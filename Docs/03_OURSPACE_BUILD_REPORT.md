@@ -159,3 +159,15 @@ Acceptance: private default, no parent grant inheritance, explicit actions, revo
 - PASS: lint/typecheck and 13 TypeScript tests, including negative ACL cases. This is a tested foundation only: no API/session/auth-provider integration exists yet, so no claim of security POC or P0 completion.
 - Stage 01 remaining gate: hosted CI for browser-enabled workflow still downloading Chromium (run 39929063507, verified active at install step); check authoritative result before claiming full stage exit. Next implementation is Stage 02 local Auth integration, server permission loading, real two-user allow/deny tests and MFA recovery POC.
 - Commit `d048d5eef7aa0943fbd8219ab0c97c6af37cef4f` PUSHED and remote master SHA verified; domain file secret scan clean. Hosted browser run still IN_PROGRESS at final check, so Stage 01 is not yet marked DONE.
+
+## Task 01.8 — Local Supabase Auth environment
+
+Acceptance: real local Auth service and SMTP capture inbox, mandatory email confirmation, no real account secrets, separate least-privilege database role, repeatable startup and infrastructure tests.
+
+- Prior browser CI run `39929063507` completed SUCCESS (GitHub API verified). User formatting commit `1a9c571` preserved.
+- Added optional `compose.auth.yaml` with GoTrue v2.197.0 and Mailpit, pinned to inspected image digests. Ports bind localhost only: Auth 55433, inbox 55434. No external SMTP service is configured; generated secrets reside only in ignored `.local` files.
+- Auth database `ourspace_auth` and login `ourspace_auth_owner` are separate from app schemas, with no superuser/create-role/create-db privileges. Upstream migration needs a conventional `postgres` grantee; provisioned a NOLOGIN/NOSUPERUSER compatibility role without altering vendor migrations.
+- Email autoconfirm and anonymous login disabled. TOTP enrollment/verification enabled in local configuration; MFA recovery capability still requires Stage 02 implementation/POC. HS256 signing is a local test choice, not a production signing-key design.
+- Commands: `npm run auth:start`, `npm run test:auth-env`, `npm run auth:stop`. Repeated startup preserves database and generated keys. Never delete `.local` secrets while keeping initialized volumes; restore both together if recovering this local environment.
+- PASS: 3 real environment tests for Auth health/settings, local inbox, and denial of Auth-role reads against app profiles. Lint/typecheck/13 unit tests run before commit. No signup/login/UI or P0 Auth acceptance claimed yet.
+- Sources: official Supabase Docker config and Auth README consulted (https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml, https://github.com/supabase/auth). Runtime health confirms GoTrue v2.197.0. No production or paid service started.

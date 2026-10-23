@@ -38,6 +38,11 @@ jobs:
       - run: npm run db:migrate
       - run: npm run db:seed
       - run: npm run test:db
+      - run: npm run auth:start
+      - run: npm run test:auth-env
+      - name: Stop local auth
+        if: always()
+        run: docker compose -f compose.yaml -f compose.auth.yaml stop auth mail
       - name: Stop local database
         if: always()
         run: docker compose stop db
