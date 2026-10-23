@@ -193,3 +193,15 @@ Acceptance: M10 D11 storage persists only unique SHA-256 token hashes, constrain
 - Scope is storage only. Request-time session authentication, immediate revocation enforcement, MFA gating, least-privilege server adapter and UI remain outstanding. No P0 Auth acceptance claimed.
 - Git checkpoint BLOCKED: automatic approval review rejected direct master commit/push again after the replacement objective was read in full. Reviewer still applies the original codex/ourspace-build rule and requires an explicit branch confirmation in conversation. No commit/push command executed, no workaround attempted. Pending branch clarification; retain all tested changes. Task 02.2a is implemented/tested but not committed or pushed. Next task must wait for this Git-first checkpoint.
 - Branch blocker resolved by explicit user reply: confirmed direct commit/push to master. Proceed with the tested checkpoint; original feature-branch instruction is superseded.
+- Commit 14b7c7ca834400e15d1d8e91137a5f461335502e PUSHED; HEAD and remote refs/heads/master verified identical. Next: least-privilege server adapter and request-time revocable session enforcement.
+
+## Task 02.2b — Least-privilege PostgreSQL server adapter
+
+Acceptance: separate runtime login, parameterized queries, bounded connection pool, same-connection transaction/rollback, sanitized failures and denial of private table/schema access.
+
+- Added pinned pg 8.23.1, its matching TypeScript definitions, and server-only import protection. Local provisioning generates an ignored runtime password and grants only database CONNECT. No owner credential is used by the adapter.
+- Each transaction checks runtime role identity, elevated flags and membership; errors omit SQL, parameters and credentials. Remote database connections require verified TLS; loopback supports local Docker. Client connections are released after success/failure.
+- Four adapter integration tests PASS on real PostgreSQL: parameterization/transaction identity, rollback and pool reuse, private table/schema/role denial, sanitized invalid configuration. Vitest resolves server-only to its actual server entry point; database operations are not mocked.
+- PASS lint/typecheck/build, 18 unit tests, full npm audit (0 vulnerabilities), diff check, history audit (no secret findings). Prior development dependency audit finding is no longer reported by the current registry advisory response; no unrelated dependency upgrade was performed.
+- Added runtime provisioning and adapter tests to CI. Read official driver docs: https://node-postgres.com/features/queries and https://node-postgres.com/features/pooling, plus installed Next server/client boundary documentation.
+- Session issuance, verified account provisioning, request authorization and revocation are next; this task grants no application data access and does not complete Auth P0.

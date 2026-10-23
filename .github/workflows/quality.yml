@@ -38,6 +38,8 @@ jobs:
       - run: npm run db:migrate
       - run: npm run db:seed
       - run: npm run test:db
+      - run: npm run db:runtime
+      - run: npm run test:database
       - run: npm run auth:start
       - run: npm run test:auth-env
       - run: npm run test:auth
