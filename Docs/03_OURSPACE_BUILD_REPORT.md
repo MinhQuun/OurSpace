@@ -138,3 +138,13 @@ Acceptance: M10 ENT-01/02 data foundation, required display name, no cascading a
 
 - Full-history scan after adding the required `.env.example` exposed an overly broad filename rule. The template contains only comments and empty assignments, as required by the Goal.
 - Scanner now permits exactly `.env.example` only when every non-comment line is an empty uppercase variable assignment. Nonempty templates and actual `.env`/`.env.local` remain rejected; content patterns still run. No generic example-file exemption.
+- Commit `de5af39e80623b4cad76da7534e819ea9139e517` PUSHED and remote verified; 11 Python tests/history audit/lint/typecheck/unit PASS.
+
+## Task 01.6 — Canonical ownership and transactional infrastructure
+
+Acceptance: canonical owners M01-M10 explicit; consumers cannot write a linked domain's canonical records through routing helper; receipts/events/audit support atomic rollback and duplicate constraints; no sensitive event payloads.
+
+- `src/domain/ownership.ts` defines source routing, keeps Place Wishlist separate from M06 Wish, and rejects cross-module canonical writers. This is not actor authorization; server use cases must perform current ACL/lifecycle/business-consent checks independently.
+- Migration 0003 adds private deny-by-default command receipt, outbox and audit tables. Receipts scope idempotency to actor/command; outbox also deduplicates source/revision/event type. No arbitrary JSON or secret-content columns in audit/outbox. IDs and events are still private and never broadcast directly.
+- Transaction tests prove domain changes/receipt/outbox/audit roll back together, and duplicate commands cannot create a second event. Application command replay/hash comparison and worker retry behavior remain to implement; constraints alone do not constitute completed financial or notification idempotency.
+- Lint/typecheck PASS; 4 TypeScript tests PASS. Real DB suite final count recorded after exit. No new P0 claimed.

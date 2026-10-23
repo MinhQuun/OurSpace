@@ -67,6 +67,34 @@ ROLLBACK;''', self.database)
                 sql(statement, self.database)
         self.assertEqual(sql('SELECT count(*) FROM m10.profiles;', self.database), '2')
 
+    def command_and_event(self):
+        return """
+INSERT INTO app_internal.command_receipts(actor_id, command_id, module, action, request_hash)
+VALUES ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'M10', 'profile.updated', repeat('a',64));
+INSERT INTO app_internal.outbox(event_id, actor_id, command_id, source_module, source_id, source_revision, event_type)
+VALUES ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'M10', '10000000-0000-4000-8000-000000000001', 1, 'profile.updated');
+INSERT INTO app_internal.audit_events(event_id, actor_id, command_id, module, action, resource_id)
+VALUES ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'M10', 'profile.updated', '10000000-0000-4000-8000-000000000001');
+"""
+
+    def test_domain_write_receipt_outbox_audit_rollback_together(self):
+        migrate(database=self.database)
+        seed(self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql("BEGIN; UPDATE m10.profiles SET display_name='Must roll back';" + self.command_and_event() + 'SELECT 1/0; COMMIT;', self.database)
+        for table in ['command_receipts', 'outbox', 'audit_events']:
+            self.assertEqual(sql(f'SELECT count(*) FROM app_internal.{table};', self.database), '0')
+        self.assertEqual(sql("SELECT count(*) FROM m10.profiles WHERE display_name='Must roll back';", self.database), '0')
+
+    def test_duplicate_command_cannot_create_second_event(self):
+        migrate(database=self.database)
+        seed(self.database)
+        sql('BEGIN;' + self.command_and_event() + 'COMMIT;', self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql('BEGIN;' + self.command_and_event() + 'COMMIT;', self.database)
+        for table in ['command_receipts', 'outbox', 'audit_events']:
+            self.assertEqual(sql(f'SELECT count(*) FROM app_internal.{table};', self.database), '1')
+
     def test_failure_rolls_back_schema_and_history(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, '0001_failure.sql').write_text('CREATE SCHEMA rollback_probe; SELECT 1/0;', encoding='utf-8')
