@@ -14,7 +14,7 @@ Updated: 2026-10-23 (Asia/Saigon). This report records implementation evidence, 
 
 | Stage | Status | Evidence / remaining work |
 |---|---|---|
-| 00 | IN_PROGRESS | Source/history audit implemented; requirements registry pending |
+| 00 | IN_PROGRESS | Source/history audit and requirements registry verified; registry push pending |
 | 01 | NOT_STARTED | Skeleton, database, CI |
 | 02 | NOT_STARTED | Security POC |
 | 03 | NOT_STARTED | Shared platform |
@@ -50,4 +50,14 @@ Acceptance: preserve existing files; correct Goal repository policy; ignore loca
 - Docker daemon access denied in sandbox; retry with suitable permissions during Stage 01 before declaring database blocked.
 - OP-01 through OP-07 remain unapproved proposals. Dependent business operations must be POLICY_BLOCKED unless separately approved; independent technical work continues.
 - Next: build machine-readable requirement registry with source references and explicit UNMAPPED priority/test evidence. Read BRD sections per stage; source verification is not a claim that all 763 AC have been analyzed or implemented.
-- Current execution gate: resolve historical-payload public disclosure review before starting the next implementation task, per Goal D.1.3. The user has authorized PUBLIC source hosting but has also prohibited sensitive personal data. Do not treat that general hosting authorization as proof that every historical binary is cleared.
+- Historical push blocker resolved: Product Owner explicitly confirmed the documents/media in base commit `ae050df` may be public and contain no sensitive personal material requiring secrecy. Approval review accepted the subsequent push. Remote `codex/ourspace-build` SHA verified as `4b1ac04e45342477738fb0bfbb31c690a2e00ff3`; both `69e95c4` and `4b1ac04` are PUSHED. No history rewrite performed.
+
+## Task 00.2 — Machine-readable source registry
+
+Acceptance: inventory all approved decisions/AC/policies and supporting draft families/E2E; validate original line references; preserve source authority; leave unsupported mappings and priorities UNMAPPED; never infer PASS from inventory counts.
+
+- `scripts/build_registry.py` builds `requirements/registry.json` reproducibly from checksum-verified sources: 247 decisions, 763 AC, 86 draft P0 families, 40 draft E2E, 7 approved DEC.
+- All 1,010 BRD decision/AC source line locators validated against original identifiers. The 60 decisions without explicit AC mapping remain UNMAPPED; remaining mappings are draft references requiring review.
+- Registry contains source, module, owner, priority, test and status; all implementation states NOT_IMPLEMENTED, tests empty, desktop/mobile NOT_RUN. AC priority remains UNMAPPED pending actual BRD scope analysis. Cross-module owner is deliberately CROSS_MODULE until technical ownership is resolved.
+- Validation: 8 Python tests PASS, including reproducibility, missing mappings and no false acceptance. Application lint/typecheck not applicable to this Python inventory task; Python syntax and Git whitespace gates run before commit.
+- Commit/push pending for this task. Next: Stage 01 skeleton only after verified push.
