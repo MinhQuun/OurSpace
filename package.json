@@ -14,7 +14,8 @@
     "db:stop": "python scripts/local_db.py stop",
     "db:migrate": "python scripts/migrate_db.py",
     "test:db": "python scripts/integration_db.py",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:seed": "python scripts/seed_local.py"
   },
   "engines": {
     "node": ">=20.19.0"

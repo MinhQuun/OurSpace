@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:e2e
       - run: npm run db:start
       - run: npm run db:migrate
+      - run: npm run db:seed
       - run: npm run test:db
       - name: Stop local database
         if: always()

@@ -121,3 +121,14 @@ Acceptance: launch the production build in an isolated local server, exercise re
 - Added pinned Playwright 1.64.1, desktop Chrome and Pixel 7 projects, no retries and no reuse of unrelated servers. Tests cover scaffold rendering, language metadata and minimal/non-cacheable health endpoint. These are infrastructure smoke tests, not P0 business evidence or physical-device validation.
 - Validation PASS: lint, typecheck, unit test, production build, 4/4 Playwright smoke tests across real desktop/mobile Chromium contexts. No page exceptions or horizontal overflow. Browser binaries downloaded locally; no personal browser profile used. Stage 01 still requires domain service boundaries, test-account seeding and remaining platform foundations before completion.
 - Windows sandbox initially prevented test-server process-tree cleanup after assertions passed; scoped cleanup of the verified test server completed. Re-ran the entire suite with authorized process permissions: 4 PASS in 2.8 seconds, exit 0 and automatic cleanup successful. No assertion or retry settings weakened.
+- Commit `23928505b0e3ef8d108384c87bb1fd5584332b81` PUSHED and remote master SHA verified. Next: observe its hosted CI, then implement remaining Stage 01 domain boundaries, test seeds and shared infrastructure.
+
+## Task 01.5 — Account data foundation and safe local fixtures
+
+Acceptance: M10 ENT-01/02 data foundation, required display name, no cascading account deletion, deny-by-default RLS and two repeatable synthetic local fixtures without credentials. Related M10 D01/D07/D09/D13; this task does not implement authentication or claim their full P0 acceptance.
+
+- Migration 0002 creates accounts with approved lifecycle vocabulary (default Pending Verification) and profiles with required display name. 120-character limit is a technical validation choice, not an approved product decision. Owner IDs are stable UUIDs; provider integration follows in Stage 02.
+- RLS enabled and forced on both tables, no permissive policies; PUBLIC privileges revoked. Local migration owner is privileged and must never be used as the application runtime role.
+- `npm run db:seed` inserts two explicit synthetic IDs and display names only; preserves existing rows/edits. No password, email-verification bypass or fake login. Auth-provider test accounts remain a Stage 02 prerequisite.
+- `.env.example` contains blank placeholders only. Seed runner targets only project-local Docker DB, with no remote URL input.
+- Validation: lint/typecheck/unit PASS; real DB integration covers repeatability/concurrency, migration drift/rollback, seed preservation, pending-verification default, blank-name rejection, restrict-delete and zero rows for unprivileged SELECT despite explicit table SELECT grants. Final test count recorded after runner exits.
