@@ -15,8 +15,8 @@ Updated: 2026-10-23 (Asia/Saigon). This report records implementation evidence, 
 | Stage | Status | Evidence / remaining work |
 |---|---|---|
 | 00 | DONE | Audit and registry pushed and verified; source mappings retain explicit unresolved statuses |
-| 01 | IN_PROGRESS | Uncommitted skeleton preserved; dependencies and checks pending |
-| 02 | NOT_STARTED | Security POC |
+| 01 | DONE | Local app/DB/Auth, seed, migrations, policy/ownership foundations and hosted CI verified |
+| 02 | IN_PROGRESS | Real Auth provider transport; application sessions/UI/MFA/pairing/ACL POC pending |
 | 03 | NOT_STARTED | Shared platform |
 | 04 | NOT_STARTED | M02 |
 | 05 | NOT_STARTED | M01 |
@@ -171,3 +171,14 @@ Acceptance: real local Auth service and SMTP capture inbox, mandatory email conf
 - Commands: `npm run auth:start`, `npm run test:auth-env`, `npm run auth:stop`. Repeated startup preserves database and generated keys. Never delete `.local` secrets while keeping initialized volumes; restore both together if recovering this local environment.
 - PASS: 3 real environment tests for Auth health/settings, local inbox, and denial of Auth-role reads against app profiles. Lint/typecheck/13 unit tests run before commit. No signup/login/UI or P0 Auth acceptance claimed yet.
 - Sources: official Supabase Docker config and Auth README consulted (https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml, https://github.com/supabase/auth). Runtime health confirms GoTrue v2.197.0. No production or paid service started.
+- Commit `d2aecc19eac31c1f76652d756bcc1c1a5d78311c` PUSHED and remote SHA verified. CI run `39984382466` completed SUCCESS, including desktop/mobile, migrations and Auth environment tests. Stage 01 exit met; no business P0 completion implied.
+- Initial automatic approval incorrectly applied the superseded branch rule; re-read user objective lines 11/120-123 proved direct master authorization. Retry was approved, with no bypass or alternate remote.
+
+## Task 02.1 — Verified email/password provider transport
+
+Acceptance: real Auth provider signup requires email confirmation; two independent users can confirm through local SMTP and log in; incorrect credentials/token denied; no provider detail leaks, cached responses or browser token persistence. Related M10 D01/D09 foundation.
+
+- Added server transport with HTTPS (loopback HTTP only for local), bounded requests, sanitized errors, input validation and explicit confirmed-email identity checks. Signup intentionally returns no ID or account-existence details.
+- Real integration performs signup → denial before confirmation → retrieves local capture email → follows actual provider verification URL → login/get-user for A and B → rejects wrong passwords/invalid token. It uses generated credentials and `.test` addresses only; these are local ephemeral test records, never source fixtures with passwords.
+- Found and fixed Auth runtime search_path during real signup. Keep `public, auth` to preserve existing vendor migration ledger resolution and find auth tables. No database was dropped or vendor migration edited. Local-only email limit is 100/hour to permit repeated capture tests; not a production policy.
+- Integration PASS against GoTrue, without mocks. Application session revocation, API routes/UI, MFA/recovery, pairing and object ACL remain outstanding; transport identity validation alone does not prove immediate JWT revocation.

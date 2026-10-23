@@ -44,6 +44,9 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='ourspace_auth')
 \\gexec
 """)
     sql('CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION ourspace_auth_owner;', 'ourspace_auth')
+    # Keep the existing migration ledger in public first; vendor business tables
+    # are schema-qualified in auth. Both schemas are writable only by DB owners.
+    sql('ALTER ROLE ourspace_auth_owner IN DATABASE ourspace_auth SET search_path TO public, auth;')
     (ROOT / '.local/auth.env').write_text(
         'GOTRUE_DB_DATABASE_URL=postgres://ourspace_auth_owner:' + password + '@db:5432/ourspace_auth\n'
         + 'GOTRUE_JWT_SECRET=' + jwt_secret + '\n', encoding='utf-8')

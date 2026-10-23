@@ -18,7 +18,8 @@
     "db:seed": "python scripts/seed_local.py",
     "auth:start": "python scripts/local_auth.py start",
     "auth:stop": "python scripts/local_auth.py stop",
-    "test:auth-env": "python scripts/integration_auth_environment.py"
+    "test:auth-env": "python scripts/integration_auth_environment.py",
+    "test:auth": "vitest run --config vitest.auth.config.mjs"
   },
   "engines": {
     "node": ">=20.19.0"
