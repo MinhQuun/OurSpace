@@ -1,12 +1,12 @@
 # OUR SPACE — CODEX GOAL: BUILD ALL P0 (M01–M10)
 
 **Trạng thái:** LỆNH THỰC THI DÀNH CHO CODEX — không phải cam kết hệ thống đã lập trình.
-**Goal version:** V1.1 + Product Owner PUBLIC amendment, 2026-10-23.
+**Goal version:** V1.1 + Product Owner PUBLIC/master workflow amendment, 2026-10-23.
 **Mốc nguồn:** OurSpace.zip cung cấp ngày 23/10/2026.
 **Chế độ mong muốn:** Codex Goal/agent được quyền đọc, sửa code, chạy lệnh, test và lặp lại cho đến khi hoàn thành hoặc gặp chặn thật sự.
 **Mục tiêu cao nhất:** Xây một website Our Space riêng tư cho đúng hai tài khoản, hoàn thiện **100% P0 của M01–M10** trên desktop và mobile, với khả năng triển khai, export, backup/restore và kiểm thử thực tế. Không thay P0 bằng mock/demo/screenshot.
 
-> **BẮT ĐẦU LÀM NGAY.** Bạn (Codex) đang ở root dự án có thư mục `Docs/`. Đây là một work order dài hạn. Không chỉ tóm tắt kế hoạch, không tạo thêm 10 vòng tài liệu, không dừng sau scaffold hay POC đầu tiên. Hãy thi công theo các giai đoạn bên dưới; trong **mỗi giai đoạn phải chia thành nhiều phần nhỏ**, kiểm thử rồi **commit và push từng phần** lên nhánh triển khai riêng (khi đã xác minh remote PUBLIC và có quyền push), trước khi tiếp tục phần tiếp theo. Chỉ dừng nếu bị chặn bởi yếu tố không thể tự giải quyết an toàn (thiếu quyền/truy cập account, chính sách chưa được chủ dự án duyệt, hoặc rủi ro xóa dữ liệu không có backup). Không tuyên bố DONE nếu không có bằng chứng.
+> Execute all STAGE 00-15 in small tested tasks; commit and push each task directly to origin/master. Do not stop after a scaffold or POC. Preserve all approved product requirements and do not claim completion without evidence.
 
 ## A. File nền và cách khởi động
 
@@ -24,7 +24,7 @@ Chỉ `01_OURSPACE_MASTER_SPEC_APPROVED.md` và 11 tệp chính thức tương �
 2. Tạo `Docs/03_OURSPACE_BUILD_REPORT.md` **một file duy nhất** cập nhật liên tục: môi trường, các lựa chọn kỹ thuật, tiến độ từng stage **và từng commit/push**, AC/P0/E2E mapping, test evidence, blockers, tài liệu chạy local/deploy/restore. Không rải ra thêm các báo cáo Markdown lặp lại.
 3. Mở `Docs/01_OURSPACE_MASTER_SPEC_APPROVED.md` theo từng module; trích riêng source từ `Docs/02_OURSPACE_SOURCE_ARCHIVE.zip` **khi cần** để tra cứu và so checksum. Không dùng tài liệu Review cũ có chữ `CHƯA CÓ` để phủ nhận Policy Supplement đã duyệt sau đó.
 4. Ghi bảng trạng thái từ `NOT_STARTED` cho toàn bộ Stage 00–15. Tiếp tục thực thi tự động theo thứ tự phụ thuộc, không hỏi duyệt lại Dxx/DEC đã khóa.
-5. Verify workspace, Git status, branch and origin https://github.com/MinhQuun/OurSpace. PUBLIC is approved by the Product Owner. Use codex/ourspace-build; verify push access before substantial implementation. Never force push or merge into master.
+5. Verify workspace, Git status, master and origin https://github.com/MinhQuun/OurSpace. PUBLIC is approved. Develop exclusively on master; do not create feature/Codex branches or require routine PRs. Never force push or rewrite history.
 6. Nếu không có credentials Supabase/Vercel: dùng môi trường local phù hợp (ví dụ Supabase local CLI + Docker hoặc PostgreSQL local; dùng tài khoản test). Xây đầy đủ code, migrations và tests trước; ghi bước người dùng phải thao tác để triển khai cloud. **Không hard-code credentials, không commit .env.**
 
 ## B. Nguồn chính thức, phạm vi và những điều không thể thương lượng
@@ -87,9 +87,9 @@ Nếu lỗi môi trường (network package registry, Docker, thiếu Git/công 
 
 1. PUBLIC repository is the official Product Owner choice. Audit tracked files and commit history before pushing. Never commit or push secrets, real user data, or sensitive personal documents. Report historical exposure risks without rewriting history. Application data remains protected by Authentication and Authorization.
 2. Nếu workspace chưa có Git: tạo repo Git **trong đúng root** (không `git init` ở thư mục cha hoặc `Docs`); thiết lập `.gitignore` bao gồm `.env`, `.env.*` (ngoại trừ `*.example` không chứa secrets), `node_modules`, `.next`, logs, generated dumps, backups, local media và dữ liệu thực tế. Không xóa file người dùng; chỉ tạo `.gitignore` theo nguyên tắc an toàn.
-3. Tạo hoặc chuyển sang **nhánh triển khai riêng** `codex/ourspace-build` từ trạng thái nền hợp lệ. Không push trực tiếp vào `main`/`master`; không tự merge/force-push/rebase-history, không xóa nhánh. Nếu đang ở repo có thay đổi do người dùng tạo, bảo toàn và xử lý cẩn thận trước khi tạo branch.
+3. Preserve existing work before switching branches. Recover prior codex/ourspace-build commits using fast-forward only after fetch and verifying ancestry; stop on divergence. Keep the old branch. After recovery, commit directly on master.
 4. **Remote chưa cấu hình/không có quyền:** chỉ commit local các bước nền tảng an toàn, ghi `GIT_REMOTE_BLOCKED`, và dừng trước khi tích lũy khối lượng code lớn; người dùng cần cung cấp Git remote PUBLIC và xác thực qua công cụ Git/credential helper. Không bịa remote URL, không yêu cầu paste token/password trong chat, không tự public hóa tài liệu.
-5. **Remote đã có và được xác minh PUBLIC:** push nhánh đầu tiên bằng `git push -u origin codex/ourspace-build`. Mỗi commit tiếp theo phải push ngay lên cùng nhánh. Chỉ mở PR khi có quyền/remote phù hợp; không tự merge PR hoặc triển khai production.
+5. Push each tested commit directly using git push origin master; verify the remote SHA. No routine pull request is required. No production deployment without separate approval.
 
 ### D.1.2. Nhịp commit bắt buộc — một lát cắt logic, một commit
 
@@ -97,7 +97,7 @@ Nếu lỗi môi trường (network package registry, Docker, thiếu Git/công 
 - **Sau khi code:** kiểm tra diff và phạm vi bằng `git diff --check`, `git status --short`, `git diff --stat`; chỉ stage **file thuộc lát cắt** với `git add <path...>`, tránh `git add -A` vô điều kiện. Không stage `.env`, tokens, secret recovery codes, private data, database dumps, source ảnh/video thật, `node_modules` hoặc build artifacts. Chạy secret scan và kiểm tra Git tracked files; archive chỉ được push sau gate ki?m tra secrets v? d? li?u nh?y c?m.
 - **Quality gate trước commit:** chạy ít nhất lint/typecheck và unit/integration tests liên quan; thay đổi schema thì chạy migration test; auth/ACL thì chạy negative security tests; finance/capsule/realtime thì chạy bộ regression tương ứng. `build` và E2E chạy ở những commit có ảnh hưởng hoặc khi kết thúc lát cắt/stage; không dùng tests giả, bỏ qua failing tests hay tự đổi expectations chỉ để pass. Nếu code chưa đạt thì sửa trước khi commit; đừng gộp nhiều nhiệm vụ đang lỗi vào commit sau.
 - **Commit:** dùng Conventional Commits có scope, ví dụ `feat(m02): private media upload and permission tests`. Commit description chứa `Stage`, `Related: Mxx Dxx / P0-... / AC...` khi đã có chứng cứ nguồn. Nếu không có mapping chắc chắn ghi `unmapped` thay vì bịa.
-- **Push ngay sau commit:** `git push origin codex/ourspace-build`. Sau đó xác minh upstream/remote SHA (`git rev-parse HEAD`, `git ls-remote --heads origin codex/ourspace-build` hoặc `git status -sb`). **Không báo PUSHED nếu chưa xác minh kết quả.** Ghi commit hash, files, test results, remote branch và PUSHED/LOCAL_ONLY/BLOCKED trong `Docs/03_OURSPACE_BUILD_REPORT.md`.
+- **Push ngay sau commit:** `git push origin master`. Sau đó xác minh upstream/remote SHA (`git rev-parse HEAD`, `git ls-remote --heads origin master` hoặc `git status -sb`). **Không báo PUSHED nếu chưa xác minh kết quả.** Ghi commit hash, files, test results, remote branch và PUSHED/LOCAL_ONLY/BLOCKED trong `Docs/03_OURSPACE_BUILD_REPORT.md`.
 - **Báo cáo cũng phải nằm trong lịch sử Git:** cập nhật report trước khi chốt commit. Nếu cần thêm bằng chứng push sau commit, dùng **commit nhỏ riêng cho nhật ký** và push ngay, hoặc giữ trạng thái push dưới dạng thông tin tiến độ ngoài commit đang chuẩn bị; tránh vòng lặp tự tạo commit vô hạn mỗi lần cập nhật hash của chính commit đó.
 - **Commit sạch và có thể quay lui:** không tự `git commit --amend` trên commit đã push, không squash liên tục khiến mất mốc tiến độ, không dùng `--force`/`--force-with-lease`, không reset cứng hoặc sửa lịch sử để che lỗi. Sửa bằng commit tiếp theo hoặc revert có kiểm chứng khi cần.
 
@@ -106,7 +106,7 @@ Nếu lỗi môi trường (network package registry, Docker, thiếu Git/công 
 - Nếu push thất bại vì network/auth/permission/non-fast-forward/remote không PUBLIC: tối đa thử lại an toàn sau khi kiểm tra nguyên nhân, **không dùng force push**; ghi `GIT_PUSH_BLOCKED` cùng stderr không chứa secrets. Không chuyển sang stage mới làm hàng loạt thay đổi không được sao lưu từ xa. Việc cần quyền truy cập phải hỏi người dùng một lần rõ ràng.
 - Nếu remote CI phát hiện lỗi: ghi lại kết quả, tạo **commit sửa lỗi nhỏ tiếp theo**, chạy lại và push; stage không DONE cho đến khi các kiểm thử bắt buộc pass. Không tự vô hiệu hóa CI/tests.
 - Nếu phiên Codex bị ngắt: lần sau đọc report, `git status -sb`, log các commit mới nhất và trạng thái upstream; tìm lát cắt chưa được push/test, tiếp tục từ đó. **Không scaffold lại, không reset, không tạo commit trùng.**
-- **Push authorization:** The Product Owner authorizes safe source commits and pushes to origin/codex/ourspace-build on the PUBLIC repository. This does not authorize visibility changes, billing, production deployment, or publishing sensitive data.
+- **Push authorization:** The Product Owner authorizes safe source commits and pushes to origin/master on the PUBLIC repository. This does not authorize visibility changes, billing, production deployment, or publishing sensitive data.
 
 ### D.1.4. Mẫu chia nhỏ commit (hướng dẫn, không giới hạn số commit)
 

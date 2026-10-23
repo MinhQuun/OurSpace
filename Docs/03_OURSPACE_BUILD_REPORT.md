@@ -6,16 +6,16 @@ Updated: 2026-10-23 (Asia/Saigon). This report records implementation evidence, 
 
 - Workspace: `D:/MinhQuun/Tmp/OurSpace`.
 - Repository: `https://github.com/MinhQuun/OurSpace`, PUBLIC expressly approved by Product Owner.
-- Branch: `codex/ourspace-build`; base commit `ae050dfd8e8cafb0cbb4670269fef58999cb8dbe`.
+- Current development branch: `master` (new Product Owner objective, 2026-10-23). Previous `codex/ourspace-build` preserved; base commit `ae050dfd8e8cafb0cbb4670269fef58999cb8dbe`.
 - Existing uncommitted Goal V1.1 additions retained; PUBLIC amendment supersedes private-repository gates only. Application Authentication/Authorization requirements remain.
-- No production, billing, cloud account secrets, force push, history rewrite, or merge authorized/performed.
+- No production, billing, cloud account secrets, force push or history rewrite authorized/performed. Fast-forward recovery into master explicitly authorized and completed.
 
 ## Stage status
 
 | Stage | Status | Evidence / remaining work |
 |---|---|---|
-| 00 | IN_PROGRESS | Source/history audit and requirements registry verified; registry push pending |
-| 01 | NOT_STARTED | Skeleton, database, CI |
+| 00 | DONE | Audit and registry pushed and verified; source mappings retain explicit unresolved statuses |
+| 01 | IN_PROGRESS | Uncommitted skeleton preserved; dependencies and checks pending |
 | 02 | NOT_STARTED | Security POC |
 | 03 | NOT_STARTED | Shared platform |
 | 04 | NOT_STARTED | M02 |
@@ -60,4 +60,13 @@ Acceptance: inventory all approved decisions/AC/policies and supporting draft fa
 - All 1,010 BRD decision/AC source line locators validated against original identifiers. The 60 decisions without explicit AC mapping remain UNMAPPED; remaining mappings are draft references requiring review.
 - Registry contains source, module, owner, priority, test and status; all implementation states NOT_IMPLEMENTED, tests empty, desktop/mobile NOT_RUN. AC priority remains UNMAPPED pending actual BRD scope analysis. Cross-module owner is deliberately CROSS_MODULE until technical ownership is resolved.
 - Validation: 8 Python tests PASS, including reproducibility, missing mappings and no false acceptance. Application lint/typecheck not applicable to this Python inventory task; Python syntax and Git whitespace gates run before commit.
-- Commit/push pending for this task. Next: Stage 01 skeleton only after verified push.
+- Commit `77502eb0f80205ca274bc950400e45201f319ebb` PUSHED and verified on the previous branch, then on master by fast-forward recovery.
+
+## Recovery checkpoint — master workflow amendment
+
+- Read new objective from user attachment on 2026-10-23. It explicitly supersedes the previous no-master development workflow.
+- Fetched origin; no divergence: master was `ae050df`, build branch was `77502eb`. Switched to master, fast-forwarded origin/master then origin/codex/ourspace-build, pushed master. HEAD and remote master both verified as `77502eb0f80205ca274bc950400e45201f319ebb`.
+- Untracked Next.js scaffold was preserved in-place and copied to ignored `.local/recovery-before-master` before switching. No files deleted; old branch retained.
+- Goal updated for direct master commits/pushes, no new feature branches or routine PR. Full stages and product requirements retained.
+- Docker daemon verified accessible with authorized elevated read-only inspection: version 28.5.1. Earlier sandbox error is not an environment blocker.
+- Stage 01 next: finish package installation, lint/typecheck/unit/build, then commit the scaffold separately. It currently implements no product P0.
