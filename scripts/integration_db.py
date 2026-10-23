@@ -102,6 +102,34 @@ VALUES ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-0000000
                 migrate(directory, self.database)
         self.assertEqual(sql("SELECT count(*) FROM pg_namespace WHERE nspname IN ('rollback_probe', 'app_migrations');", self.database), '0')
 
+    def test_session_constraints_and_private_storage(self):
+        migrate(database=self.database)
+        seed(self.database)
+        insert = """INSERT INTO m10.sessions(id, account_id, token_hash, created_at, expires_at)
+VALUES ('50000000-0000-4000-8000-000000000001',
+'10000000-0000-4000-8000-000000000001', repeat('a',64),
+'2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');"""
+        sql(insert, self.database)
+        for statement in [
+            "UPDATE m10.sessions SET token_hash = 'raw-bearer-token';",
+            "UPDATE m10.sessions SET expires_at = created_at;",
+            "UPDATE m10.sessions SET revoked_at = created_at - interval '1 second';",
+            insert.replace('50000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000002'),
+        ]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement, self.database)
+        role = 'probe_' + uuid.uuid4().hex
+        result = sql(f'''BEGIN;
+CREATE ROLE {role} NOLOGIN;
+GRANT USAGE ON SCHEMA m10 TO {role};
+GRANT SELECT ON m10.sessions TO {role};
+SET LOCAL ROLE {role};
+SELECT count(*) FROM m10.sessions;
+ROLLBACK;''', self.database)
+        self.assertEqual(result, '0')
+        sql("UPDATE m10.sessions SET revoked_at = '2026-01-01T12:00:00Z';", self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.sessions WHERE revoked_at IS NOT NULL;', self.database), '1')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -182,3 +182,14 @@ Acceptance: real Auth provider signup requires email confirmation; two independe
 - Real integration performs signup → denial before confirmation → retrieves local capture email → follows actual provider verification URL → login/get-user for A and B → rejects wrong passwords/invalid token. It uses generated credentials and `.test` addresses only; these are local ephemeral test records, never source fixtures with passwords.
 - Found and fixed Auth runtime search_path during real signup. Keep `public, auth` to preserve existing vendor migration ledger resolution and find auth tables. No database was dropped or vendor migration edited. Local-only email limit is 100/hour to permit repeated capture tests; not a production policy.
 - Integration PASS against GoTrue, without mocks. Application session revocation, API routes/UI, MFA/recovery, pairing and object ACL remain outstanding; transport identity validation alone does not prove immediate JWT revocation.
+- Commit `d51e4f91f4ccb54c091380aec5e1f43488e2bde6` PUSHED and remote SHA verified. Final checks: lint/typecheck/build, 18 unit tests, real two-user Auth integration and 3 environment tests PASS. Next task: application-owned revocable sessions and least-privilege server database adapter, followed by login/signup UI and two-browser E2E.
+
+## Task 02.2a — Private application session storage
+
+Acceptance: M10 D11 storage persists only unique SHA-256 token hashes, constrains expiry/revocation timestamps, preserves account references and denies unprivileged reads even with table SELECT grants.
+
+- Added forward-only migration 0004 with FORCE RLS and no client policies/runtime grants. No raw bearer tokens or provider credentials are stored.
+- PASS: local migration; all 9 real PostgreSQL integration tests (including invalid hash, duplicate hash, invalid expiry/revocation and private reads); lint/typecheck; 18 unit tests; 11 requirement/audit tests; diff check and history scanner (no secret findings). Previously reviewed historical media remain explicitly authorized for public release by the user.
+- Scope is storage only. Request-time session authentication, immediate revocation enforcement, MFA gating, least-privilege server adapter and UI remain outstanding. No P0 Auth acceptance claimed.
+- Git checkpoint BLOCKED: automatic approval review rejected direct master commit/push again after the replacement objective was read in full. Reviewer still applies the original codex/ourspace-build rule and requires an explicit branch confirmation in conversation. No commit/push command executed, no workaround attempted. Pending branch clarification; retain all tested changes. Task 02.2a is implemented/tested but not committed or pushed. Next task must wait for this Git-first checkpoint.
+- Branch blocker resolved by explicit user reply: confirmed direct commit/push to master. Proceed with the tested checkpoint; original feature-branch instruction is superseded.
