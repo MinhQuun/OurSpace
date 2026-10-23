@@ -20,10 +20,20 @@ class BaselineTests(unittest.TestCase):
     def test_checks_archive_contents(self):
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, 'w') as archive:
-            archive.writestr('key.txt', '-----BEGIN PRIVATE KEY-----')
+            archive.writestr('key.txt', '-----BEGIN PRIVATE KEY-----\n' + 'QUFB' * 20)
         findings = []
         inspect('fixture.zip', stream.getvalue(), findings, [])
         self.assertIn({'path': 'fixture.zip!key.txt', 'rule': 'private-key'}, findings)
+
+    def test_documentation_marker_is_not_key_material(self):
+        findings = []
+        inspect('example.py', b"marker = '-----BEGIN PRIVATE KEY-----'", findings, [])
+        self.assertEqual(findings, [])
+
+    def test_detects_truncated_private_key_material(self):
+        findings = []
+        inspect('key.txt', b'-----BEGIN RSA PRIVATE KEY-----\n' + b'QUFB' * 20, findings, [])
+        self.assertEqual(findings, [{'path': 'key.txt', 'rule': 'private-key'}])
 
     def test_marks_video_for_manual_review(self):
         binaries = []

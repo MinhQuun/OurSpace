@@ -106,3 +106,9 @@ Acceptance: every master push runs source audit, lint, typecheck, unit/source te
 - All constituent code checks ran locally in Tasks 01.1/01.2. Hosted CI is NOT_RUN until this workflow is pushed and its run is observed; adding a YAML file is not evidence of hosted success.
 - Five pre-existing source formatting changes appeared during Task 01.2; preserved unstaged and excluded from database/CI commits.
 - Commit `e083033c0acba6a04d0d076b98f049935c7763f5` PUSHED; remote master verified. Hosted run `39917391288` exists and is QUEUED (last verified via GitHub API); no jobs started yet. Continue observing this run, do not dispatch duplicate runs or claim CI PASS: https://github.com/MinhQuun/OurSpace/actions/runs/39917391288.
+
+### Task 01.3a — Fix scanner fixture false positive
+
+- Run `39917391288` completed FAILURE at history secret scan; lint/typecheck/unit/source tests succeeded. Reproduced locally: bare private-key header string in `scripts/test_audit.py` triggered the key rule, without any actual key bytes.
+- Detection now requires base64 key material following the header. It still catches truncated keys without an end marker. Added regressions for documentation-only headers and real-shaped synthetic key material in ZIP/direct files. No path exclusion, history rewrite or CI bypass.
+- User commit `cf831c9` formats the preserved source files and includes the prior report checkpoint; retained intact.
