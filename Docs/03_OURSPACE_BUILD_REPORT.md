@@ -112,3 +112,12 @@ Acceptance: every master push runs source audit, lint, typecheck, unit/source te
 - Run `39917391288` completed FAILURE at history secret scan; lint/typecheck/unit/source tests succeeded. Reproduced locally: bare private-key header string in `scripts/test_audit.py` triggered the key rule, without any actual key bytes.
 - Detection now requires base64 key material following the header. It still catches truncated keys without an end marker. Added regressions for documentation-only headers and real-shaped synthetic key material in ZIP/direct files. No path exclusion, history rewrite or CI bypass.
 - User commit `cf831c9` formats the preserved source files and includes the prior report checkpoint; retained intact.
+- Fix commit `e34fd0f017683d90b0678282763107a9218ce856` PUSHED and remote SHA verified. Ten Python tests, history scan, lint, typecheck and unit test PASS locally. Hosted CI run `39927893483` completed SUCCESS, verified via GitHub API: https://github.com/MinhQuun/OurSpace/actions/runs/39927893483.
+
+## Task 01.4 — Desktop/mobile browser test harness
+
+Acceptance: launch the production build in an isolated local server, exercise real Chromium desktop/mobile viewports, fail on browser exceptions or horizontal overflow, keep E2E separate from unit discovery, run in CI.
+
+- Added pinned Playwright 1.64.1, desktop Chrome and Pixel 7 projects, no retries and no reuse of unrelated servers. Tests cover scaffold rendering, language metadata and minimal/non-cacheable health endpoint. These are infrastructure smoke tests, not P0 business evidence or physical-device validation.
+- Validation PASS: lint, typecheck, unit test, production build, 4/4 Playwright smoke tests across real desktop/mobile Chromium contexts. No page exceptions or horizontal overflow. Browser binaries downloaded locally; no personal browser profile used. Stage 01 still requires domain service boundaries, test-account seeding and remaining platform foundations before completion.
+- Windows sandbox initially prevented test-server process-tree cleanup after assertions passed; scoped cleanup of the verified test server completed. Re-ran the entire suite with authorized process permissions: 4 PASS in 2.8 seconds, exit 0 and automatic cleanup successful. No assertion or retry settings weakened.
