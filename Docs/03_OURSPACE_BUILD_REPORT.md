@@ -70,3 +70,16 @@ Acceptance: inventory all approved decisions/AC/policies and supporting draft fa
 - Goal updated for direct master commits/pushes, no new feature branches or routine PR. Full stages and product requirements retained.
 - Docker daemon verified accessible with authorized elevated read-only inspection: version 28.5.1. Earlier sandbox error is not an environment blocker.
 - Stage 01 next: finish package installation, lint/typecheck/unit/build, then commit the scaffold separately. It currently implements no product P0.
+
+## Task 01.1 — Runnable Next.js scaffold
+
+Acceptance: a real local Next.js server and build, strict TypeScript, lint/test commands, a non-sensitive health endpoint; no product acceptance inferred from scaffold UI.
+
+- Workflow amendment `7a5acc8679ce18f238e68701371774c58d126cb6` PUSHED and remote master verified.
+- Next.js 16.4.2 / React 19.3.1 / TypeScript 5.9.3 / Vitest 4.1.12 pinned with lockfile. Registry metadata and official installation docs checked; local Next.js bundled guides also consulted. Node 20.20.2 meets engines.
+- npm 10.8.2 peer resolver crashed with `edgesOut`; installing dev dependencies with `--legacy-peer-deps` completed. ESLint 9.39.5 retained because installed React and accessibility plugins exclude ESLint 10 in their peer ranges; follow-up toolchain upgrade needed.
+- PASS: lint, strict typecheck, 1 endpoint unit test, production build; live dev server on `127.0.0.1:3100` returned HTTP 200 for `/` and `/api/health`, exact health payload `{"status":"ok"}`. Typecheck generates route types for fresh checkouts.
+- Dependency risk OPEN: npm audit reports 5 high entries in one dev-only chain: eslint-config-next → next lint plugin → fast-glob → micromatch → braces (GHSA-vfj7-8cjw-p6xm). Registry latest braces is 3.0.3, still affected. No forced downgrade or disabling checks; production direct dependency installation audit had zero findings. Recheck before release; this does not meet Stage 14 dependency hardening gate.
+- UI is a preparation page with no private data and no claimed P0 business functionality. Auth/database/domain modules/E2E/CI remain for subsequent tasks.
+- Run: `npm install --legacy-peer-deps`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`. No environment secrets needed for scaffold. No production deployment performed.
+- Next task: local PostgreSQL configuration and migration runner with database integration tests, followed by CI and module service boundaries.
