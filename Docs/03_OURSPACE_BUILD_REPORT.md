@@ -96,3 +96,12 @@ Acceptance: isolated persistent local database; no checked-in password; repeatab
 - `python scripts/integration_db.py` uses fresh UUID-named disposable test databases, never resets the application database. Acceptance cases: repeated/concurrent runs, checksum drift rejected, schema/history rolled back on SQL failure.
 - Validation PASS: lint/typecheck and existing unit test; Python compilation and diff whitespace; all 3 real PostgreSQL integration tests (concurrency/repeatability, drift rejection, failure rollback). PostgreSQL 17.11 healthy; base migration applied. Docker image pinned to verified digest `sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb`.
 - Local recovery: stop/start preserves volume; failed migration transaction rolls back. Correct an unapplied migration then rerun; never modify an applied migration, add a forward migration instead. Production migration/backup credentials and deployment remain out of scope for this local task.
+- Commit `5e29ee763f6054da6be1f67edeff3f01f3aee2d4` PUSHED and remote master SHA verified.
+
+## Task 01.3 — Continuous quality gates
+
+Acceptance: every master push runs source audit, lint, typecheck, unit/source tests, production dependency audit, build, migration and real DB integration tests; no deployment or account secrets.
+
+- Workflow `.github/workflows/quality.yml` uses read-only repository permission and official Actions pinned to verified v6 commit SHAs. Local credentials are generated ephemerally, never uploaded as artifacts. Production dependency audit blocks high findings; known development lint-chain findings remain explicitly open in Task 01.1.
+- All constituent code checks ran locally in Tasks 01.1/01.2. Hosted CI is NOT_RUN until this workflow is pushed and its run is observed; adding a YAML file is not evidence of hosted success.
+- Five pre-existing source formatting changes appeared during Task 01.2; preserved unstaged and excluded from database/CI commits.
