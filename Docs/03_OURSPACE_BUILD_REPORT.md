@@ -148,3 +148,13 @@ Acceptance: canonical owners M01-M10 explicit; consumers cannot write a linked d
 - Migration 0003 adds private deny-by-default command receipt, outbox and audit tables. Receipts scope idempotency to actor/command; outbox also deduplicates source/revision/event type. No arbitrary JSON or secret-content columns in audit/outbox. IDs and events are still private and never broadcast directly.
 - Transaction tests prove domain changes/receipt/outbox/audit roll back together, and duplicate commands cannot create a second event. Application command replay/hash comparison and worker retry behavior remain to implement; constraints alone do not constitute completed financial or notification idempotency.
 - Lint/typecheck PASS; 4 TypeScript tests PASS. Real DB suite final count recorded after exit. No new P0 claimed.
+- Final DB suite: 8 PASS. Commit `8290e13a0f47cd0e97e1aa8a05156d834d27bfa1` PUSHED and remote verified.
+
+## Task 01.7 — Base object permission policy library
+
+Acceptance: private default, no parent grant inheritance, explicit actions, revocation/expiry, mandatory domain guard even for owners, inactive sessions denied and no inferred business consent (M10 D13-D18 foundation).
+
+- Pure policy library evaluates server-loaded identity, resource grants, lifecycle and domain guards. It grants no access from pairing alone, rejects expired/revoked grants and trashed content, and keeps share/trash owner-only in this base policy. Module exceptions need explicit contracts.
+- Owner access still requires domain guard, so ownership cannot bypass a sealed-content guard. Domain actions such as approval/seal/reveal are not generic content actions. Relationship guard can stop shared collaboration without disabling personal owner access.
+- PASS: lint/typecheck and 13 TypeScript tests, including negative ACL cases. This is a tested foundation only: no API/session/auth-provider integration exists yet, so no claim of security POC or P0 completion.
+- Stage 01 remaining gate: hosted CI for browser-enabled workflow still downloading Chromium (run 39929063507, verified active at install step); check authoritative result before claiming full stage exit. Next implementation is Stage 02 local Auth integration, server permission loading, real two-user allow/deny tests and MFA recovery POC.
