@@ -2,11 +2,17 @@ import io
 import unittest
 import zipfile
 
-from audit_repository import inspect
+from audit_repository import inspect, sensitive_filename
 from verify_sources import verify
 
 
 class BaselineTests(unittest.TestCase):
+    def test_only_empty_env_template_is_allowed(self):
+        self.assertFalse(sensitive_filename('.env.example', b'# local settings\nDATABASE_URL=\n'))
+        self.assertTrue(sensitive_filename('.env.example', b'DATABASE_URL=some-value'))
+        self.assertTrue(sensitive_filename('.env.local', b''))
+        self.assertTrue(sensitive_filename('nested/.env', b''))
+
     def test_sources_match_master(self):
         self.assertEqual(len(verify()['approved_sources']), 11)
 

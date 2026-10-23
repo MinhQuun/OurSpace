@@ -46,11 +46,21 @@ def main():
         if git('cat-file', '-t', oid).strip() != b'blob':
             continue
         blobs += 1
-        if re.search(r'(^|/)\.env(?:\.|$)|\.(pem|key)$', path):
+        data = git('cat-file', 'blob', oid)
+        if sensitive_filename(path, data):
             findings.append({'path': path, 'rule': 'sensitive-filename'})
-        inspect(path, git('cat-file', 'blob', oid), findings, binaries)
+        inspect(path, data, findings, binaries)
     print(json.dumps({'history_blobs': blobs, 'findings': findings, 'manual_binary_review': sorted(set(binaries)), 'limitation': 'Heuristic scan; no guarantee of absence of personal data or unknown secret formats.'}, indent=2))
     return bool(findings)
+
+
+def sensitive_filename(path, data):
+    if path.split('/')[-1] == '.env.example':
+        # Only comments, blank lines and empty assignments are allowed.
+        return any(line.strip() and not line.lstrip().startswith(b'#')
+                   and not re.fullmatch(rb'[A-Z][A-Z0-9_]*=\s*', line.strip())
+                   for line in data.splitlines())
+    return bool(re.search(r'(^|/)\.env(?:\.|$)|\.(pem|key)$', path))
 
 
 if __name__ == '__main__':

@@ -132,3 +132,9 @@ Acceptance: M10 ENT-01/02 data foundation, required display name, no cascading a
 - `npm run db:seed` inserts two explicit synthetic IDs and display names only; preserves existing rows/edits. No password, email-verification bypass or fake login. Auth-provider test accounts remain a Stage 02 prerequisite.
 - `.env.example` contains blank placeholders only. Seed runner targets only project-local Docker DB, with no remote URL input.
 - Validation: lint/typecheck/unit PASS; real DB integration covers repeatability/concurrency, migration drift/rollback, seed preservation, pending-verification default, blank-name rejection, restrict-delete and zero rows for unprivileged SELECT despite explicit table SELECT grants. Final test count recorded after runner exits.
+- Final DB runner: 6 tests PASS. Commit `c6c3dd3ad56fadedbc1d4d05880901c03216ebea` PUSHED with remote SHA verified.
+
+### Task 01.5a — Validate empty environment templates in history audit
+
+- Full-history scan after adding the required `.env.example` exposed an overly broad filename rule. The template contains only comments and empty assignments, as required by the Goal.
+- Scanner now permits exactly `.env.example` only when every non-comment line is an empty uppercase variable assignment. Nonempty templates and actual `.env`/`.env.local` remain rejected; content patterns still run. No generic example-file exemption.
