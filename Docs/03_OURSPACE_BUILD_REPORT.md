@@ -75,6 +75,8 @@ Acceptance: inventory all approved decisions/AC/policies and supporting draft fa
 
 Acceptance: a real local Next.js server and build, strict TypeScript, lint/test commands, a non-sensitive health endpoint; no product acceptance inferred from scaffold UI.
 
+- Commit `f005fd045330c6e50b9c056e86600910b2a6e49c` PUSHED; remote master SHA matches local HEAD. Scaffold task complete; Stage 01 remains IN_PROGRESS.
+
 - Workflow amendment `7a5acc8679ce18f238e68701371774c58d126cb6` PUSHED and remote master verified.
 - Next.js 16.4.2 / React 19.3.1 / TypeScript 5.9.3 / Vitest 4.1.12 pinned with lockfile. Registry metadata and official installation docs checked; local Next.js bundled guides also consulted. Node 20.20.2 meets engines.
 - npm 10.8.2 peer resolver crashed with `edgesOut`; installing dev dependencies with `--legacy-peer-deps` completed. ESLint 9.39.5 retained because installed React and accessibility plugins exclude ESLint 10 in their peer ranges; follow-up toolchain upgrade needed.
@@ -83,3 +85,14 @@ Acceptance: a real local Next.js server and build, strict TypeScript, lint/test 
 - UI is a preparation page with no private data and no claimed P0 business functionality. Auth/database/domain modules/E2E/CI remain for subsequent tasks.
 - Run: `npm install --legacy-peer-deps`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`. No environment secrets needed for scaffold. No production deployment performed.
 - Next task: local PostgreSQL configuration and migration runner with database integration tests, followed by CI and module service boundaries.
+
+## Task 01.2 — Local PostgreSQL and transactional migrations
+
+Acceptance: isolated persistent local database; no checked-in password; repeatable migration runner with checksum drift rejection, concurrency lock and atomic failure rollback; demonstrate on real PostgreSQL.
+
+- Added `compose.yaml` scoped to project `ourspace-local`, bound to `127.0.0.1:55432`. Password generated only in ignored `.local/db-password`; named data volume persists on stop. No destructive reset command.
+- `python scripts/local_db.py start|stop|status` manages only this Compose project. `python scripts/migrate_db.py` applies local SQL migrations with transactional advisory lock and SHA-256 history.
+- Initial migration creates private module schemas M01-M10 and removes PUBLIC create rights. These schemas are technical boundaries, not implemented domains or verified end-user ACL.
+- `python scripts/integration_db.py` uses fresh UUID-named disposable test databases, never resets the application database. Acceptance cases: repeated/concurrent runs, checksum drift rejected, schema/history rolled back on SQL failure.
+- Validation PASS: lint/typecheck and existing unit test; Python compilation and diff whitespace; all 3 real PostgreSQL integration tests (concurrency/repeatability, drift rejection, failure rollback). PostgreSQL 17.11 healthy; base migration applied. Docker image pinned to verified digest `sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb`.
+- Local recovery: stop/start preserves volume; failed migration transaction rolls back. Correct an unapplied migration then rerun; never modify an applied migration, add a forward migration instead. Production migration/backup credentials and deployment remain out of scope for this local task.

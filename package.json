@@ -9,7 +9,11 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:requirements": "python -m unittest discover -s scripts -p test_*.py -v"
+    "test:requirements": "python -m unittest discover -s scripts -p test_*.py -v",
+    "db:start": "python scripts/local_db.py start",
+    "db:stop": "python scripts/local_db.py stop",
+    "db:migrate": "python scripts/migrate_db.py",
+    "test:db": "python scripts/integration_db.py"
   },
   "engines": {
     "node": ">=20.19.0"

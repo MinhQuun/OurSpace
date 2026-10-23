@@ -1,0 +1,24 @@
+name: ourspace-local
+services:
+  db:
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+    environment:
+      POSTGRES_DB: ourspace
+      POSTGRES_USER: ourspace_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    ports:
+      - "127.0.0.1:55432:5432"
+    secrets:
+      - db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ourspace_owner -d ourspace"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+secrets:
+  db_password:
+    file: ./.local/db-password
+volumes:
+  postgres_data:
