@@ -368,3 +368,13 @@ Acceptance: changing enrollment security state permanently revokes that account'
 - Migration 0010 adds mfa_changed revocation evidence and a private trigger for enrollment state transitions. Already revoked sessions are not updated or audited twice. Metadata-only updates leave sessions unchanged. Provider session downgrade is not treated as application cookie revocation.
 - PASS all 14 real PostgreSQL integration cases. New case covers forced rollback, two sessions revoked on verification, partner isolation, acknowledgment/activation revocation, disabling/disabled revocation and exact audit count. Lint/typecheck and diff/history audit PASS (209 blobs, no findings). Local migration applied and checksums verified.
 - Scope: trigger handles existing session invalidation only. Signed-proof orchestration and issuance policy must still serialize concurrent login/MFA changes and enforce required assurance before the product MFA flow is exposed. No new runtime grants or browser endpoints; Stage 02 and D10 remain incomplete.
+- Commit 773cdb5b449212dd27f88349adcf6315826e3b2a PUSHED; remote master SHA matches HEAD. Next: signed-proof enrollment functions and serialized MFA-aware session issuance.
+
+## Task 02.6h — Database MFA assurance at session issuance
+
+Acceptance: a verified live enrollment requires signature-validated AAL2 at database issuance; pending enrollment does not silently enable MFA; login racing verification cannot leave an active password-only session.
+
+- Migration 0011 replaces issuance with the same function signature/grants, adding assurance checks against durable enrollment state. Verified cancellation/disable-in-progress retains the requirement until cleanup completes. Unknown/missing assurance fails closed. Existing provider signature/identity and account-state checks remain.
+- Enrollment state transitions update account security_version, sharing the row lock already used by issuance. The transaction that follows verification observes its assurance requirement; issuance that precedes verification is revoked by the transition trigger.
+- PASS 14 PostgreSQL cases including expanded signed-token assurance and concurrent login/verification; 2 real Auth provider scenarios after local migration; lint/typecheck and diff/history audit (212 blobs, no findings). Tested pending login, missing/aal1/unknown assurance denial, aal2 issuance, cancellation-in-progress denial and completed cancellation behavior.
+- Scope remains local signed-provider profile. Authenticated enrollment mutation functions, safe provider reconciliation, recovery acknowledgment UI and production signing/rotation remain outstanding. Full D10/Stage 02 are not complete.

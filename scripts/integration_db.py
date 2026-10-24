@@ -276,6 +276,31 @@ ROLLBACK;''', self.database)
         self.assertEqual(sql('SELECT count(*) FROM m10.accounts;', self.database), '0')
         issue(token(claims))
         self.assertEqual(sql('SELECT account_id FROM m10.sessions;', self.database), account)
+        enrollment = str(uuid.uuid4())
+        sql(f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{enrollment}','{account}');", self.database)
+        issue(token(claims))  # Unverified setup does not enable MFA.
+        verify = f"UPDATE m10.mfa_enrollments SET provider_factor_id='{uuid.uuid4()}',verified_at=clock_timestamp(),state='verified';"
+        # Both requests start independently. Either issuance wins and its session
+        # is revoked by verification, or verification wins and issuance denies.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            changing = pool.submit(sql, verify, self.database)
+            logging_in = pool.submit(issue, token(claims))
+            changing.result()
+            try:
+                logging_in.result()
+            except subprocess.CalledProcessError:
+                pass
+        self.assertEqual(sql('SELECT count(*) FROM m10.sessions WHERE revoked_at IS NULL;', self.database), '0')
+        for assurance in [None, 'aal1', 'aal3', 'AAL2']:
+            with self.assertRaises(subprocess.CalledProcessError):
+                issue(token({**claims, 'aal': assurance}))
+        issue(token({**claims, 'aal': 'aal2'}))
+        sql("UPDATE m10.mfa_enrollments SET state='cancelling';", self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            issue(token(claims))
+        sql("UPDATE m10.mfa_enrollments SET state='cancelled';", self.database)
+        issue(token(claims))
+        self.assertEqual(sql('SELECT security_version FROM m10.accounts;', self.database), '4')
         sql("UPDATE m10.accounts SET state='deactivated';", self.database)
         with self.assertRaises(subprocess.CalledProcessError):
             issue(token(claims))
