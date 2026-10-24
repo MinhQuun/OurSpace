@@ -70,6 +70,46 @@ export class MfaService {
     });
   }
 
+  private async recoveryProof(token: string, credentials: Credentials, enrollmentId: string, version: string, code: string) {
+    const { session, identity } = await this.reauthenticate(token, credentials);
+    const current = (await this.db.query('SELECT * FROM app_internal.bound_mfa_factor($1,$2)',
+      [digest(token), enrollmentId])).rows[0];
+    if (!current || current.state !== 'verified' || String(current.version) !== version ||
+        !identity.totpFactorIds.includes(current.provider_factor_id)) throw new AuthProviderError('denied');
+    const challenge = await this.provider.challengeTotp(session.accessToken, current.provider_factor_id);
+    const elevated = await this.provider.verifyTotp(session.accessToken, current.provider_factor_id, challenge, code);
+    return { elevated, identity };
+  }
+
+  async issueRecovery(token: string, credentials: Credentials, enrollmentId: string, version: string, code: string) {
+    const { elevated } = await this.recoveryProof(token, credentials, enrollmentId, version, code);
+    const receipt = randomBytes(32).toString('base64url');
+    return this.db.transaction(async client => {
+      // Lock/version check precedes provider mutation. A competing request must
+      // fail before it can create or replace a recovery set.
+      const result = await client.query('SELECT app_internal.record_mfa_recovery($1,$2,$3,$4,$5,false) AS version',
+        [digest(token), elevated.accessToken, enrollmentId, version, digest(receipt)]);
+      const codes = await this.provider.generateRecoveryCodes(elevated.accessToken);
+      return { enrollmentId, version: String(result.rows[0].version), codes, receipt };
+    });
+  }
+
+  async acknowledgeRecovery(token: string, credentials: Credentials, enrollmentId: string, version: string, code: string, receipt: string) {
+    const receiptHash = digest(receipt);
+    const { elevated, identity } = await this.recoveryProof(token, credentials, enrollmentId, version, code);
+    const recovery = await this.provider.recoveryStatus(elevated.accessToken);
+    if (recovery.remaining <= 0) throw new AuthProviderError('denied');
+    const replacement = { token: randomBytes(32).toString('base64url'), id: randomUUID(),
+      expiresAt: new Date(Date.now() + elevated.expiresIn * 1000) };
+    return this.db.transaction(async client => {
+      const result = await client.query('SELECT app_internal.record_mfa_recovery($1,$2,$3,$4,$5,true) AS version',
+        [digest(token), elevated.accessToken, enrollmentId, version, receiptHash]);
+      await client.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
+        [elevated.accessToken, identity.displayName ?? null, replacement.id, digest(replacement.token)]);
+      return { enrollmentId, version: String(result.rows[0].version), session: replacement };
+    });
+  }
+
   async verify(
     token: string,
     credentials: Credentials,

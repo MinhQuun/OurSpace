@@ -79,6 +79,19 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
       localTotp(started.secret),
     ),
   ).rejects.toMatchObject({ kind: "denied" });
+  const recovery = await service.issueRecovery(verified.session.token, credentials, started.enrollmentId, verified.version, localTotp(started.secret));
+  expect(recovery.version).toBe('4');
+  expect(Object.keys(recovery).sort()).toEqual(['codes', 'enrollmentId', 'receipt', 'version']);
+  await expect(service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
+    localTotp(started.secret), randomBytes(32).toString('base64url'))).rejects.toThrow('Database operation unavailable');
+  expect(Boolean(await sessions.actor(verified.session.token))).toBe(true);
+  const enabled = await service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
+    localTotp(started.secret), recovery.receipt);
+  expect(enabled.version).toBe('5');
+  expect(await sessions.actor(verified.session.token)).toBeNull();
+  expect(Boolean(await sessions.actor(enabled.session.token))).toBe(true);
+  const recovered = await sessions.login(credentials.email, credentials.password, undefined, { method: 'recovery', code: recovery.codes[0] });
+  expect(Boolean(await sessions.actor(recovered.token))).toBe(true);
 }, 30_000);
 
 test("factor binding requires current version and verification requires signed AAL2", async () => {

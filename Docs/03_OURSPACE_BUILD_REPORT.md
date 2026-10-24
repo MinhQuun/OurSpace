@@ -418,3 +418,12 @@ Acceptance: reauthenticate the current account before setup; resolve factor iden
 - PASS 4 real provider integration scenarios including service enrollment, stale verification rejection, TOTP verification, invalidation of both prior app sessions, valid replacement and revoked-session replay denial. Typecheck and diff/history scan PASS (227 blobs, no findings). Local migration/grants applied.
 - Limits: provider side effects cannot roll back with a database transaction. Interrupted initial enrollment must be reconciled before retry; recovery generation/acknowledgment and cancellation are not yet wired into this service. No public route is exposed until these paths are handled. Stage 02 remains IN_PROGRESS.
 - Lint completed successfully (exit 0); all task checks above passed.
+- Commit 016c26a650cb9f67a27782c5c45ad1859ea23ad4 PUSHED; HEAD and remote master SHA match. Formatter also expanded the edited integration test/service layout. Next: recovery orchestration and interrupted setup reconciliation before settings routes/UI.
+
+## Task 02.6m — Recovery issuance and acknowledgment service
+
+Acceptance: require fresh password/TOTP proof and the bound verified factor; return real provider recovery codes with a random receipt; activate only with matching receipt/current version and replace revoked session atomically.
+
+- Added MfaService.issueRecovery/acknowledgeRecovery. Issuance locks/checks DB state before calling provider, returns plaintext codes only in the explicit one-time result, and persists only receipt digest. Acknowledgment checks provider recovery availability, records activation and issues the replacement opaque session in one transaction.
+- PASS 4 real Auth integration scenarios. Expanded service test covers complete start/verify/issue/acknowledge path, wrong receipt denial preserving the current session, successful activation invalidating it, working replacement and actual recovery-code login. Lint/typecheck and diff/history audit PASS (232 blobs, no findings).
+- Recovery material/token payloads are not logged, cached or committed. Provider side effects and response delivery still require reconciliation after interruptions; no public endpoint/UI exposed yet. Next: recover safely from lost enrollment/recovery responses and allow cancellation before exposing setup. Stage 02/D10 remain incomplete.
