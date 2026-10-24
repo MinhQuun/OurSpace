@@ -102,6 +102,50 @@ VALUES ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-0000000
                 migrate(directory, self.database)
         self.assertEqual(sql("SELECT count(*) FROM pg_namespace WHERE nspname IN ('rollback_probe', 'app_migrations');", self.database), '0')
 
+    def test_session_authentication_and_revocation_boundaries(self):
+        migrate(database=self.database)
+        seed(self.database)
+        sql('''UPDATE m10.accounts SET state = 'active';
+INSERT INTO m10.sessions(id, account_id, token_hash, created_at, expires_at) VALUES
+('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',repeat('a',64),now()-interval '1 minute',now()+interval '1 hour'),
+('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002',repeat('b',64),now()-interval '1 minute',now()+interval '1 hour'),
+('50000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001',repeat('c',64),now()-interval '2 hours',now()-interval '1 hour');''', self.database)
+        role = 'probe_' + uuid.uuid4().hex
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f'''BEGIN; CREATE ROLE {role} NOLOGIN;
+GRANT USAGE ON SCHEMA app_internal TO {role}; SET LOCAL ROLE {role};
+SELECT app_internal.session_actor(repeat('a',64)); COMMIT;''', self.database)
+        result = sql(f'''BEGIN; CREATE ROLE {role} NOLOGIN;
+GRANT USAGE ON SCHEMA app_internal TO {role};
+GRANT EXECUTE ON FUNCTION app_internal.session_actor(text), app_internal.revoke_session(text,uuid) TO {role};
+SET LOCAL ROLE {role};
+SELECT app_internal.session_actor(repeat('a',64));
+SELECT app_internal.session_actor(repeat('c',64)) IS NULL;
+SELECT app_internal.session_actor('invalid') IS NULL;
+SELECT app_internal.revoke_session(repeat('a',64),'50000000-0000-4000-8000-000000000002');
+SELECT app_internal.revoke_session(repeat('a',64),'50000000-0000-4000-8000-000000000001');
+SELECT app_internal.session_actor(repeat('a',64)) IS NULL;
+SELECT app_internal.session_actor(repeat('b',64));
+SELECT app_internal.revoke_session(repeat('a',64),'50000000-0000-4000-8000-000000000001');
+RESET ROLE;
+SELECT count(*) FROM m10.session_revocations;
+ROLLBACK;''', self.database)
+        self.assertEqual(result.splitlines(), [
+            '10000000-0000-4000-8000-000000000001', 't', 't', 'f', 't', 't',
+            '10000000-0000-4000-8000-000000000002', 'f', '1'])
+        self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '0')
+        for state in ['pending_verification', 'deactivated', 'deletion_requested', 'deletion_processing', 'deleted']:
+            sql(f"UPDATE m10.accounts SET state = '{state}';", self.database)
+            self.assertEqual(sql("SELECT app_internal.session_actor(repeat('a',64)) IS NULL;", self.database), 't')
+        sql("UPDATE m10.accounts SET state = 'active';", self.database)
+        revoke = "SELECT app_internal.revoke_session(repeat('a',64),'50000000-0000-4000-8000-000000000001');"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(sql, revoke, self.database) for _ in range(2)]
+            self.assertEqual(sorted(attempt.result() for attempt in attempts), ['f', 't'])
+        # Fresh database connections observe committed revocation immediately.
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('a',64)) IS NULL;", self.database), 't')
+        self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '1')
+
     def test_session_constraints_and_private_storage(self):
         migrate(database=self.database)
         seed(self.database)

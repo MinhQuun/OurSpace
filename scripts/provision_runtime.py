@@ -22,7 +22,10 @@ END $$;""")
     # Secret is passed on stdin, never printed or included in process arguments.
     sql(f"ALTER ROLE ourspace_runtime PASSWORD '{password}';")
     sql('GRANT CONNECT ON DATABASE ourspace TO ourspace_runtime;')
-    print('Local runtime login provisioned; no application table grants.')
+    sql('''GRANT USAGE ON SCHEMA app_internal TO ourspace_runtime;
+GRANT EXECUTE ON FUNCTION app_internal.session_actor(text),
+app_internal.revoke_session(text, uuid) TO ourspace_runtime;''')
+    print('Local runtime login provisioned; explicit session functions only, no table grants.')
 
 
 if __name__ == '__main__':

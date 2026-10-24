@@ -205,3 +205,15 @@ Acceptance: separate runtime login, parameterized queries, bounded connection po
 - PASS lint/typecheck/build, 18 unit tests, full npm audit (0 vulnerabilities), diff check, history audit (no secret findings). Prior development dependency audit finding is no longer reported by the current registry advisory response; no unrelated dependency upgrade was performed.
 - Added runtime provisioning and adapter tests to CI. Read official driver docs: https://node-postgres.com/features/queries and https://node-postgres.com/features/pooling, plus installed Next server/client boundary documentation.
 - Session issuance, verified account provisioning, request authorization and revocation are next; this task grants no application data access and does not complete Auth P0.
+- Commit b85bd2e80f61570e7f5d2d005e38664d3a0b0765 PUSHED; HEAD and remote master SHA match. CI result pending.
+
+## Task 02.2c — Database session authentication and atomic revocation
+
+Acceptance: M10 D11 / ENT-M10-14 rejects expired/revoked sessions and non-active accounts; valid caller can revoke only own sessions; revocation and token-free audit commit/rollback atomically; subsequent connections observe denial.
+
+- Added migration 0005 with private revocation records and two narrowly granted SECURITY DEFINER functions. Fixed search_path, qualified tables, revoked PUBLIC execution and no runtime table grants. Server supplies token hash; caller cannot select an actor ID.
+- PASS: 10 PostgreSQL integration tests, plus expanded concurrent-revocation check (one success, one no-op, one audit record) and fresh-connection denial; all five non-active account states rejected. Cross-account revoke denied; expired/unknown token denied; transaction rollback restores revocation/audit together.
+- PASS: lint/typecheck, 18 unit tests, 4 real adapter tests, diff check/history scan. An initial targeted unittest command used the wrong import root; rerun from scripts succeeded. Prior interrupted patch had only created migration 0005; inspected state and completed remaining edits before testing.
+- CI for 14b7c7c (39986480870) and b85bd2e (39987306872) verified SUCCESS.
+- PostgreSQL security-definer guidance consulted: https://www.postgresql.org/docs/17/sql-createfunction.html. No session TTL policy introduced: tests use synthetic intervals only.
+- Scope: database boundary only. HTTP request integration, session issuance, listing/UI, other-device logout, MFA and account lifecycle invalidation remain; no full D11/P0 acceptance claimed.
