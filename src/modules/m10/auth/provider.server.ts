@@ -71,12 +71,56 @@ export class AuthProvider {
 
   async signIn(email: string, password: string): Promise<ProviderSession> {
     const data = await this.request('/token?grant_type=password', this.credentials(email, password));
+    return this.session(data);
+  }
+
+  private async session(data: Record<string, unknown>): Promise<ProviderSession> {
     if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string' ||
         typeof data.expires_in !== 'number' || !Number.isFinite(data.expires_in) || data.expires_in <= 0) {
       throw new AuthProviderError('unavailable');
     }
     await this.identity(data.access_token);
     return { accessToken: data.access_token, refreshToken: data.refresh_token, expiresIn: data.expires_in };
+  }
+
+  private factorId(value: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) throw new AuthProviderError('invalid_input');
+    return value;
+  }
+
+  async enrollTotp(token: string): Promise<{ id: string; secret: string; uri: string }> {
+    await this.identity(token);
+    const data = await this.request('/factors', { factor_type: 'totp', friendly_name: 'Our Space' }, token);
+    const totp = data.totp as { secret?: unknown; uri?: unknown } | undefined;
+    if (typeof data.id !== 'string' || typeof totp?.secret !== 'string' ||
+        !/^[A-Z2-7]+=*$/.test(totp.secret) || typeof totp.uri !== 'string' || !totp.uri.startsWith('otpauth://totp/')) {
+      throw new AuthProviderError('unavailable');
+    }
+    return { id: this.factorId(data.id), secret: totp.secret, uri: totp.uri };
+  }
+
+  async challengeTotp(token: string, factorId: string): Promise<string> {
+    const data = await this.request(`/factors/${this.factorId(factorId)}/challenge`, {}, token);
+    if (typeof data.id !== 'string') throw new AuthProviderError('unavailable');
+    return this.factorId(data.id);
+  }
+
+  async verifyTotp(token: string, factorId: string, challengeId: string, code: string): Promise<ProviderSession> {
+    if (!/^\d{6}$/.test(code)) throw new AuthProviderError('invalid_input');
+    const before = await this.identity(token);
+    const data = await this.request(`/factors/${this.factorId(factorId)}/verify`, {
+      challenge_id: this.factorId(challengeId), code,
+    }, token);
+    const session = await this.session(data);
+    const after = await this.identity(session.accessToken);
+    if (before.id !== after.id) throw new AuthProviderError('denied');
+    // This token came directly from authenticated provider verification and was
+    // validated by /user. Never use unverified client JWT claims for assurance.
+    try {
+      const claims = JSON.parse(Buffer.from(session.accessToken.split('.')[1], 'base64url').toString('utf8'));
+      if (claims.aal !== 'aal2') throw new Error();
+    } catch { throw new AuthProviderError('denied'); }
+    return session;
   }
 
   async identity(token: string): Promise<VerifiedIdentity> {

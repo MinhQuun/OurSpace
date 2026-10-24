@@ -295,3 +295,14 @@ Acceptance: ENT-M10-13 last-seen reflects successful session use; changing accou
 - PASS 12 real PostgreSQL tests, including last-seen movement, deactivate/reactivate denial and no duplicate audit on later state changes; all non-active states still deny lookup. Expanded Auth integration, 4 HTTP/desktop/mobile session-management cases, lint/typecheck/build and 18 unit tests PASS. Diff/history scan clean.
 - Function return-shape migration replaces only list_sessions definition, then local provisioning reapplies its explicit grant. No tables or user records dropped; migrations remain immutable after application. Unrelated account/page.tsx formatting preserved unstaged.
 - Next: verify pinned-provider MFA/recovery support, implement complete MFA challenge/recovery and security lifecycle handling. Stage 02 remains incomplete.
+- Commit 9c91653df64150f46666a40e7a06cb7545a0aa9e PUSHED; HEAD and remote master SHA match. Continue with MFA/recovery provider verification and implementation.
+
+## Task 02.6a — Real TOTP provider transport
+
+Acceptance: enroll a TOTP factor, create challenge, reject incorrect code, verify correct code with same identity and AAL2, reject replay; return sanitized failures and no token logging.
+
+- Added enrollment/challenge/verification methods to AuthProvider with UUID/code/response validation, current identity checks and AAL2 verification after provider validation. Reused the server session response parser. No MFA browser endpoint or storage of provider tokens introduced.
+- PASS real GoTrue integration: enrollment, incorrect code denial, correct verification, same user, replay denial and continued password-only application login denial. Lint/typecheck and 18 unit tests PASS; diff/history scan clean.
+- Recovery evidence corrected: tagged v2.197.0 OpenAPI omits recovery-codes, but tagged source api.go includes status/generate/verify/regenerate/delete routes. Authenticated status returned 404 with error_code=mfa_factor_not_found, proving no enrolled factor rather than a missing route. Earlier absence inference must not drive a custom implementation.
+- GitHub latest release is still v2.197.0 and its release notes explicitly include recovery endpoints. Next task: enable/verify native recovery configuration and test one-use/rotation behavior before integrating full MFA UI.
+- Sources: https://raw.githubusercontent.com/supabase/auth/v2.197.0/internal/api/api.go and https://github.com/supabase/auth/releases/tag/v2.197.0. Full M10 D10 remains incomplete.

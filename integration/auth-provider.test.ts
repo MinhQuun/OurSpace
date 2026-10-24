@@ -71,19 +71,20 @@ test('real provider requires email confirmation and isolates two identities', as
       [forged, 'Forged', randomUUID(), hash])).rejects.toThrow('Database operation unavailable');
     await expect(auth.signIn(email, randomUUID() + '!Aa9')).rejects.toMatchObject({ kind: 'denied' });
     if (label === 'a') {
-      const post = async (path: string, body: unknown) => {
-        const response = await fetch('http://127.0.0.1:55433' + path, {
-          method: 'POST', headers: { Authorization: `Bearer ${session.accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        expect(response.status).toBe(200);
-        return response.json();
-      };
-      const factor = await post('/factors', { factor_type: 'totp', friendly_name: 'Local integration authenticator' });
-      const challenge = await post(`/factors/${factor.id}/challenge`, {});
-      await post(`/factors/${factor.id}/verify`, { challenge_id: challenge.id, code: localTotp(factor.totp.secret) });
+      const factor = await auth.enrollTotp(session.accessToken);
+      const challenge = await auth.challengeTotp(session.accessToken, factor.id);
+      const wrongCode = String((Number(localTotp(factor.secret)) + 1) % 1000000).padStart(6, '0');
+      await expect(auth.verifyTotp(session.accessToken, factor.id, challenge, wrongCode)).rejects.toMatchObject({ kind: 'denied' });
+      const verified = await auth.verifyTotp(session.accessToken, factor.id, challenge, localTotp(factor.secret));
+      expect((await auth.identity(verified.accessToken)).id).toBe(identity.id);
+      await expect(auth.verifyTotp(session.accessToken, factor.id, challenge, localTotp(factor.secret))).rejects.toMatchObject({ kind: 'denied' });
       expect((await auth.identity(session.accessToken)).mfaRequired).toBe(true);
       await expect(sessions.login(email, password)).rejects.toMatchObject({ kind: 'denied' });
+      const recoveryProbe = await fetch('http://127.0.0.1:55433/factors/recovery-codes', {
+        headers: { Authorization: `Bearer ${verified.accessToken}` },
+      });
+      expect(recoveryProbe.status).toBe(404);
+      expect((await recoveryProbe.json()).error_code).toBe('mfa_factor_not_found');
     }
   }
   expect(new Set(identities).size).toBe(2);
