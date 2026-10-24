@@ -338,3 +338,14 @@ Acceptance: provider-required MFA reveals accessible TOTP/recovery inputs; eithe
 - PASS lint, typecheck, production build and all 4 real Auth HTTP/desktop/mobile cases. Expanded browser tests cover TOTP success, recovery success, method-switch clearing, replay denial with unauthenticated session, no local/session storage and reload clearing. Desktop/mobile screenshots inspected after clearing all credentials; no horizontal overflow.
 - Diff/history heuristic scan: no findings across 200 historical blobs. Historical media remains covered by the user's public-release authorization. Unrelated account/page.tsx formatting remains unstaged.
 - Stage 02 remains IN_PROGRESS. Product MFA enrollment, recovery acknowledgment, database MFA policy and existing-session invalidation are still outstanding; this task completes only the login UI.
+- Commit 525017faa842c116f66cf348cf78ac3ca2d3b1c7 PUSHED; HEAD and origin/master SHA verified identical. Next: MFA enrollment/recovery acknowledgment and database policy/session invalidation.
+
+## Task 02.6e — MFA cancellation/removal provider boundary
+
+Acceptance: cancel unverified enrollment without enabling MFA; removal of verified factors/recovery requires provider step-up; another account cannot remove a factor; removed factors/codes cannot authenticate.
+
+- Added server transport for factor unenrollment and recovery deletion with response validation and existing sanitized error handling. No public application endpoint added before lifecycle coordination is ready.
+- PASS lint/typecheck and 2 real provider integration scenarios: cancellation then re-enrollment; repeated cancellation denied; password-only removal denied for both TOTP/recovery; foreign-account removal denied; elevated removal succeeds; deleted recovery code and removed TOTP challenge rejected; fresh identity has no enabled factor.
+- Diff/history audit: no findings across 203 blobs; previously authorized media unchanged. Unrelated account/page.tsx formatting remains unstaged.
+- Native API behavior verified against pinned source: https://github.com/supabase/auth/blob/v2.197.0/internal/api/mfa.go and https://github.com/supabase/auth/blob/v2.197.0/internal/api/recovery_codes.go.
+- UC-M10-10 still requires a durable pending enrollment and recovery acknowledgment before product activation. Provider verification activates its factor immediately, so orchestration must represent that intermediate state explicitly and recover safely after interruptions. App session invalidation is not implied by provider session downgrade. These remain next work; no complete D10 claim.

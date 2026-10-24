@@ -125,3 +125,37 @@ test('real provider requires email confirmation and isolates two identities', as
   expect(await sessions.actor('malformed')).toBeNull();
   await expect(auth.identity('invalid-test-token')).rejects.toMatchObject({ kind: 'denied' });
 }, 30_000);
+
+test('provider cancellation and MFA removal enforce ownership and step-up', async () => {
+  const email = `lifecycle-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + '!Aa9';
+  await auth.signUp(email, password);
+  expect((await fetch(await confirmationLink(email), { redirect: 'manual' })).status).toBe(303);
+  const initial = await auth.signIn(email, password);
+  const pending = await auth.enrollTotp(initial.accessToken);
+  expect((await auth.identity(initial.accessToken)).mfaRequired).toBe(false);
+  await auth.unenrollFactor(initial.accessToken, pending.id);
+  await expect(auth.challengeTotp(initial.accessToken, pending.id)).rejects.toMatchObject({ kind: 'denied' });
+  await expect(auth.unenrollFactor(initial.accessToken, pending.id)).rejects.toMatchObject({ kind: 'denied' });
+  const factor = await auth.enrollTotp(initial.accessToken);
+  const challenge = await auth.challengeTotp(initial.accessToken, factor.id);
+  const elevated = await auth.verifyTotp(initial.accessToken, factor.id, challenge, localTotp(factor.secret));
+  const codes = await auth.generateRecoveryCodes(elevated.accessToken);
+  const low = await auth.signIn(email, password);
+  await expect(auth.unenrollFactor(low.accessToken, factor.id)).rejects.toMatchObject({ kind: 'denied' });
+  await expect(auth.deleteRecoveryCodes(low.accessToken)).rejects.toMatchObject({ kind: 'denied' });
+  expect((await auth.recoveryStatus(elevated.accessToken)).remaining).toBe(codes.length);
+  const otherEmail = `lifecycle-other-${randomUUID()}@ourspace.test`;
+  await auth.signUp(otherEmail, password);
+  expect((await fetch(await confirmationLink(otherEmail), { redirect: 'manual' })).status).toBe(303);
+  const other = await auth.signIn(otherEmail, password);
+  await expect(auth.unenrollFactor(other.accessToken, factor.id)).rejects.toMatchObject({ kind: 'denied' });
+  expect((await auth.identity(elevated.accessToken)).mfaRequired).toBe(true);
+  await auth.deleteRecoveryCodes(elevated.accessToken);
+  await expect(auth.recoveryStatus(elevated.accessToken)).rejects.toMatchObject({ kind: 'denied' });
+  await expect(auth.verifyRecoveryCode(low.accessToken, codes[0])).rejects.toMatchObject({ kind: 'denied' });
+  await auth.unenrollFactor(elevated.accessToken, factor.id);
+  const fresh = await auth.signIn(email, password);
+  expect((await auth.identity(fresh.accessToken)).mfaRequired).toBe(false);
+  await expect(auth.challengeTotp(fresh.accessToken, factor.id)).rejects.toMatchObject({ kind: 'denied' });
+}, 30_000);
