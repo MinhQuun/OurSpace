@@ -284,3 +284,14 @@ Acceptance: desktop/mobile users can inspect own sessions, distinguish current/r
 - PASS: full desktop/mobile browser flows now exercise cancel, revoke others, selected revoke and self-revoke, checking independent cookie contexts lose access. All 8 Playwright HTTP/UI/scaffold cases, lint/typecheck/build and 18 unit tests PASS. Diff/history scan has no secret findings.
 - Inspected mobile session-management screenshot in ignored .local/sessions-mobile.png. Dates/controls fit; no credentials or real personal data are present. Desktop screenshot also generated for review.
 - D11 UI slice is implemented; last-seen metadata, lifecycle invalidation, full MFA/recovery and remaining Stage 02 requirements still need completion. No complete P0 Auth claim.
+- Commit 182e9d7bc78e4e4887ffb35d9b83e3ea4c6ef462 PUSHED; remote master SHA matches HEAD. Next: last-seen/session lifecycle coverage and pinned-provider MFA/recovery capability verification.
+
+## Task 02.5c — Last-seen and account-state session invalidation
+
+Acceptance: ENT-M10-13 last-seen reflects successful session use; changing account to a non-active state revokes existing sessions atomically with audit; reactivation cannot resurrect old tokens.
+
+- Added forward migration 0008: last_seen initialized from creation for existing sessions; authenticated lookups update it using trusted database time. Session listing/UI expose last-seen without adding token/hash fields.
+- Account state-change trigger permanently revokes outstanding sessions and records account_inactive evidence in the same transaction. Returning state to active does not clear revocations. No account lifecycle UI or deletion workflow is claimed complete by this trigger.
+- PASS 12 real PostgreSQL tests, including last-seen movement, deactivate/reactivate denial and no duplicate audit on later state changes; all non-active states still deny lookup. Expanded Auth integration, 4 HTTP/desktop/mobile session-management cases, lint/typecheck/build and 18 unit tests PASS. Diff/history scan clean.
+- Function return-shape migration replaces only list_sessions definition, then local provisioning reapplies its explicit grant. No tables or user records dropped; migrations remain immutable after application. Unrelated account/page.tsx formatting preserved unstaged.
+- Next: verify pinned-provider MFA/recovery support, implement complete MFA challenge/recovery and security lifecycle handling. Stage 02 remains incomplete.

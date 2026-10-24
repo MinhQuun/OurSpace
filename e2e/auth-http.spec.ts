@@ -45,7 +45,7 @@ test('verified login uses private cookie and logout invalidates a copied cookie'
     const entries = (await listed.json()).sessions;
     expect(entries.length).toBe(2);
     expect(entries.filter((entry: { is_current: boolean }) => entry.is_current).length).toBe(1);
-    expect(Object.keys(entries[0]).sort()).toEqual(['created_at', 'expires_at', 'id', 'is_current', 'revoked_at']);
+    expect(Object.keys(entries[0]).sort()).toEqual(['created_at', 'expires_at', 'id', 'is_current', 'last_seen', 'revoked_at']);
     const revoked = await request.post('/api/auth/revoke-other-sessions', { headers: { Origin: origin } });
     expect(await revoked.json()).toEqual({ revoked: 1 });
     expect((await other.get('/api/auth/session')).status()).toBe(401);

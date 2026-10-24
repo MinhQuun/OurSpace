@@ -141,8 +141,7 @@ ROLLBACK;''', self.database)
             '10000000-0000-4000-8000-000000000002', 'f', '1'])
         self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '0')
         for state in ['pending_verification', 'deactivated', 'deletion_requested', 'deletion_processing', 'deleted']:
-            sql(f"UPDATE m10.accounts SET state = '{state}';", self.database)
-            self.assertEqual(sql("SELECT app_internal.session_actor(repeat('a',64)) IS NULL;", self.database), 't')
+            self.assertEqual(sql(f"BEGIN; UPDATE m10.accounts SET state = '{state}'; SELECT app_internal.session_actor(repeat('a',64)) IS NULL; ROLLBACK;", self.database), 't')
         sql("UPDATE m10.accounts SET state = 'active';", self.database)
         revoke = "SELECT app_internal.revoke_session(repeat('a',64),'50000000-0000-4000-8000-000000000001');"
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -187,6 +186,21 @@ ROLLBACK;''', self.database)
         with self.assertRaises(subprocess.CalledProcessError):
             issue(token(claims))
         self.assertEqual(sql('SELECT state FROM m10.accounts;', self.database), 'deactivated')
+
+    def test_account_reactivation_cannot_resurrect_sessions(self):
+        migrate(database=self.database)
+        seed(self.database)
+        sql('''UPDATE m10.accounts SET state='active';
+INSERT INTO m10.sessions(id, account_id, token_hash, created_at, last_seen, expires_at)
+VALUES ('50000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001',
+repeat('a',64), now()-interval '1 hour', now()-interval '1 hour', now()+interval '1 hour');''', self.database)
+        self.assertEqual(sql("SELECT app_internal.authenticate_session(repeat('a',64));", self.database), '10000000-0000-4000-8000-000000000001')
+        self.assertEqual(sql('SELECT last_seen > created_at FROM m10.sessions;', self.database), 't')
+        sql("UPDATE m10.accounts SET state='deactivated'; UPDATE m10.accounts SET state='active';", self.database)
+        self.assertEqual(sql("SELECT app_internal.authenticate_session(repeat('a',64)) IS NULL;", self.database), 't')
+        self.assertEqual(sql("SELECT count(*) FROM m10.session_revocations WHERE reason='account_inactive';", self.database), '1')
+        sql("UPDATE m10.accounts SET state='deletion_requested';", self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '1')
 
     def test_session_constraints_and_private_storage(self):
         migrate(database=self.database)

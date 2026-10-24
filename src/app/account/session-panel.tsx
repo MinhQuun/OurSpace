@@ -8,6 +8,7 @@ type Session = {
   expires_at: string;
   revoked_at: string | null;
   is_current: boolean;
+  last_seen: string;
 };
 
 export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
@@ -152,6 +153,7 @@ export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
                 </strong>
                 <p>{state}</p>
                 <p className="field-help">
+                  Hoạt động gần nhất: <time dateTime={item.last_seen}>{new Date(item.last_seen).toLocaleString('vi-VN')}</time><br />
                   Bắt đầu:{" "}
                   <time dateTime={item.created_at}>
                     {new Date(item.created_at).toLocaleString("vi-VN")}

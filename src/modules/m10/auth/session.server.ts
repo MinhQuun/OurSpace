@@ -5,7 +5,7 @@ import { AuthProvider, AuthProviderError } from './provider.server';
 
 type Database = ReturnType<typeof createDatabase>;
 export type SessionSummary = {
-  id: string; created_at: Date; expires_at: Date; revoked_at: Date | null; is_current: boolean;
+  id: string; created_at: Date; expires_at: Date; revoked_at: Date | null; is_current: boolean; last_seen: Date;
 };
 function digest(token: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new AuthProviderError('denied');
@@ -41,7 +41,7 @@ export class SessionService {
     let hash: string;
     try { hash = digest(token); } catch { return null; }
     const result = await this.db.query<{ actor: string | null }>(
-      'SELECT app_internal.session_actor($1) AS actor', [hash]);
+      'SELECT app_internal.authenticate_session($1) AS actor', [hash]);
     return result.rows[0]?.actor ?? null;
   }
 
