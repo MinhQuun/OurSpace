@@ -11,9 +11,13 @@ export default function AccountForm() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [factorMethod, setFactorMethod] = useState<"totp" | "recovery">("totp");
   const sessionExpired = useCallback(() => {
-    setState('guest'); setMode('login'); setFailed(false);
-    setMessage('Phiên đã kết thúc. Vui lòng đăng nhập lại.');
+    setState("guest");
+    setMode("login");
+    setFailed(false);
+    setMessage("Phiên đã kết thúc. Vui lòng đăng nhập lại.");
   }, []);
 
   useEffect(() => {
@@ -51,16 +55,27 @@ export default function AccountForm() {
         body: JSON.stringify({
           email: data.get("email"),
           password: data.get("password"),
+          ...(mode === "login" && mfaRequired
+            ? { secondFactor: { method: factorMethod, code: data.get("code") } }
+            : {}),
           ...(mode === "signup"
             ? { displayName: data.get("displayName") }
             : {}),
         }),
       });
       if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        if (response.status === 401 && result.error === "mfa_required") {
+          setMfaRequired(true);
+          setMessage(
+            "Nhập mã từ ứng dụng xác thực hoặc dùng một mã khôi phục chưa sử dụng.",
+          );
+          return;
+        }
         setFailed(true);
         setMessage(
           response.status === 401
-            ? "Không thể đăng nhập. Kiểm tra email, mật khẩu và việc xác minh email. Tài khoản bật xác thực hai bước cần luồng xác thực bổ sung."
+            ? "Không thể đăng nhập. Kiểm tra email, mật khẩu, xác minh email và mã xác thực nếu có."
             : response.status === 400
               ? "Vui lòng kiểm tra các thông tin đã nhập."
               : "Chưa thể xử lý yêu cầu. Vui lòng thử lại sau.",
@@ -68,6 +83,8 @@ export default function AccountForm() {
         return;
       }
       form.reset();
+      setMfaRequired(false);
+      setFactorMethod("totp");
       if (mode === "signup") {
         setMode("login");
         setMessage(
@@ -175,6 +192,46 @@ export default function AccountForm() {
               <p id="password-help" className="field-help">
                 Mật khẩu có ít nhất 12 ký tự.
               </p>
+              {mode === "login" && mfaRequired && (
+                <>
+                  <p className="field-help" id="factor-help">
+                    Mã khôi phục chỉ dùng được một lần. Không chia sẻ mã với
+                    người khác.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      setFactorMethod(
+                        factorMethod === "totp" ? "recovery" : "totp",
+                      )
+                    }
+                  >
+                    {factorMethod === "totp"
+                      ? "Dùng mã khôi phục"
+                      : "Dùng ứng dụng xác thực"}
+                  </button>
+                  <label>
+                    {factorMethod === "totp"
+                      ? "Mã xác thực 6 chữ số"
+                      : "Mã khôi phục"}
+                    <input
+                      key={factorMethod}
+                      name="code"
+                      type="text"
+                      inputMode={factorMethod === "totp" ? "numeric" : "text"}
+                      autoComplete="one-time-code"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                      minLength={factorMethod === "totp" ? 6 : 13}
+                      maxLength={factorMethod === "totp" ? 6 : 64}
+                      pattern={factorMethod === "totp" ? "[0-9]{6}" : undefined}
+                      aria-describedby="factor-help"
+                    />
+                  </label>
+                </>
+              )}
               <button type="submit">
                 {busy
                   ? "Đang xử lý…"
@@ -190,6 +247,8 @@ export default function AccountForm() {
             disabled={busy}
             onClick={() => {
               setMode(mode === "login" ? "signup" : "login");
+              setMfaRequired(false);
+              setFactorMethod("totp");
               setMessage("");
               setFailed(false);
             }}

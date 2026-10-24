@@ -328,3 +328,13 @@ Acceptance: password-only attempts on MFA accounts yield no app session; correct
 - PASS real integration: missing factor denied, unauthorized factor ID denied, TOTP and recovery app sessions succeed, used recovery rejected. HTTP tests verify mfa_required leaves client unauthenticated, TOTP/recovery set working cookies, replay after logout leaves no valid session.
 - PASS lint/typecheck/build, 18 unit tests, expanded Auth integration and all 4 Auth HTTP/desktop/mobile cases; diff/history scan clean. UI second-factor inputs and enrollment/recovery acknowledgment are next.
 - Limits: application enrollment must still coordinate DB MFA policy and existing-session invalidation. Direct local provider enrollment in tests is a capability fixture, not a completed product enrollment flow. Full D10 remains incomplete.
+- Commit f84134bb1ad2a8da12f79d4063e62f9ae39e963d PUSHED; remote master SHA matches HEAD. Next: second-factor login UI, then MFA enrollment with recovery acknowledgment and lifecycle invalidation.
+
+## Task 02.6d — Desktop/mobile second-factor login
+
+Acceptance: provider-required MFA reveals accessible TOTP/recovery inputs; either method can establish a real app session; used recovery codes remain denied; switching methods clears the code and no credentials persist in browser storage.
+
+- Added progressive second-factor entry after the server's mfa_required response. Each attempt re-sends credentials to the existing server flow; no provider token or password is persisted. Numeric six-digit TOTP input and recovery input have labels, validation and one-time-code autocomplete. Method changes unmount the old code input.
+- PASS lint, typecheck, production build and all 4 real Auth HTTP/desktop/mobile cases. Expanded browser tests cover TOTP success, recovery success, method-switch clearing, replay denial with unauthenticated session, no local/session storage and reload clearing. Desktop/mobile screenshots inspected after clearing all credentials; no horizontal overflow.
+- Diff/history heuristic scan: no findings across 200 historical blobs. Historical media remains covered by the user's public-release authorization. Unrelated account/page.tsx formatting remains unstaged.
+- Stage 02 remains IN_PROGRESS. Product MFA enrollment, recovery acknowledgment, database MFA policy and existing-session invalidation are still outstanding; this task completes only the login UI.
