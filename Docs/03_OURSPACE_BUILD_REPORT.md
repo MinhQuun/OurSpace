@@ -437,3 +437,13 @@ Acceptance: after losing an issuance response, authenticated user can replace th
 - Added authenticated metadata-only service status. Original issuance timestamp is preserved; replacement advances version without falsely enabling MFA. No plaintext recovery store introduced.
 - PASS 4 real Auth scenarios, including service issuance/replacement, status resume, old-receipt denial, old-code denial, new acknowledgment and new-code login. Lint/typecheck and diff/history audit PASS (235 blobs, no findings). Local migration and explicit function grant applied.
 - Limits: this path replaces an existing provider recovery set. Recovery-set absence after a failed initial generation, interrupted TOTP enrollment, cancellation and full failure-injection coverage remain to be handled before public settings endpoints. Stage 02/D10 remain incomplete.
+- Commit a048f475bcdeacbeb23c90dec18bfd8ba2768a77 PUSHED; HEAD and remote master SHA match. Next: provider recovery absence reconciliation and cancellation/resume of interrupted setup.
+
+## Task 02.6o — Reconcile missing provider recovery sets
+
+Acceptance: redelivery can recreate a missing provider set or rotate an existing set, while authentication/network errors remain failures and never imply absence.
+
+- Provider transport recognizes only GET recovery status 404 with exact mfa_factor_not_found as absence. Added optional-status method; ordinary recoveryStatus retains failure behavior. No raw provider error text is propagated.
+- Redelivery checks current provider status under its existing account lock/reservation before choosing generate or regenerate. The old receipt remains invalidated before either operation.
+- PASS 4 real Auth scenarios: test removes the synthetic user's actual recovery set after app issuance, confirms absence, recreates through service, rotates again, rejects prior codes/receipt and completes activation/new-code login. Invalid token status remains denied. Lint/typecheck and diff/history audit PASS (240 blobs, no findings).
+- Remaining before settings endpoints: interrupted TOTP setup reconciliation, cancellation/disable orchestration and broader failure/concurrency coverage. Stage 02/D10 remain incomplete.

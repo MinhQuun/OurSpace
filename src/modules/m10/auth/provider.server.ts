@@ -5,6 +5,7 @@ export class AuthProviderError extends Error {
       | "denied"
       | "unavailable"
       | "mfa_required",
+    public readonly reason?: "recovery_not_enrolled",
   ) {
     super(`Authentication ${kind}`);
     this.name = "AuthProviderError";
@@ -74,10 +75,25 @@ export class AuthProvider {
     } catch {
       throw new AuthProviderError("unavailable");
     }
-    if (!response.ok)
+    if (!response.ok) {
+      // Only this exact authenticated status response means no recovery set.
+      // Network failures, invalid tokens and unrelated 404s must not trigger
+      // fallback generation or be mistaken for empty state.
+      if (
+        response.status === 404 &&
+        path === "/factors/recovery-codes" &&
+        body === undefined &&
+        method === undefined
+      ) {
+        const error = await response.json().catch(() => null);
+        if (error?.error_code === "mfa_factor_not_found") {
+          throw new AuthProviderError("denied", "recovery_not_enrolled");
+        }
+      }
       throw new AuthProviderError(
         response.status >= 500 ? "unavailable" : "denied",
       );
+    }
     try {
       const data: unknown = await response.json();
       if (!data || typeof data !== "object" || Array.isArray(data))
@@ -284,6 +300,21 @@ export class AuthProvider {
     )
       throw new AuthProviderError("unavailable");
     return data.codes as string[];
+  }
+
+  async recoveryStatusIfEnrolled(
+    token: string,
+  ): Promise<{ total: number; remaining: number } | null> {
+    try {
+      return await this.recoveryStatus(token);
+    } catch (error) {
+      if (
+        error instanceof AuthProviderError &&
+        error.reason === "recovery_not_enrolled"
+      )
+        return null;
+      throw error;
+    }
   }
 
   async recoveryStatus(

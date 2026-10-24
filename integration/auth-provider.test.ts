@@ -79,29 +79,113 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
       localTotp(started.secret),
     ),
   ).rejects.toMatchObject({ kind: "denied" });
-  let recovery = await service.issueRecovery(verified.session.token, credentials, started.enrollmentId, verified.version, localTotp(started.secret));
-  expect(recovery.version).toBe('4');
-  expect(Object.keys(recovery).sort()).toEqual(['codes', 'enrollmentId', 'receipt', 'version']);
-  await expect(service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
-    localTotp(started.secret), randomBytes(32).toString('base64url'))).rejects.toThrow('Database operation unavailable');
+  let recovery = await service.issueRecovery(
+    verified.session.token,
+    credentials,
+    started.enrollmentId,
+    verified.version,
+    localTotp(started.secret),
+  );
+  expect(recovery.version).toBe("4");
+  expect(Object.keys(recovery).sort()).toEqual([
+    "codes",
+    "enrollmentId",
+    "receipt",
+    "version",
+  ]);
+  await expect(
+    service.acknowledgeRecovery(
+      verified.session.token,
+      credentials,
+      started.enrollmentId,
+      recovery.version,
+      localTotp(started.secret),
+      randomBytes(32).toString("base64url"),
+    ),
+  ).rejects.toThrow("Database operation unavailable");
   expect(Boolean(await sessions.actor(verified.session.token))).toBe(true);
   const oldRecovery = recovery;
-  recovery = await service.replaceRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version, localTotp(started.secret));
-  expect(recovery.version).toBe('5');
+  // Real external-state divergence: provider set is absent while the app still
+  // records issuance, as can happen across interrupted recovery operations.
+  const proof = await auth.signIn(credentials.email, credentials.password);
+  const factorId = (await auth.identity(proof.accessToken)).totpFactorIds[0];
+  const recoveryChallenge = await auth.challengeTotp(
+    proof.accessToken,
+    factorId,
+  );
+  const elevatedRecovery = await auth.verifyTotp(
+    proof.accessToken,
+    factorId,
+    recoveryChallenge,
+    localTotp(started.secret),
+  );
+  await auth.deleteRecoveryCodes(elevatedRecovery.accessToken);
+  expect(
+    await auth.recoveryStatusIfEnrolled(elevatedRecovery.accessToken),
+  ).toBeNull();
+  await expect(
+    auth.recoveryStatusIfEnrolled("invalid-test-token"),
+  ).rejects.toMatchObject({ kind: "denied" });
+  recovery = await service.replaceRecovery(
+    verified.session.token,
+    credentials,
+    started.enrollmentId,
+    recovery.version,
+    localTotp(started.secret),
+  );
+  expect(recovery.version).toBe("5");
   const resumed = await service.status(verified.session.token);
-  expect(resumed?.state).toBe('verified');
-  expect(resumed?.version).toBe('5');
-  expect('recovery_receipt_hash' in resumed!).toBe(false);
-  await expect(service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
-    localTotp(started.secret), oldRecovery.receipt)).rejects.toThrow('Database operation unavailable');
-  await expect(sessions.login(credentials.email, credentials.password, undefined,
-    { method: 'recovery', code: oldRecovery.codes[0] })).rejects.toMatchObject({ kind: 'denied' });
-  const enabled = await service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
-    localTotp(started.secret), recovery.receipt);
-  expect(enabled.version).toBe('6');
+  expect(resumed?.state).toBe("verified");
+  expect(resumed?.version).toBe("5");
+  expect("recovery_receipt_hash" in resumed!).toBe(false);
+  const regenerated = recovery;
+  recovery = await service.replaceRecovery(
+    verified.session.token,
+    credentials,
+    started.enrollmentId,
+    recovery.version,
+    localTotp(started.secret),
+  );
+  expect(recovery.version).toBe("6");
+  await expect(
+    sessions.login(credentials.email, credentials.password, undefined, {
+      method: "recovery",
+      code: regenerated.codes[0],
+    }),
+  ).rejects.toMatchObject({ kind: "denied" });
+  await expect(
+    service.acknowledgeRecovery(
+      verified.session.token,
+      credentials,
+      started.enrollmentId,
+      recovery.version,
+      localTotp(started.secret),
+      oldRecovery.receipt,
+    ),
+  ).rejects.toThrow("Database operation unavailable");
+  await expect(
+    sessions.login(credentials.email, credentials.password, undefined, {
+      method: "recovery",
+      code: oldRecovery.codes[0],
+    }),
+  ).rejects.toMatchObject({ kind: "denied" });
+  const enabled = await service.acknowledgeRecovery(
+    verified.session.token,
+    credentials,
+    started.enrollmentId,
+    recovery.version,
+    localTotp(started.secret),
+    recovery.receipt,
+  );
+  expect(enabled.version).toBe("7");
   expect(await sessions.actor(verified.session.token)).toBeNull();
   expect(Boolean(await sessions.actor(enabled.session.token))).toBe(true);
-  const recovered = await sessions.login(credentials.email, credentials.password, undefined, { method: 'recovery', code: recovery.codes[0] });
+  const recovered = await sessions.login(
+    credentials.email,
+    credentials.password,
+    undefined,
+    { method: "recovery", code: recovery.codes[0] },
+  );
   expect(Boolean(await sessions.actor(recovered.token))).toBe(true);
 }, 30_000);
 
