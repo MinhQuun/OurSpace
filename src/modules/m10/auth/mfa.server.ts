@@ -40,8 +40,8 @@ export class MfaService {
     if (identity.mfaRequired) throw new AuthProviderError("denied");
     const hash = digest(token);
     // Account lock prevents two application requests enrolling competing factors.
-    // Provider operations are external: interrupted enrollments need reconciliation
-    // before retry; no successful setup is reported if this transaction fails.
+    // Provider operations are external. An unbound factor from an interrupted
+    // start is reconciled under this account lock before creating a new secret.
     return this.db.transaction(async (client) => {
       await client.query("SELECT app_internal.begin_mfa_enrollment($1,$2,$3)", [
         hash,
@@ -56,6 +56,11 @@ export class MfaService {
       ).rows[0];
       if (!current || current.state !== "pending" || current.provider_factor_id)
         throw new AuthProviderError("denied");
+      const latest = await this.provider.identity(session.accessToken);
+      if (latest.id !== identity.id || latest.mfaRequired) throw new AuthProviderError('denied');
+      for (const orphanId of latest.pendingOurSpaceTotpFactorIds) {
+        await this.provider.unenrollFactor(session.accessToken, orphanId);
+      }
       const factor = await this.provider.enrollTotp(session.accessToken);
       const result = await client.query(
         "SELECT app_internal.record_mfa_factor($1,$2,$3,$4,$5,false) AS version",

@@ -457,3 +457,12 @@ Acceptance: authenticated owner can cancel pending setup, remove only its bound 
 - Provider identity now exposes validated unverified TOTP IDs to server orchestration. Missing bound factor is treated as completed cleanup after interruption; authentication/provider failures remain errors.
 - PASS 5 real Auth scenarios, plus targeted re-run after adding verified-setup cancellation denial. New scenario covers cancellation, old-cookie revocation, empty active status, provider factor removal, fresh setup, external factor removal followed by reconciliation and stale-cookie replay denial. Lint/typecheck and diff/history scan PASS (244 blobs, no findings). Migration/grants applied locally.
 - Remaining: orphan initial provider factors when DB binding never committed, cancellation of verified-but-not-enabled setup, full MFA disable and public settings UI. Stage 02/D10 remain incomplete.
+- Commit 93d060f813dd695297dd848fa64dff572ba07059 PUSHED; HEAD and remote master SHA match. Next: reconcile orphan setup factors and implement elevated cancellation/disable.
+
+## Task 02.6q — Reconcile orphan unverified TOTP factors
+
+Acceptance: retry setup when provider factor creation succeeded but DB binding did not; remove only the authenticated user's unverified Our Space factors, preserving unrelated factors and refusing verified MFA.
+
+- Provider identity exposes a separately filtered list for unverified TOTP factors with exact Our Space friendly name. Start refreshes identity under the account lock, denies verified MFA, cleans only those unbound factors and then generates/binds new setup material. Existing bound enrollments still require explicit cancellation rather than silent replacement.
+- PASS 5 real Auth scenarios, plus targeted expanded test creating an actual orphan Our Space factor and a differently named factor. Retry removes the orphan (challenge denied), leaves the unrelated factor intact, supports cancellation/restart and reconciles missing bound factors. Lint/typecheck and diff/history audit PASS (250 blobs, no findings).
+- Next: elevated cancellation/disable with safe recovery after provider-side deletion, then HTTP/settings UI and desktop/mobile evidence. Stage 02/D10 remain incomplete.

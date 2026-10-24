@@ -23,6 +23,7 @@ export type VerifiedIdentity = Readonly<{
   mfaRequired: boolean;
   totpFactorIds: string[];
   pendingTotpFactorIds: string[];
+  pendingOurSpaceTotpFactorIds: string[];
   displayName?: string;
 }>;
 
@@ -391,6 +392,11 @@ export class AuthProvider {
       id: user.id,
       email: user.email,
       totpFactorIds,
+      pendingOurSpaceTotpFactorIds: factors.flatMap(f => {
+        const factor = f as { id?: unknown; status?: unknown; factor_type?: unknown; friendly_name?: unknown };
+        return factor.status === 'unverified' && factor.factor_type === 'totp' && factor.friendly_name === 'Our Space' && typeof factor.id === 'string'
+          ? [this.factorId(factor.id)] : [];
+      }),
       pendingTotpFactorIds: factors.flatMap(f => {
         const factor = f as { id?: unknown; status?: unknown; factor_type?: unknown };
         return factor.status === 'unverified' && factor.factor_type === 'totp' && typeof factor.id === 'string'

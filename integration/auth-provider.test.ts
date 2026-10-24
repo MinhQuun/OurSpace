@@ -20,15 +20,25 @@ test('pending MFA cancellation removes provider factor and permits fresh setup',
   expect((await fetch(await confirmationLink(credentials.email), { redirect: 'manual' })).status).toBe(303);
   const app = await sessions.login(credentials.email, credentials.password, 'Synthetic cancellation');
   const service = new MfaService(db, auth);
+  const orphanSession = await auth.signIn(credentials.email, credentials.password);
+  const unrelatedResponse = await fetch('http://127.0.0.1:55433/factors', {
+    method: 'POST', headers: { Authorization: `Bearer ${orphanSession.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ factor_type: 'totp', friendly_name: 'Independent fixture' }),
+  });
+  expect(unrelatedResponse.status).toBe(200);
+  const unrelatedId = (await unrelatedResponse.json()).id;
+  const orphan = await auth.enrollTotp(orphanSession.accessToken);
   const setup = await service.start(app.token, credentials, randomUUID());
+  await expect(auth.challengeTotp(orphanSession.accessToken, orphan.id)).rejects.toMatchObject({ kind: 'denied' });
   const cancelled = await service.cancelPending(app.token, credentials, setup.enrollmentId, setup.version);
   expect(cancelled.state).toBe('cancelled');
   expect(await sessions.actor(app.token)).toBeNull();
   expect(await service.status(cancelled.session.token)).toBeNull();
   const providerSession = await auth.signIn(credentials.email, credentials.password);
-  expect((await auth.identity(providerSession.accessToken)).pendingTotpFactorIds.length).toBe(0);
+  expect((await auth.identity(providerSession.accessToken)).pendingOurSpaceTotpFactorIds.length).toBe(0);
+  expect((await auth.identity(providerSession.accessToken)).pendingTotpFactorIds.includes(unrelatedId)).toBe(true);
   const fresh = await service.start(cancelled.session.token, credentials, randomUUID());
-  const factor = (await auth.identity(providerSession.accessToken)).pendingTotpFactorIds[0];
+  const factor = (await auth.identity(providerSession.accessToken)).pendingOurSpaceTotpFactorIds[0];
   await auth.unenrollFactor(providerSession.accessToken, factor);
   const reconciled = await service.cancelPending(cancelled.session.token, credentials, fresh.enrollmentId, fresh.version);
   expect(await service.status(reconciled.session.token)).toBeNull();
