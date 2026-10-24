@@ -19,34 +19,47 @@ export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
   const [error, setError] = useState(false);
   const [now, setNow] = useState(0);
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch("/api/auth/sessions", {
-      cache: "no-store",
-      signal,
-    });
-    if (response.status === 401) {
-      onExpired();
-      return;
-    }
-    if (!response.ok) throw new Error();
-    setItems((await response.json()).sessions);
-    setNow(Date.now());
-    setLoading(false);
-  }, [onExpired]);
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      const response = await fetch("/api/auth/sessions", {
+        cache: "no-store",
+        signal,
+      });
+      if (response.status === 401) {
+        onExpired();
+        return;
+      }
+      if (!response.ok) throw new Error();
+      setItems((await response.json()).sessions);
+      setNow(Date.now());
+      setLoading(false);
+    },
+    [onExpired],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/auth/sessions', { cache: 'no-store', signal: controller.signal }).then(async response => {
-      if (response.status === 401) { onExpired(); return; }
-      if (!response.ok) throw new Error();
-      setItems((await response.json()).sessions); setNow(Date.now()); setLoading(false);
-    }).catch(() => {
-      if (!controller.signal.aborted) {
+    fetch("/api/auth/sessions", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (response.status === 401) {
+          onExpired();
+          return;
+        }
+        if (!response.ok) throw new Error();
+        setItems((await response.json()).sessions);
+        setNow(Date.now());
         setLoading(false);
-        setError(true);
-        setMessage("Chưa thể tải danh sách phiên. Hãy thử làm mới.");
-      }
-    });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setError(true);
+          setMessage("Chưa thể tải danh sách phiên. Hãy thử làm mới.");
+        }
+      });
     const timer = setInterval(() => setNow(Date.now()), 30000);
     return () => {
       controller.abort();
@@ -153,7 +166,11 @@ export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
                 </strong>
                 <p>{state}</p>
                 <p className="field-help">
-                  Hoạt động gần nhất: <time dateTime={item.last_seen}>{new Date(item.last_seen).toLocaleString('vi-VN')}</time><br />
+                  Hoạt động gần nhất:{" "}
+                  <time dateTime={item.last_seen}>
+                    {new Date(item.last_seen).toLocaleString("vi-VN")}
+                  </time>
+                  <br />
                   Bắt đầu:{" "}
                   <time dateTime={item.created_at}>
                     {new Date(item.created_at).toLocaleString("vi-VN")}

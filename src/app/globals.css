@@ -50,20 +50,105 @@ aside p {
   color: var(--muted);
   line-height: 1.6;
 }
-.account-page { max-width: 44rem; padding-top: 3rem; }
-.account-card h1 { font-size: clamp(2rem, 5vw, 3rem); margin-top: 2.5rem; }
-.account-card fieldset { border: 0; padding: 0; margin: 1.5rem 0 0; min-width: 0; }
-.account-card label { display: grid; gap: .5rem; margin: 1rem 0; font-weight: 600; }
-.account-card input { width: 100%; min-width: 0; padding: .8rem; border: 1px solid #97828c; border-radius: .5rem; background: white; color: var(--ink); font: inherit; }
-.account-card button { min-height: 44px; border: 0; border-radius: .5rem; background: #643c50; color: white; padding: .8rem 1.4rem; font: inherit; cursor: pointer; }
-.account-card button:disabled { opacity: .65; cursor: wait; }
-.account-card .text-button { color: #643c50; background: transparent; padding-left: 0; text-align: left; margin-top: .75rem; text-decoration: underline; }
-.field-help { color: var(--muted); font-size: .9rem; line-height: 1.6; }
-.form-message { padding: 1rem; background: #e8eee5; border-radius: .5rem; line-height: 1.6; }
-.form-error { background: #f6e3e3; color: #752525; }
-input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #9c587b; outline-offset: 3px; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.session-panel { margin-top: 2rem; border-top: 1px solid #d8cdd1; padding-top: 1rem; }
-.session-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
-.session-list { list-style: none; padding: 0; }
-.session-list li { margin: 1rem 0; border: 1px solid #d8cdd1; padding: 1rem; border-radius: .5rem; overflow-wrap: anywhere; }
+.account-page {
+  max-width: 44rem;
+  padding-top: 3rem;
+}
+.account-card h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin-top: 2.5rem;
+}
+.account-card fieldset {
+  border: 0;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  min-width: 0;
+}
+.account-card label {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  font-weight: 600;
+}
+.account-card input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid #97828c;
+  border-radius: 0.5rem;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+.account-card button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #643c50;
+  color: white;
+  padding: 0.8rem 1.4rem;
+  font: inherit;
+  cursor: pointer;
+}
+.account-card button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.account-card .text-button {
+  color: #643c50;
+  background: transparent;
+  padding-left: 0;
+  text-align: left;
+  margin-top: 0.75rem;
+  text-decoration: underline;
+}
+.field-help {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.form-message {
+  padding: 1rem;
+  background: #e8eee5;
+  border-radius: 0.5rem;
+  line-height: 1.6;
+}
+.form-error {
+  background: #f6e3e3;
+  color: #752525;
+}
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #9c587b;
+  outline-offset: 3px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.session-panel {
+  margin-top: 2rem;
+  border-top: 1px solid #d8cdd1;
+  padding-top: 1rem;
+}
+.session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.session-list {
+  list-style: none;
+  padding: 0;
+}
+.session-list li {
+  margin: 1rem 0;
+  border: 1px solid #d8cdd1;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-wrap: anywhere;
+}

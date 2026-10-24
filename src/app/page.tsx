@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -14,7 +14,10 @@ export default function Home() {
       </p>
       <aside role="status">
         <h2>Không gian đang được chuẩn bị</h2>
-        <p>Bản thử nghiệm đã có đăng ký và đăng nhập. Các tính năng không gian chung đang được hoàn thiện.</p>
+        <p>
+          Bản thử nghiệm đã có đăng ký và đăng nhập. Các tính năng không gian
+          chung đang được hoàn thiện.
+        </p>
         <Link href="/account">Đăng nhập hoặc tạo tài khoản</Link>
       </aside>
     </main>

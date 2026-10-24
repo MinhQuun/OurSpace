@@ -57,7 +57,8 @@ export class MfaService {
       if (!current || current.state !== "pending" || current.provider_factor_id)
         throw new AuthProviderError("denied");
       const latest = await this.provider.identity(session.accessToken);
-      if (latest.id !== identity.id || latest.mfaRequired) throw new AuthProviderError('denied');
+      if (latest.id !== identity.id || latest.mfaRequired)
+        throw new AuthProviderError("denied");
       for (const orphanId of latest.pendingOurSpaceTotpFactorIds) {
         await this.provider.unenrollFactor(session.accessToken, orphanId);
       }
@@ -75,29 +76,72 @@ export class MfaService {
     });
   }
 
-  async cancelPending(token: string, credentials: Credentials, enrollmentId: string, version: string) {
+  async cancelPending(
+    token: string,
+    credentials: Credentials,
+    enrollmentId: string,
+    version: string,
+  ) {
     const { session, identity } = await this.reauthenticate(token, credentials);
-    if (identity.mfaRequired) throw new AuthProviderError('denied');
+    if (identity.mfaRequired) throw new AuthProviderError("denied");
     const hash = digest(token);
-    const replacement = { token: randomBytes(32).toString('base64url'), id: randomUUID(),
-      expiresAt: new Date(Date.now() + session.expiresIn * 1000) };
-    return this.db.transaction(async client => {
+    const replacement = {
+      token: randomBytes(32).toString("base64url"),
+      id: randomUUID(),
+      expiresAt: new Date(Date.now() + session.expiresIn * 1000),
+    };
+    return this.db.transaction(async (client) => {
       // Existing pending-ID retry obtains the account lock before provider
       // mutation, serializing cancellation against application verification.
-      await client.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)', [hash, session.accessToken, enrollmentId]);
-      const current = (await client.query('SELECT * FROM app_internal.bound_mfa_factor($1,$2)', [hash, enrollmentId])).rows[0];
-      if (!current || current.state !== 'pending' || String(current.version) !== version) throw new AuthProviderError('denied');
+      await client.query("SELECT app_internal.begin_mfa_enrollment($1,$2,$3)", [
+        hash,
+        session.accessToken,
+        enrollmentId,
+      ]);
+      const current = (
+        await client.query(
+          "SELECT * FROM app_internal.bound_mfa_factor($1,$2)",
+          [hash, enrollmentId],
+        )
+      ).rows[0];
+      if (
+        !current ||
+        current.state !== "pending" ||
+        String(current.version) !== version
+      )
+        throw new AuthProviderError("denied");
       const latest = await this.provider.identity(session.accessToken);
-      if (latest.id !== identity.id || latest.mfaRequired) throw new AuthProviderError('denied');
-      if (current.provider_factor_id && latest.pendingTotpFactorIds.includes(current.provider_factor_id)) {
-        await this.provider.unenrollFactor(session.accessToken, current.provider_factor_id);
+      if (latest.id !== identity.id || latest.mfaRequired)
+        throw new AuthProviderError("denied");
+      if (
+        current.provider_factor_id &&
+        latest.pendingTotpFactorIds.includes(current.provider_factor_id)
+      ) {
+        await this.provider.unenrollFactor(
+          session.accessToken,
+          current.provider_factor_id,
+        );
       }
       // A missing factor is valid reconciliation after a previously completed
       // provider deletion whose DB transaction/response was interrupted.
-      await client.query('SELECT app_internal.cancel_pending_mfa($1,$2,$3,$4)', [hash, session.accessToken, enrollmentId, version]);
-      await client.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
-        [session.accessToken, identity.displayName ?? null, replacement.id, digest(replacement.token)]);
-      return { enrollmentId, state: 'cancelled' as const, session: replacement };
+      await client.query(
+        "SELECT app_internal.cancel_pending_mfa($1,$2,$3,$4)",
+        [hash, session.accessToken, enrollmentId, version],
+      );
+      await client.query(
+        "SELECT app_internal.issue_verified_session($1,$2,$3,$4)",
+        [
+          session.accessToken,
+          identity.displayName ?? null,
+          replacement.id,
+          digest(replacement.token),
+        ],
+      );
+      return {
+        enrollmentId,
+        state: "cancelled" as const,
+        session: replacement,
+      };
     });
   }
 

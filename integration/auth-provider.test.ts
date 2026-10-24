@@ -14,35 +14,92 @@ const db = createDatabase(
 afterAll(() => db.close());
 const sessions = new SessionService(db, auth);
 
-test('pending MFA cancellation removes provider factor and permits fresh setup', async () => {
-  const credentials = { email: `cancel-${randomUUID()}@ourspace.test`, password: randomUUID() + '!Aa9' };
+test("pending MFA cancellation removes provider factor and permits fresh setup", async () => {
+  const credentials = {
+    email: `cancel-${randomUUID()}@ourspace.test`,
+    password: randomUUID() + "!Aa9",
+  };
   await auth.signUp(credentials.email, credentials.password);
-  expect((await fetch(await confirmationLink(credentials.email), { redirect: 'manual' })).status).toBe(303);
-  const app = await sessions.login(credentials.email, credentials.password, 'Synthetic cancellation');
+  expect(
+    (
+      await fetch(await confirmationLink(credentials.email), {
+        redirect: "manual",
+      })
+    ).status,
+  ).toBe(303);
+  const app = await sessions.login(
+    credentials.email,
+    credentials.password,
+    "Synthetic cancellation",
+  );
   const service = new MfaService(db, auth);
-  const orphanSession = await auth.signIn(credentials.email, credentials.password);
-  const unrelatedResponse = await fetch('http://127.0.0.1:55433/factors', {
-    method: 'POST', headers: { Authorization: `Bearer ${orphanSession.accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ factor_type: 'totp', friendly_name: 'Independent fixture' }),
+  const orphanSession = await auth.signIn(
+    credentials.email,
+    credentials.password,
+  );
+  const unrelatedResponse = await fetch("http://127.0.0.1:55433/factors", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${orphanSession.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      factor_type: "totp",
+      friendly_name: "Independent fixture",
+    }),
   });
   expect(unrelatedResponse.status).toBe(200);
   const unrelatedId = (await unrelatedResponse.json()).id;
   const orphan = await auth.enrollTotp(orphanSession.accessToken);
   const setup = await service.start(app.token, credentials, randomUUID());
-  await expect(auth.challengeTotp(orphanSession.accessToken, orphan.id)).rejects.toMatchObject({ kind: 'denied' });
-  const cancelled = await service.cancelPending(app.token, credentials, setup.enrollmentId, setup.version);
-  expect(cancelled.state).toBe('cancelled');
+  await expect(
+    auth.challengeTotp(orphanSession.accessToken, orphan.id),
+  ).rejects.toMatchObject({ kind: "denied" });
+  const cancelled = await service.cancelPending(
+    app.token,
+    credentials,
+    setup.enrollmentId,
+    setup.version,
+  );
+  expect(cancelled.state).toBe("cancelled");
   expect(await sessions.actor(app.token)).toBeNull();
   expect(await service.status(cancelled.session.token)).toBeNull();
-  const providerSession = await auth.signIn(credentials.email, credentials.password);
-  expect((await auth.identity(providerSession.accessToken)).pendingOurSpaceTotpFactorIds.length).toBe(0);
-  expect((await auth.identity(providerSession.accessToken)).pendingTotpFactorIds.includes(unrelatedId)).toBe(true);
-  const fresh = await service.start(cancelled.session.token, credentials, randomUUID());
-  const factor = (await auth.identity(providerSession.accessToken)).pendingOurSpaceTotpFactorIds[0];
+  const providerSession = await auth.signIn(
+    credentials.email,
+    credentials.password,
+  );
+  expect(
+    (await auth.identity(providerSession.accessToken))
+      .pendingOurSpaceTotpFactorIds.length,
+  ).toBe(0);
+  expect(
+    (
+      await auth.identity(providerSession.accessToken)
+    ).pendingTotpFactorIds.includes(unrelatedId),
+  ).toBe(true);
+  const fresh = await service.start(
+    cancelled.session.token,
+    credentials,
+    randomUUID(),
+  );
+  const factor = (await auth.identity(providerSession.accessToken))
+    .pendingOurSpaceTotpFactorIds[0];
   await auth.unenrollFactor(providerSession.accessToken, factor);
-  const reconciled = await service.cancelPending(cancelled.session.token, credentials, fresh.enrollmentId, fresh.version);
+  const reconciled = await service.cancelPending(
+    cancelled.session.token,
+    credentials,
+    fresh.enrollmentId,
+    fresh.version,
+  );
   expect(await service.status(reconciled.session.token)).toBeNull();
-  await expect(service.cancelPending(cancelled.session.token, credentials, fresh.enrollmentId, fresh.version)).rejects.toMatchObject({ kind: 'denied' });
+  await expect(
+    service.cancelPending(
+      cancelled.session.token,
+      credentials,
+      fresh.enrollmentId,
+      fresh.version,
+    ),
+  ).rejects.toMatchObject({ kind: "denied" });
 }, 30_000);
 
 test("MFA service enrolls and verifies with atomic session replacement", async () => {
@@ -93,8 +150,14 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
     localTotp(started.secret),
   );
   expect(verified.version).toBe("3");
-  await expect(service.cancelPending(verified.session.token, credentials, started.enrollmentId, verified.version))
-    .rejects.toMatchObject({ kind: 'denied' });
+  await expect(
+    service.cancelPending(
+      verified.session.token,
+      credentials,
+      started.enrollmentId,
+      verified.version,
+    ),
+  ).rejects.toMatchObject({ kind: "denied" });
   expect(await sessions.actor(app.token)).toBeNull();
   expect(await sessions.actor(other.token)).toBeNull();
   expect(Boolean(await sessions.actor(verified.session.token))).toBe(true);
