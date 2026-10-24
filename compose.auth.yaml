@@ -32,6 +32,8 @@ services:
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /verify
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+      GOTRUE_MFA_RECOVERY_CODES_ENROLL_ENABLED: "true"
+      GOTRUE_MFA_RECOVERY_CODES_VERIFY_ENABLED: "true"
       GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: "true"
       GOTRUE_PASSWORD_MIN_LENGTH: 12
       # Local capture inbox only; enables repeated integration runs.

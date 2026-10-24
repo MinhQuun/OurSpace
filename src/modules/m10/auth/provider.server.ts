@@ -111,9 +111,13 @@ export class AuthProvider {
     const data = await this.request(`/factors/${this.factorId(factorId)}/verify`, {
       challenge_id: this.factorId(challengeId), code,
     }, token);
+    return this.elevatedSession(data, before.id);
+  }
+
+  private async elevatedSession(data: Record<string, unknown>, expectedId: string): Promise<ProviderSession> {
     const session = await this.session(data);
     const after = await this.identity(session.accessToken);
-    if (before.id !== after.id) throw new AuthProviderError('denied');
+    if (expectedId !== after.id) throw new AuthProviderError('denied');
     // This token came directly from authenticated provider verification and was
     // validated by /user. Never use unverified client JWT claims for assurance.
     try {
@@ -121,6 +125,28 @@ export class AuthProvider {
       if (claims.aal !== 'aal2') throw new Error();
     } catch { throw new AuthProviderError('denied'); }
     return session;
+  }
+
+  async generateRecoveryCodes(token: string, rotate = false): Promise<string[]> {
+    const data = await this.request(`/factors/recovery-codes${rotate ? '/regenerate' : ''}`, {}, token);
+    if (!Array.isArray(data.codes) || data.codes.length < 4 || data.codes.length > 16 ||
+        data.codes.some(code => typeof code !== 'string' || !/^[A-Za-z0-9-]{13,64}$/.test(code)) ||
+        new Set(data.codes).size !== data.codes.length) throw new AuthProviderError('unavailable');
+    return data.codes as string[];
+  }
+
+  async recoveryStatus(token: string): Promise<{ total: number; remaining: number }> {
+    const data = await this.request('/factors/recovery-codes', undefined, token);
+    if (data.codes !== undefined || !Number.isInteger(data.total) || !Number.isInteger(data.remaining) ||
+        Number(data.remaining) < 0 || Number(data.remaining) > Number(data.total)) throw new AuthProviderError('unavailable');
+    return { total: Number(data.total), remaining: Number(data.remaining) };
+  }
+
+  async verifyRecoveryCode(token: string, code: string): Promise<ProviderSession> {
+    if (!/^[A-Za-z0-9 -]{13,64}$/.test(code)) throw new AuthProviderError('invalid_input');
+    const identity = await this.identity(token);
+    const data = await this.request('/factors/recovery-codes/verify', { code }, token);
+    return this.elevatedSession(data, identity.id);
   }
 
   async identity(token: string): Promise<VerifiedIdentity> {

@@ -306,3 +306,14 @@ Acceptance: enroll a TOTP factor, create challenge, reject incorrect code, verif
 - Recovery evidence corrected: tagged v2.197.0 OpenAPI omits recovery-codes, but tagged source api.go includes status/generate/verify/regenerate/delete routes. Authenticated status returned 404 with error_code=mfa_factor_not_found, proving no enrolled factor rather than a missing route. Earlier absence inference must not drive a custom implementation.
 - GitHub latest release is still v2.197.0 and its release notes explicitly include recovery endpoints. Next task: enable/verify native recovery configuration and test one-use/rotation behavior before integrating full MFA UI.
 - Sources: https://raw.githubusercontent.com/supabase/auth/v2.197.0/internal/api/api.go and https://github.com/supabase/auth/releases/tag/v2.197.0. Full M10 D10 remains incomplete.
+- Commit 3ccc5884527dceb136a245fdf1a7d5134276851d PUSHED; remote master matches HEAD. Next: native recovery generation/verification/rotation capability and full MFA orchestration.
+
+## Task 02.6b — Native recovery-code provider transport
+
+Acceptance: verified AAL2 required for code generation; status exposes counts only; codes are single-use, concurrency-safe, account-bound and invalidated by rotation; recovered session retains identity and AAL2.
+
+- Enabled GoTrue native recovery enrollment/verification in localhost configuration. Kept provider defaults for count/length/lockout; these are local infrastructure defaults, not newly approved product policy. No custom recovery-code store or provider upgrade needed.
+- Added generate/regenerate, status and redemption transport with bounded response/input validation and shared elevated-session identity/AAL2 checks. Plaintext codes live only in method results/test memory, are never logged or persisted by the application; status rejects any unexpected code payload.
+- PASS actual pinned GoTrue: AAL1 generation denied; AAL2 generation succeeds; status count decreases on use; replay rejected; simultaneous redemption yields exactly one success; rotation rejects an old unused code and accepts a new code; account B cannot redeem A's code.
+- PASS lint/typecheck, 18 unit tests, expanded real Auth/TOTP/recovery integration, diff/history scan. No browser recovery flow or full D10 acceptance claimed.
+- Sources: tagged internal/api/recovery_codes.go and internal/conf/configuration.go under https://github.com/supabase/auth/tree/v2.197.0. Next: MFA enrollment/login orchestration with safe pending-state handling, recovery display/acknowledgment and existing-session invalidation.

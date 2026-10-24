@@ -27,6 +27,7 @@ async function confirmationLink(email: string): Promise<string> {
 
 test('real provider requires email confirmation and isolates two identities', async () => {
   const identities: string[] = [];
+  let foreignRecoveryCode = '';
   const issued: Awaited<ReturnType<SessionService['login']>>[] = [];
   for (const label of ['a', 'b']) {
     const email = `provider-${label}-${randomUUID()}@ourspace.test`;
@@ -85,6 +86,28 @@ test('real provider requires email confirmation and isolates two identities', as
       });
       expect(recoveryProbe.status).toBe(404);
       expect((await recoveryProbe.json()).error_code).toBe('mfa_factor_not_found');
+      const low = await auth.signIn(email, password);
+      await expect(auth.generateRecoveryCodes(low.accessToken)).rejects.toMatchObject({ kind: 'denied' });
+      const codes = await auth.generateRecoveryCodes(verified.accessToken);
+      const status = await auth.recoveryStatus(verified.accessToken);
+      expect(status.remaining).toBe(codes.length);
+      const redeemed = await auth.verifyRecoveryCode(low.accessToken, codes[0]);
+      expect((await auth.identity(redeemed.accessToken)).id).toBe(identity.id);
+      await expect(auth.verifyRecoveryCode(low.accessToken, codes[0])).rejects.toMatchObject({ kind: 'denied' });
+      expect((await auth.recoveryStatus(verified.accessToken)).remaining).toBe(codes.length - 1);
+      const concurrent = await Promise.allSettled([
+        auth.verifyRecoveryCode(low.accessToken, codes[1]), auth.verifyRecoveryCode(low.accessToken, codes[1]),
+      ]);
+      expect(concurrent.filter(result => result.status === 'fulfilled').length).toBe(1);
+      expect(concurrent.filter(result => result.status === 'rejected').length).toBe(1);
+      const rotated = await auth.generateRecoveryCodes(verified.accessToken, true);
+      foreignRecoveryCode = rotated[1];
+      await expect(auth.verifyRecoveryCode(low.accessToken, codes[2])).rejects.toMatchObject({ kind: 'denied' });
+      expect((await auth.recoveryStatus(verified.accessToken)).remaining).toBe(rotated.length);
+      const recovered = await auth.verifyRecoveryCode(low.accessToken, rotated[0]);
+      expect((await auth.identity(recovered.accessToken)).id).toBe(identity.id);
+    } else {
+      await expect(auth.verifyRecoveryCode(session.accessToken, foreignRecoveryCode)).rejects.toMatchObject({ kind: 'denied' });
     }
   }
   expect(new Set(identities).size).toBe(2);
