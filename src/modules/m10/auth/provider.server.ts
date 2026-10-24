@@ -10,7 +10,7 @@ export type ProviderSession = Readonly<{
   refreshToken: string;
   expiresIn: number;
 }>;
-export type VerifiedIdentity = Readonly<{ id: string; email: string }>;
+export type VerifiedIdentity = Readonly<{ id: string; email: string; mfaRequired: boolean }>;
 
 /** Server transport only: never cache responses, log payloads or persist tokens
  * in browser storage. Application session revocation is a separate boundary.
@@ -84,6 +84,10 @@ export class AuthProvider {
         typeof user.email !== 'string' || typeof user.email_confirmed_at !== 'string' || !user.email_confirmed_at) {
       throw new AuthProviderError('denied');
     }
-    return { id: user.id, email: user.email };
+    if (user.factors !== undefined && !Array.isArray(user.factors)) throw new AuthProviderError('denied');
+    const factors = (user.factors ?? []) as unknown[];
+    if (factors.some(f => !f || typeof f !== 'object' || !('status' in f))) throw new AuthProviderError('denied');
+    return { id: user.id, email: user.email,
+      mfaRequired: factors.some(f => (f as { status: unknown }).status !== 'unverified') };
   }
 }

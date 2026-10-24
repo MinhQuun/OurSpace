@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs';
 import { afterAll, expect, test } from 'vitest';
 import { AuthProvider } from '../src/modules/m10/auth/provider.server';
 import { createDatabase } from '../src/server/database.server';
+import { SessionService } from '../src/modules/m10/auth/session.server';
+import { localTotp } from './local-totp';
 
 const auth = new AuthProvider('http://127.0.0.1:55433');
 const db = createDatabase(`postgresql://ourspace_runtime:${readFileSync('.local/runtime-db-password', 'utf8').trim()}@127.0.0.1:55432/ourspace`);
 afterAll(() => db.close());
+const sessions = new SessionService(db, auth);
 
 async function confirmationLink(email: string): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -24,11 +27,13 @@ async function confirmationLink(email: string): Promise<string> {
 
 test('real provider requires email confirmation and isolates two identities', async () => {
   const identities: string[] = [];
+  const issued: Awaited<ReturnType<SessionService['login']>>[] = [];
   for (const label of ['a', 'b']) {
     const email = `provider-${label}-${randomUUID()}@ourspace.test`;
     const password = randomUUID() + '!Aa9';
     await auth.signUp(email, password);
     await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: 'denied' });
+    await expect(sessions.login(email, password, 'Synthetic')).rejects.toMatchObject({ kind: 'denied' });
     const link = await confirmationLink(email);
     const verification = await fetch(link, { redirect: 'manual' });
     expect(verification.status).toBe(303);
@@ -37,6 +42,13 @@ test('real provider requires email confirmation and isolates two identities', as
     const identity = await auth.identity(session.accessToken);
     expect(identity.email === email).toBe(true);
     identities.push(identity.id);
+    const current = await sessions.login(email, password, `Synthetic ${label}`);
+    issued.push(current);
+    expect(await sessions.actor(current.token)).toBe(identity.id);
+    const other = await sessions.login(email, password);
+    expect(other.token === current.token).toBe(false);
+    expect(await sessions.revoke(current.token, other.id)).toBe(true);
+    expect(await sessions.actor(other.token)).toBeNull();
     const hash = createHash('sha256').update(randomBytes(32)).digest('hex');
     const appSessionId = randomUUID();
     await db.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
@@ -50,7 +62,27 @@ test('real provider requires email confirmation and isolates two identities', as
     await expect(db.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
       [forged, 'Forged', randomUUID(), hash])).rejects.toThrow('Database operation unavailable');
     await expect(auth.signIn(email, randomUUID() + '!Aa9')).rejects.toMatchObject({ kind: 'denied' });
+    if (label === 'a') {
+      const post = async (path: string, body: unknown) => {
+        const response = await fetch('http://127.0.0.1:55433' + path, {
+          method: 'POST', headers: { Authorization: `Bearer ${session.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const factor = await post('/factors', { factor_type: 'totp', friendly_name: 'Local integration authenticator' });
+      const challenge = await post(`/factors/${factor.id}/challenge`, {});
+      await post(`/factors/${factor.id}/verify`, { challenge_id: challenge.id, code: localTotp(factor.totp.secret) });
+      expect((await auth.identity(session.accessToken)).mfaRequired).toBe(true);
+      await expect(sessions.login(email, password)).rejects.toMatchObject({ kind: 'denied' });
+    }
   }
   expect(new Set(identities).size).toBe(2);
+  expect(await sessions.revoke(issued[0].token, issued[1].id)).toBe(false);
+  expect(await sessions.revoke(issued[0].token, issued[0].id)).toBe(true);
+  expect(await sessions.actor(issued[0].token)).toBeNull();
+  expect(await sessions.actor(issued[1].token)).toBe(identities[1]);
+  expect(await sessions.actor('malformed')).toBeNull();
   await expect(auth.identity('invalid-test-token')).rejects.toMatchObject({ kind: 'denied' });
 }, 30_000);

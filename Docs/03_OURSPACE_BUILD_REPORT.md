@@ -229,3 +229,14 @@ Acceptance: issue an application session only from a cryptographically verified 
 - PASS: 11 PostgreSQL tests including forged signatures, wrong algorithm/issuer/role, expired/anonymous token, missing profile rollback and inactive-account denial. Rechecked denial with unique hashes to exclude duplicate-constraint false positives. Real GoTrue integration confirms two verified users receive correctly bound app sessions; forged subject rejected; runtime cannot read signing key.
 - PASS lint/typecheck, 18 unit tests, 4 adapter tests, diff/history scan. No production service or real account credentials used.
 - This is the local HS256 security profile, not approval of production signing/rotation. Current provider identity revalidation, MFA gating, server service, cookies/routes/UI and lifecycle-wide revocation remain required before P0 Auth acceptance. No user-facing login endpoint exposed yet.
+- Commit 04f05d1aa9089910701d7c7566dada5de8de73dc PUSHED; remote master matches HEAD. Next: server session service with current identity/MFA guard, then HTTP cookies and login UI.
+
+## Task 02.2e — Server session service and password-only MFA guard
+
+Acceptance: verified provider login produces a fresh opaque application token; only its SHA-256 hash reaches storage; identity resolution reloads database state each call; revoke enforces ownership; enabled MFA must deny password-only issuance.
+
+- Added server-only SessionService composing real Auth transport and signed-proof DB issuance. Each login generates 32 random bytes and a UUID. Provider access/refresh tokens are not returned by the service or persisted. Actor lookups are uncached; malformed token resolves to no actor. Cookie expiry hint is conservatively bounded by provider lifetime; database expiry remains authoritative.
+- Provider identity includes validated MFA factor metadata; password-only login denies any factor not explicitly unverified. MFA challenge/recovery login flow is still outstanding.
+- Real integration PASS: email-unverified denial; two users; repeated independent sessions; revoke own other/current sessions; immediate subsequent denial; cross-account revoke denied. Enrolled and verified a real local GoTrue TOTP factor using an in-memory test authenticator, then confirmed password-only SessionService login is denied.
+- PASS lint/typecheck/build, 18 unit tests, real expanded Auth/session integration, diff/history scan. No cookies/routes or product UI exposed yet. Existing-session invalidation on MFA enrollment and lifecycle changes remains required before acceptance.
+- Official GoTrue OpenAPI consulted: https://raw.githubusercontent.com/supabase/auth/master/openapi.yaml. Current upstream now documents recovery-code endpoints; verify support against pinned v2.197.0 before choosing custom recovery implementation (earlier absence assumption is not conclusive).
