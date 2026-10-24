@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authRuntime } from '../../../../server/auth-runtime.server';
 import { AuthProviderError } from '../../../../modules/m10/auth/provider.server';
+import type { SecondFactor } from '../../../../modules/m10/auth/session.server';
 
 export const runtime = 'nodejs';
 const cookieName = 'ourspace_session';
@@ -77,7 +78,16 @@ export async function POST(request: NextRequest, context: Context) {
       await auth.provider.signUp(input.email, input.password, input.displayName);
       return json({ verificationRequired: true }, 202);
     }
-    const session = await auth.sessions.login(input.email, input.password);
+    let secondFactor: SecondFactor | undefined;
+    if (input.secondFactor !== undefined) {
+      const factor = input.secondFactor as Partial<SecondFactor> | null;
+      if (!factor || typeof factor !== 'object' || !['totp', 'recovery'].includes(factor.method ?? '') ||
+          typeof factor.code !== 'string' || (factor.factorId !== undefined && typeof factor.factorId !== 'string')) {
+        throw new AuthProviderError('invalid_input');
+      }
+      secondFactor = factor as SecondFactor;
+    }
+    const session = await auth.sessions.login(input.email, input.password, undefined, secondFactor);
     const response = json({ ok: true });
     response.cookies.set(cookieName, `${session.id}:${session.token}`, {
       httpOnly: true, secure: auth.secure, sameSite: 'strict', path: '/', expires: session.expiresAt,
@@ -85,7 +95,7 @@ export async function POST(request: NextRequest, context: Context) {
     return response;
   } catch (error) {
     if (error instanceof AuthProviderError) {
-      return json({ error: error.kind }, error.kind === 'invalid_input' ? 400 : error.kind === 'denied' ? 401 : 503);
+      return json({ error: error.kind }, error.kind === 'invalid_input' ? 400 : error.kind === 'unavailable' ? 503 : 401);
     }
     return json({ error: 'unavailable' }, 503);
   }

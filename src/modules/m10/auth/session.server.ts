@@ -4,6 +4,7 @@ import type { createDatabase } from '../../../server/database.server';
 import { AuthProvider, AuthProviderError } from './provider.server';
 
 type Database = ReturnType<typeof createDatabase>;
+export type SecondFactor = { method: 'totp' | 'recovery'; code: string; factorId?: string };
 export type SessionSummary = {
   id: string; created_at: Date; expires_at: Date; revoked_at: Date | null; is_current: boolean; last_seen: Date;
 };
@@ -16,16 +17,24 @@ function digest(token: string) {
 export class SessionService {
   constructor(private readonly db: Database, private readonly provider: AuthProvider) {}
 
-  async login(email: string, password: string, displayName?: string) {
+  async login(email: string, password: string, displayName?: string, secondFactor?: SecondFactor) {
     if (displayName !== undefined && (!displayName.trim() || displayName.trim().length > 120)) {
       throw new AuthProviderError('invalid_input');
     }
     const startedAt = Date.now();
-    const providerSession = await this.provider.signIn(email, password);
+    let providerSession = await this.provider.signIn(email, password);
     const identity = await this.provider.identity(providerSession.accessToken);
-    // Password-only flow cannot satisfy an enabled second factor. The MFA
-    // challenge flow will be added separately before P0 Auth acceptance.
-    if (identity.mfaRequired) throw new AuthProviderError('denied');
+    if (identity.mfaRequired) {
+      if (!secondFactor) throw new AuthProviderError('mfa_required');
+      if (secondFactor.method === 'recovery') {
+        providerSession = await this.provider.verifyRecoveryCode(providerSession.accessToken, secondFactor.code);
+      } else {
+        const factorId = secondFactor.factorId ?? identity.totpFactorIds[0];
+        if (!factorId || !identity.totpFactorIds.includes(factorId)) throw new AuthProviderError('denied');
+        const challenge = await this.provider.challengeTotp(providerSession.accessToken, factorId);
+        providerSession = await this.provider.verifyTotp(providerSession.accessToken, factorId, challenge, secondFactor.code);
+      }
+    }
     const expiresAt = new Date(startedAt + providerSession.expiresIn * 1000);
     if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
       throw new AuthProviderError('denied');

@@ -317,3 +317,14 @@ Acceptance: verified AAL2 required for code generation; status exposes counts on
 - PASS actual pinned GoTrue: AAL1 generation denied; AAL2 generation succeeds; status count decreases on use; replay rejected; simultaneous redemption yields exactly one success; rotation rejects an old unused code and accepts a new code; account B cannot redeem A's code.
 - PASS lint/typecheck, 18 unit tests, expanded real Auth/TOTP/recovery integration, diff/history scan. No browser recovery flow or full D10 acceptance claimed.
 - Sources: tagged internal/api/recovery_codes.go and internal/conf/configuration.go under https://github.com/supabase/auth/tree/v2.197.0. Next: MFA enrollment/login orchestration with safe pending-state handling, recovery display/acknowledgment and existing-session invalidation.
+- Commit fad2d06cec4af2af54971b11130b69ccbc77c483 PUSHED; remote master SHA verified identical. Continue with MFA/recovery application orchestration and UI.
+
+## Task 02.6c — MFA-aware application login
+
+Acceptance: password-only attempts on MFA accounts yield no app session; correct TOTP or unused recovery code yields an account-bound app session; wrong factor/replayed recovery denied; no provider credentials returned to browser.
+
+- SessionService now reauthenticates email/password for each attempt, inspects verified provider factors, challenges an authorized TOTP factor or redeems native recovery, and only then passes the elevated provider proof to DB issuance. Optional factor selection is constrained to the user's verified TOTP IDs.
+- HTTP login accepts a validated secondFactor object and returns mfa_required after successful password verification when needed. No pending provider-token cookie, client JWT or persistent password state was introduced; each request is self-contained.
+- PASS real integration: missing factor denied, unauthorized factor ID denied, TOTP and recovery app sessions succeed, used recovery rejected. HTTP tests verify mfa_required leaves client unauthenticated, TOTP/recovery set working cookies, replay after logout leaves no valid session.
+- PASS lint/typecheck/build, 18 unit tests, expanded Auth integration and all 4 Auth HTTP/desktop/mobile cases; diff/history scan clean. UI second-factor inputs and enrollment/recovery acknowledgment are next.
+- Limits: application enrollment must still coordinate DB MFA policy and existing-session invalidation. Direct local provider enrollment in tests is a capability fixture, not a completed product enrollment flow. Full D10 remains incomplete.

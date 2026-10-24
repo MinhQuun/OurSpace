@@ -1,5 +1,5 @@
 export class AuthProviderError extends Error {
-  constructor(public readonly kind: 'invalid_input' | 'denied' | 'unavailable') {
+  constructor(public readonly kind: 'invalid_input' | 'denied' | 'unavailable' | 'mfa_required') {
     super(`Authentication ${kind}`);
     this.name = 'AuthProviderError';
   }
@@ -10,7 +10,7 @@ export type ProviderSession = Readonly<{
   refreshToken: string;
   expiresIn: number;
 }>;
-export type VerifiedIdentity = Readonly<{ id: string; email: string; mfaRequired: boolean; displayName?: string }>;
+export type VerifiedIdentity = Readonly<{ id: string; email: string; mfaRequired: boolean; totpFactorIds: string[]; displayName?: string }>;
 
 /** Server transport only: never cache responses, log payloads or persist tokens
  * in browser storage. Application session revocation is a separate boundary.
@@ -161,7 +161,13 @@ export class AuthProvider {
     if (factors.some(f => !f || typeof f !== 'object' || !('status' in f))) throw new AuthProviderError('denied');
     const metadata = user.user_metadata as { display_name?: unknown } | undefined;
     const name = metadata?.display_name;
+    const totpFactorIds = factors.flatMap(f => {
+      const factor = f as { id?: unknown; status?: unknown; factor_type?: unknown };
+      return factor.status === 'verified' && factor.factor_type === 'totp' && typeof factor.id === 'string'
+        ? [this.factorId(factor.id)] : [];
+    });
     return { id: user.id, email: user.email,
+      totpFactorIds,
       displayName: typeof name === 'string' && name.trim().length > 0 && name.trim().length <= 120 ? name.trim() : undefined,
       mfaRequired: factors.some(f => (f as { status: unknown }).status !== 'unverified') };
   }

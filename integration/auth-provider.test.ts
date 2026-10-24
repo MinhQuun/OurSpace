@@ -80,7 +80,7 @@ test('real provider requires email confirmation and isolates two identities', as
       expect((await auth.identity(verified.accessToken)).id).toBe(identity.id);
       await expect(auth.verifyTotp(session.accessToken, factor.id, challenge, localTotp(factor.secret))).rejects.toMatchObject({ kind: 'denied' });
       expect((await auth.identity(session.accessToken)).mfaRequired).toBe(true);
-      await expect(sessions.login(email, password)).rejects.toMatchObject({ kind: 'denied' });
+      await expect(sessions.login(email, password)).rejects.toMatchObject({ kind: 'mfa_required' });
       const recoveryProbe = await fetch('http://127.0.0.1:55433/factors/recovery-codes', {
         headers: { Authorization: `Bearer ${verified.accessToken}` },
       });
@@ -106,6 +106,12 @@ test('real provider requires email confirmation and isolates two identities', as
       expect((await auth.recoveryStatus(verified.accessToken)).remaining).toBe(rotated.length);
       const recovered = await auth.verifyRecoveryCode(low.accessToken, rotated[0]);
       expect((await auth.identity(recovered.accessToken)).id).toBe(identity.id);
+      const recoveryLogin = await sessions.login(email, password, undefined, { method: 'recovery', code: rotated[2] });
+      expect(await sessions.actor(recoveryLogin.token)).toBe(identity.id);
+      await expect(sessions.login(email, password, undefined, { method: 'recovery', code: rotated[2] })).rejects.toMatchObject({ kind: 'denied' });
+      await expect(sessions.login(email, password, undefined, { method: 'totp', code: '123456', factorId: randomUUID() })).rejects.toMatchObject({ kind: 'denied' });
+      const totpLogin = await sessions.login(email, password, undefined, { method: 'totp', code: localTotp(factor.secret) });
+      expect(await sessions.actor(totpLogin.token)).toBe(identity.id);
     } else {
       await expect(auth.verifyRecoveryCode(session.accessToken, foreignRecoveryCode)).rejects.toMatchObject({ kind: 'denied' });
     }
