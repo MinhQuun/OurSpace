@@ -63,3 +63,7 @@ aside p {
 .form-error { background: #f6e3e3; color: #752525; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #9c587b; outline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.session-panel { margin-top: 2rem; border-top: 1px solid #d8cdd1; padding-top: 1rem; }
+.session-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.session-list { list-style: none; padding: 0; }
+.session-list li { margin: 1rem 0; border: 1px solid #d8cdd1; padding: 1rem; border-radius: .5rem; overflow-wrap: anywhere; }

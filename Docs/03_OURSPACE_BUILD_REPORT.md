@@ -273,3 +273,14 @@ Acceptance: M10 D11 own-session listing without secrets; revoke a selected own s
 - PASS 11 PostgreSQL tests, expanded Auth integration, 4 Auth HTTP/desktop/mobile cases, lint/typecheck/build, 18 unit tests, diff/history scan. No runtime table grants added.
 - GitHub CI verified SUCCESS for 30753a9, 04f05d1, 6360a63, 072dd0e and 2a59ea8 (latest run 40045668349).
 - Next task is the session-management screen and desktop/mobile revocation controls. Full D11 still needs that UI and remaining session metadata/lifecycle checks; Stage 02 remains in progress.
+- Commit 545dda1ba2c58b28d796eef75a37aab28610df40 PUSHED; HEAD and remote master SHA verified identical. Continue with task 02.5b session-management UI.
+
+## Task 02.5b — Session management interface
+
+Acceptance: desktop/mobile users can inspect own sessions, distinguish current/revoked/expired state, cancel or confirm selected/all-other/current revocation, and return to login after current session ends.
+
+- Added responsive session panel with dates, current marker, refresh, per-session revoke and revoke-other controls. Confirmation cancellation performs no mutation. Expiration display updates periodically; server remains authoritative. Current-session denial/revocation resets account UI without unsafe navigation or stale signed-in state.
+- Preserved concurrent workspace formatting changes; unrelated account/page.tsx formatting remains unstaged. Corrected the effect callback structure and internal navigation lint violations before acceptance.
+- PASS: full desktop/mobile browser flows now exercise cancel, revoke others, selected revoke and self-revoke, checking independent cookie contexts lose access. All 8 Playwright HTTP/UI/scaffold cases, lint/typecheck/build and 18 unit tests PASS. Diff/history scan has no secret findings.
+- Inspected mobile session-management screenshot in ignored .local/sessions-mobile.png. Dates/controls fit; no credentials or real personal data are present. Desktop screenshot also generated for review.
+- D11 UI slice is implemented; last-seen metadata, lifecycle invalidation, full MFA/recovery and remaining Stage 02 requirements still need completion. No complete P0 Auth claim.
