@@ -45,6 +45,32 @@ test('factor binding requires current version and verification requires signed A
   expect(status.rows[0].state).toBe('verified');
   expect(status.rows[0].version).toBe('3');
   expect(status.rows[0].enabled_at).toBeNull();
+  const freshHash = createHash('sha256').update(fresh.token).digest('hex');
+  const receiptHash = createHash('sha256').update(randomBytes(32)).digest('hex');
+  const recovery = (token: string, version: number, receipt: string, acknowledge: boolean) =>
+    db.query('SELECT app_internal.record_mfa_recovery($1,$2,$3,$4,$5,$6) AS version',
+      [freshHash, token, id, version, receipt, acknowledge]);
+  await expect(recovery(elevated.accessToken, 3, receiptHash, true)).rejects.toThrow('Database operation unavailable');
+  const low = await auth.signIn(email, password);
+  await expect(recovery(low.accessToken, 3, receiptHash, false)).rejects.toThrow('Database operation unavailable');
+  const codes = await auth.generateRecoveryCodes(elevated.accessToken);
+  expect((await auth.recoveryStatus(elevated.accessToken)).remaining).toBe(codes.length);
+  expect((await recovery(elevated.accessToken, 3, receiptHash, false)).rows[0].version).toBe('4');
+  expect((await recovery(elevated.accessToken, 4, receiptHash, false)).rows[0].version).toBe('4');
+  await expect(recovery(elevated.accessToken, 3, receiptHash, true)).rejects.toThrow('Database operation unavailable');
+  await expect(recovery(elevated.accessToken, 4, 'a'.repeat(64), true)).rejects.toThrow('Database operation unavailable');
+  const acknowledgments = await Promise.allSettled([
+    recovery(elevated.accessToken, 4, receiptHash, true), recovery(elevated.accessToken, 4, receiptHash, true),
+  ]);
+  expect(acknowledgments.filter(result => result.status === 'fulfilled').length).toBe(1);
+  expect(await sessions.actor(fresh.token)).toBeNull();
+  const enabledSession = await sessions.login(email, password, undefined, { method: 'recovery', code: codes[0] });
+  const enabled = await db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)',
+    [createHash('sha256').update(enabledSession.token).digest('hex')]);
+  expect(enabled.rows[0].state).toBe('enabled');
+  expect(enabled.rows[0].version).toBe('5');
+  expect(Boolean(enabled.rows[0].recovery_acknowledged_at)).toBe(true);
+  expect('recovery_receipt_hash' in enabled.rows[0]).toBe(false);
 }, 30_000);
 
 async function confirmationLink(email: string): Promise<string> {
