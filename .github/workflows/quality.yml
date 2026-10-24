@@ -43,6 +43,7 @@ jobs:
       - run: npm run auth:start
       - run: npm run test:auth-env
       - run: npm run test:auth
+      - run: npm run test:auth-http
       - name: Stop local auth
         if: always()
         run: docker compose -f compose.yaml -f compose.auth.yaml stop auth mail

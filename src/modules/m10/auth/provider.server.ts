@@ -10,7 +10,7 @@ export type ProviderSession = Readonly<{
   refreshToken: string;
   expiresIn: number;
 }>;
-export type VerifiedIdentity = Readonly<{ id: string; email: string; mfaRequired: boolean }>;
+export type VerifiedIdentity = Readonly<{ id: string; email: string; mfaRequired: boolean; displayName?: string }>;
 
 /** Server transport only: never cache responses, log payloads or persist tokens
  * in browser storage. Application session revocation is a separate boundary.
@@ -60,8 +60,10 @@ export class AuthProvider {
     return { email: normalized, password };
   }
 
-  async signUp(email: string, password: string): Promise<void> {
-    const data = await this.request('/signup', this.credentials(email, password));
+  async signUp(email: string, password: string, displayName?: string): Promise<void> {
+    if (displayName !== undefined && (!displayName.trim() || displayName.trim().length > 120)) throw new AuthProviderError('invalid_input');
+    const data = await this.request('/signup', { ...this.credentials(email, password),
+      ...(displayName ? { data: { display_name: displayName.trim() } } : {}) });
     // Fail closed if provider configuration silently bypasses email verification.
     if (data.access_token || data.email_confirmed_at) throw new AuthProviderError('denied');
     // Do not expose provider IDs/existence information for duplicate signups.
@@ -87,7 +89,10 @@ export class AuthProvider {
     if (user.factors !== undefined && !Array.isArray(user.factors)) throw new AuthProviderError('denied');
     const factors = (user.factors ?? []) as unknown[];
     if (factors.some(f => !f || typeof f !== 'object' || !('status' in f))) throw new AuthProviderError('denied');
+    const metadata = user.user_metadata as { display_name?: unknown } | undefined;
+    const name = metadata?.display_name;
     return { id: user.id, email: user.email,
+      displayName: typeof name === 'string' && name.trim().length > 0 && name.trim().length <= 120 ? name.trim() : undefined,
       mfaRequired: factors.some(f => (f as { status: unknown }).status !== 'unverified') };
   }
 }

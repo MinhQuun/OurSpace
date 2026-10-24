@@ -30,7 +30,7 @@ export class SessionService {
     const token = randomBytes(32).toString('base64url');
     const id = randomUUID();
     await this.db.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
-      [providerSession.accessToken, displayName?.trim() ?? null, id, digest(token)]);
+      [providerSession.accessToken, displayName?.trim() ?? identity.displayName ?? null, id, digest(token)]);
     return { token, id, expiresAt };
   }
 
