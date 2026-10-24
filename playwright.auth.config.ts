@@ -1,8 +1,13 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 export default defineConfig({
-  testDir: './e2e', testMatch: 'auth-http.spec.ts', workers: 1,
+  testDir: './e2e', workers: 1,
+  projects: [
+    { name: 'http', testMatch: 'auth-http.spec.ts' },
+    { name: 'desktop', testMatch: 'auth-ui.spec.ts', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile', testMatch: 'auth-ui.spec.ts', use: { ...devices['Pixel 7'] } },
+  ],
   forbidOnly: Boolean(process.env.CI), retries: 0,
   use: { baseURL: 'http://127.0.0.1:3102', trace: 'off' },
   webServer: {

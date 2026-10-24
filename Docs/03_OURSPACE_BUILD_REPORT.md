@@ -251,3 +251,14 @@ Acceptance: signup requires display name/email verification; login issues only H
 - PASS: two real production-server HTTP tests covering full email verification/login/logout, replay of copied revoked cookie, missing/wrong Origin, cross-site requests, malformed/oversized input and unknown action. Auth Playwright traces disabled to avoid capturing ephemeral credentials. Four desktop/mobile scaffold E2E and real Auth/session integration also PASS.
 - PASS lint/typecheck/build, 18 unit tests, diff/history scan. CI includes test:auth-http after local Auth setup. Blank server env names added to .env.example; generated runtime credentials stay ignored and are supplied only to the local test server process.
 - Limitations: this is HTTP transport, not desktop/mobile Auth UI acceptance. Production HTTPS cookie behavior, rate-limit policy, full MFA/recovery, session listing, password reset and lifecycle invalidation remain. Existing scaffold remains honest about incomplete UI.
+- Commit 072dd0e6baeaa1d5c86c83cacfb54b74288ecbfc PUSHED; remote master SHA matches HEAD. Next: accessible signup/login/logout UI and real desktop/mobile flows.
+
+## Task 02.4 — Desktop/mobile account UI
+
+Acceptance: users can register with display name, receive verification instructions, log in only after email confirmation, retain session across reload and log out on desktop/mobile; labeled keyboard-accessible fields, visible errors/busy states and no browser token storage.
+
+- Added /account signup/login/logout interface with Vietnamese labels, autocomplete hints, native input validation, accessible status/alert messages, disabled submission while pending, focus indicators and responsive form sizing. Home now links to the working account flow and accurately states remaining features are unfinished.
+- PASS real Chromium desktop and Pixel 7 flows: browser signup, refusal before verification, actual Mailpit verification link, browser login, authenticated reload, logout/reload, HttpOnly invisibility in document.cookie, empty local/sessionStorage, no browser exceptions or horizontal overflow. No mocked auth/network.
+- PASS both HTTP security tests and four desktop/mobile scaffold checks (8 Playwright cases total), lint/typecheck/build and 18 unit tests. Fixed initial Next Link lint error and scoped alert assertion to the account form to exclude Next route announcer; reruns passed.
+- Inspected desktop/mobile screenshots of the empty login form in ignored .local/auth-desktop.png and .local/auth-mobile.png; no credentials captured. Diff/history scan clean.
+- This completes the basic email/password UI slice only. MFA/recovery, reset password, session management screen, pairing and remaining Stage 02 acceptance are still outstanding. No claim of full M10 or P0 Auth completion.

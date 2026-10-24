@@ -7,7 +7,7 @@ test('public scaffold renders without browser errors or horizontal overflow', as
   expect(response?.status()).toBe(200);
   await expect(page).toHaveTitle('Our Space');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('chưa mở đăng ký');
+  await expect(page.getByRole('status')).toContainText('Bản thử nghiệm');
   expect(await page.locator('html').getAttribute('lang')).toBe('vi');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
