@@ -262,3 +262,14 @@ Acceptance: users can register with display name, receive verification instructi
 - PASS both HTTP security tests and four desktop/mobile scaffold checks (8 Playwright cases total), lint/typecheck/build and 18 unit tests. Fixed initial Next Link lint error and scoped alert assertion to the account form to exclude Next route announcer; reruns passed.
 - Inspected desktop/mobile screenshots of the empty login form in ignored .local/auth-desktop.png and .local/auth-mobile.png; no credentials captured. Diff/history scan clean.
 - This completes the basic email/password UI slice only. MFA/recovery, reset password, session management screen, pairing and remaining Stage 02 acceptance are still outstanding. No claim of full M10 or P0 Auth completion.
+- Commit 2a59ea80c6cf8f8fddc8be0df377c200c935abb1 PUSHED; remote master SHA verified. Next: session listing/revoke-other-devices and MFA/recovery capability verification against pinned Auth.
+
+## Task 02.5a — Session management backend
+
+Acceptance: M10 D11 own-session listing without secrets; revoke a selected own session or all other active sessions; preserve current session; isolate accounts and audit revocations atomically.
+
+- Added narrowly granted list_sessions/revoke_other_sessions database functions, SessionService methods and authenticated HTTP endpoints. Listing returns only ID, creation/expiry/revocation timestamps and current-session flag. Other-session revocation uses one transactional update/audit operation and excludes expired/revoked/current sessions.
+- PASS real integration: independent sessions, own-session/current flag, repeat revoke-other no-op, immediate denial, account A cannot list/revoke account B. Real HTTP test uses independent cookie contexts, verifies exact listing fields and rejects subsequent list/session requests from the revoked context.
+- PASS 11 PostgreSQL tests, expanded Auth integration, 4 Auth HTTP/desktop/mobile cases, lint/typecheck/build, 18 unit tests, diff/history scan. No runtime table grants added.
+- GitHub CI verified SUCCESS for 30753a9, 04f05d1, 6360a63, 072dd0e and 2a59ea8 (latest run 40045668349).
+- Next task is the session-management screen and desktop/mobile revocation controls. Full D11 still needs that UI and remaining session metadata/lifecycle checks; Stage 02 remains in progress.

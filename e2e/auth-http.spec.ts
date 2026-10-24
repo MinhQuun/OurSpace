@@ -11,7 +11,7 @@ test('write endpoints reject cross-site, malformed and oversized requests', asyn
   expect((await request.get('/api/auth/unknown')).status()).toBe(404);
 });
 
-test('verified login uses private cookie and logout invalidates a copied cookie', async ({ request }) => {
+test('verified login uses private cookie and logout invalidates a copied cookie', async ({ request, playwright }) => {
   const origin = 'http://127.0.0.1:3102';
   const email = `http-${randomUUID()}@ourspace.test`;
   const password = randomUUID() + '!Aa9';
@@ -37,6 +37,21 @@ test('verified login uses private cookie and logout invalidates a copied cookie'
   const current = await request.get('/api/auth/session');
   expect(current.status()).toBe(200);
   expect(current.headers()['cache-control']).toBe('no-store');
+  const other = await playwright.request.newContext({ baseURL: origin });
+  try {
+    expect((await other.post('/api/auth/login', { headers: { Origin: origin }, data: { email, password } })).status()).toBe(200);
+    const listed = await request.get('/api/auth/sessions');
+    expect(listed.status()).toBe(200);
+    const entries = (await listed.json()).sessions;
+    expect(entries.length).toBe(2);
+    expect(entries.filter((entry: { is_current: boolean }) => entry.is_current).length).toBe(1);
+    expect(Object.keys(entries[0]).sort()).toEqual(['created_at', 'expires_at', 'id', 'is_current', 'revoked_at']);
+    const revoked = await request.post('/api/auth/revoke-other-sessions', { headers: { Origin: origin } });
+    expect(await revoked.json()).toEqual({ revoked: 1 });
+    expect((await other.get('/api/auth/session')).status()).toBe(401);
+    expect((await other.get('/api/auth/sessions')).status()).toBe(401);
+    expect((await request.get('/api/auth/session')).status()).toBe(200);
+  } finally { await other.dispose(); }
   expect((await request.post('/api/auth/logout', { headers: { Origin: 'https://wrong.test' } })).status()).toBe(403);
   expect((await request.get('/api/auth/session')).status()).toBe(200);
   expect((await request.post('/api/auth/logout', { headers: { Origin: origin } })).status()).toBe(200);

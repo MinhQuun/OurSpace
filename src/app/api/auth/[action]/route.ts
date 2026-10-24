@@ -37,17 +37,19 @@ async function body(request: NextRequest): Promise<Record<string, unknown>> {
 }
 
 export async function GET(request: NextRequest, context: Context) {
-  if ((await context.params).action !== 'session') return json({ error: 'not_found' }, 404);
+  const { action } = await context.params;
+  if (!['session', 'sessions'].includes(action)) return json({ error: 'not_found' }, 404);
   try {
     const cookie = sessionCookie(request);
     const actor = cookie ? await authRuntime().sessions.actor(cookie.token) : null;
-    return actor ? json({ accountId: actor }) : json({ error: 'unauthenticated' }, 401);
+    if (!actor || !cookie) return json({ error: 'unauthenticated' }, 401);
+    return action === 'sessions' ? json({ sessions: await authRuntime().sessions.list(cookie.token) }) : json({ accountId: actor });
   } catch { return json({ error: 'unavailable' }, 503); }
 }
 
 export async function POST(request: NextRequest, context: Context) {
   const { action } = await context.params;
-  if (!['signup', 'login', 'logout'].includes(action)) return json({ error: 'not_found' }, 404);
+  if (!['signup', 'login', 'logout', 'revoke-session', 'revoke-other-sessions'].includes(action)) return json({ error: 'not_found' }, 404);
   try {
     const auth = authRuntime();
     if (request.headers.get('origin') !== auth.origin || request.headers.get('sec-fetch-site') === 'cross-site') {
@@ -59,6 +61,14 @@ export async function POST(request: NextRequest, context: Context) {
       const response = json({ ok: true });
       response.cookies.set(cookieName, '', { httpOnly: true, secure: auth.secure, sameSite: 'strict', path: '/', maxAge: 0 });
       return response;
+    }
+    if (action === 'revoke-session' || action === 'revoke-other-sessions') {
+      const cookie = sessionCookie(request);
+      if (!cookie || !await auth.sessions.actor(cookie.token)) return json({ error: 'unauthenticated' }, 401);
+      if (action === 'revoke-other-sessions') return json({ revoked: await auth.sessions.revokeOthers(cookie.token) });
+      const input = await body(request);
+      if (typeof input.sessionId !== 'string') throw new AuthProviderError('invalid_input');
+      return json({ revoked: await auth.sessions.revoke(cookie.token, input.sessionId) });
     }
     const input = await body(request);
     if (typeof input.email !== 'string' || typeof input.password !== 'string') throw new AuthProviderError('invalid_input');

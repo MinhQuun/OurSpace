@@ -49,6 +49,14 @@ test('real provider requires email confirmation and isolates two identities', as
     expect(other.token === current.token).toBe(false);
     expect(await sessions.revoke(current.token, other.id)).toBe(true);
     expect(await sessions.actor(other.token)).toBeNull();
+    const additional = await sessions.login(email, password);
+    const ownList = await sessions.list(current.token);
+    expect(ownList.some(item => item.id === current.id && item.is_current)).toBe(true);
+    expect(ownList.some(item => item.id === additional.id && !item.is_current)).toBe(true);
+    expect(await sessions.revokeOthers(current.token)).toBe(1);
+    expect(await sessions.actor(additional.token)).toBeNull();
+    expect(await sessions.actor(current.token)).toBe(identity.id);
+    expect(await sessions.revokeOthers(current.token)).toBe(0);
     const hash = createHash('sha256').update(randomBytes(32)).digest('hex');
     const appSessionId = randomUUID();
     await db.query('SELECT app_internal.issue_verified_session($1,$2,$3,$4)',
@@ -80,6 +88,7 @@ test('real provider requires email confirmation and isolates two identities', as
   }
   expect(new Set(identities).size).toBe(2);
   expect(await sessions.revoke(issued[0].token, issued[1].id)).toBe(false);
+  expect((await sessions.list(issued[0].token)).some(item => item.id === issued[1].id)).toBe(false);
   expect(await sessions.revoke(issued[0].token, issued[0].id)).toBe(true);
   expect(await sessions.actor(issued[0].token)).toBeNull();
   expect(await sessions.actor(issued[1].token)).toBe(identities[1]);

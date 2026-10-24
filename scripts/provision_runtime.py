@@ -25,7 +25,8 @@ END $$;""")
     sql('''GRANT USAGE ON SCHEMA app_internal TO ourspace_runtime;
 GRANT EXECUTE ON FUNCTION app_internal.session_actor(text),
 app_internal.revoke_session(text, uuid),
-app_internal.issue_verified_session(text,text,uuid,text) TO ourspace_runtime;''')
+app_internal.issue_verified_session(text,text,uuid,text),
+app_internal.list_sessions(text), app_internal.revoke_other_sessions(text) TO ourspace_runtime;''')
     print('Local runtime login provisioned; explicit session functions only, no table grants.')
 
 

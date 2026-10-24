@@ -4,6 +4,9 @@ import type { createDatabase } from '../../../server/database.server';
 import { AuthProvider, AuthProviderError } from './provider.server';
 
 type Database = ReturnType<typeof createDatabase>;
+export type SessionSummary = {
+  id: string; created_at: Date; expires_at: Date; revoked_at: Date | null; is_current: boolean;
+};
 function digest(token: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new AuthProviderError('denied');
   return createHash('sha256').update(token).digest('hex');
@@ -49,5 +52,15 @@ export class SessionService {
     const result = await this.db.query<{ revoked: boolean }>(
       'SELECT app_internal.revoke_session($1,$2) AS revoked', [digest(token), sessionId]);
     return result.rows[0]?.revoked === true;
+  }
+
+  async list(token: string): Promise<SessionSummary[]> {
+    return (await this.db.query<SessionSummary>(
+      'SELECT * FROM app_internal.list_sessions($1)', [digest(token)])).rows;
+  }
+
+  async revokeOthers(token: string): Promise<number> {
+    return (await this.db.query<{ count: number }>(
+      'SELECT app_internal.revoke_other_sessions($1) AS count', [digest(token)])).rows[0].count;
   }
 }
