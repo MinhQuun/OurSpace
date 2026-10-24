@@ -18,6 +18,61 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_mfa_activation_requires_verification_and_recovery_acknowledgment(self):
+        migrate(database=self.database)
+        seed(self.database)
+        account = '10000000-0000-4000-8000-000000000001'
+        enrollment = str(uuid.uuid4())
+        insert = f"INSERT INTO m10.mfa_enrollments(id, account_id) VALUES ('{enrollment}', '{account}');"
+        sql(insert, self.database)
+        for statement in [
+            f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{uuid.uuid4()}', '{account}');",
+            "UPDATE m10.mfa_enrollments SET state='enabled';",
+            "UPDATE m10.mfa_enrollments SET state='verified';",
+            "UPDATE m10.mfa_enrollments SET recovery_acknowledged_at=clock_timestamp();",
+        ]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement, self.database)
+        sql(f"UPDATE m10.mfa_enrollments SET provider_factor_id='{uuid.uuid4()}', verified_at=clock_timestamp(), state='verified';", self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql("UPDATE m10.mfa_enrollments SET enabled_at=clock_timestamp(),state='enabled';", self.database)
+        sql("UPDATE m10.mfa_enrollments SET recovery_issued_at=clock_timestamp();", self.database)
+        sql("UPDATE m10.mfa_enrollments SET recovery_acknowledged_at=clock_timestamp(),enabled_at=clock_timestamp(),state='enabled';", self.database)
+        self.assertEqual(sql('SELECT state || chr(58) || version FROM m10.mfa_enrollments;', self.database), 'enabled:4')
+        for statement in [
+            "UPDATE m10.mfa_enrollments SET state='pending';",
+            "UPDATE m10.mfa_enrollments SET recovery_acknowledged_at=NULL;",
+            "UPDATE m10.mfa_enrollments SET account_id='10000000-0000-4000-8000-000000000002';",
+        ]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement, self.database)
+        role = 'probe_' + uuid.uuid4().hex
+        self.assertEqual(sql(f'''BEGIN; CREATE ROLE {role} NOLOGIN;
+GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.mfa_enrollments TO {role};
+SET LOCAL ROLE {role}; SELECT count(*) FROM m10.mfa_enrollments; ROLLBACK;''', self.database), '0')
+        sql("UPDATE m10.mfa_enrollments SET state='disabling';", self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{uuid.uuid4()}', '{account}');", self.database)
+        sql("UPDATE m10.mfa_enrollments SET state='disabled';", self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql("UPDATE m10.mfa_enrollments SET state='enabled';", self.database)
+        sql(f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{uuid.uuid4()}', '{account}');", self.database)
+        sql("UPDATE m10.mfa_enrollments SET state='cancelling' WHERE state='pending';", self.database)
+        sql("UPDATE m10.mfa_enrollments SET state='cancelled' WHERE state='cancelling';", self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.mfa_enrollments;', self.database), '2')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = [pool.submit(sql,
+                f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{uuid.uuid4()}', '{account}');",
+                self.database) for _ in range(2)]
+            outcomes = []
+            for attempt in attempts:
+                try:
+                    attempt.result()
+                    outcomes.append(True)
+                except subprocess.CalledProcessError:
+                    outcomes.append(False)
+        self.assertEqual(sorted(outcomes), [False, True])
+
     def setUp(self):
         self.database = 'ourspace_test_' + uuid.uuid4().hex
         sql(f'CREATE DATABASE {self.database};')

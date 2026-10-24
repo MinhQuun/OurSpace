@@ -349,3 +349,13 @@ Acceptance: cancel unverified enrollment without enabling MFA; removal of verifi
 - Diff/history audit: no findings across 203 blobs; previously authorized media unchanged. Unrelated account/page.tsx formatting remains unstaged.
 - Native API behavior verified against pinned source: https://github.com/supabase/auth/blob/v2.197.0/internal/api/mfa.go and https://github.com/supabase/auth/blob/v2.197.0/internal/api/recovery_codes.go.
 - UC-M10-10 still requires a durable pending enrollment and recovery acknowledgment before product activation. Provider verification activates its factor immediately, so orchestration must represent that intermediate state explicitly and recover safely after interruptions. App session invalidation is not implied by provider session downgrade. These remain next work; no complete D10 claim.
+- Commit ae828a401fd13366fea4ec9f8ba01f95a718c0fb PUSHED; remote master SHA matches HEAD. Next: durable MFA enrollment transitions, recovery acknowledgment and application session invalidation.
+
+## Task 02.6f — Durable MFA enrollment lifecycle schema
+
+Acceptance: product activation requires verification and recovery acknowledgment; one live enrollment per account even under concurrent writes; cancellation/disable can remain resumable; terminal records cannot resurrect; metadata remains private.
+
+- Migration 0009 adds m10.mfa_enrollments with pending/verified/enabled and two-phase cancelling/cancelled, disabling/disabled states. Stores provider factor identity and milestone timestamps only, never tokens, TOTP secrets or recovery values. Immutable identity/milestones and monotonically advancing version protect transition history.
+- Database constraints require verified factor and issued/acknowledged recovery before enabling. Partial unique index includes interrupted cleanup states. Terminal records remain preserved; replacement enrollment gets a new ID. RLS FORCE, no policies/runtime grants; authenticated orchestration must supply validated provider proof in the next task.
+- PASS 13 PostgreSQL integration cases, then targeted expanded MFA test with two concurrent inserts (exactly one accepted). Covered invalid activation, missing acknowledgment, identity/milestone tampering, RLS denial, blocked replacement during disabling, terminal replay and successful replacement after completion. Local migration applied and checksums verified. Lint/typecheck and diff/history audit PASS (206 historical blobs, no findings).
+- Schema is foundational evidence only: provider reconciliation, signed-proof transition functions, session invalidation and desktop/mobile settings flow remain incomplete. Stage 02 stays IN_PROGRESS; no full D10 acceptance claimed.
