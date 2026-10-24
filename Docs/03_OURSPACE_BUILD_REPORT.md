@@ -407,3 +407,14 @@ Acceptance: verified enrollment cannot activate before recovery issuance; acknow
 - PASS 3 real Auth scenarios with expanded recovery lifecycle: pre-issuance acknowledgment denied, AAL1 denied, real provider code generation, stale version/wrong receipt denied, concurrent acknowledgment exactly one success, session revoked, recovery login succeeds and status reports enabled/version 5 without receipt digest.
 - PASS 14 PostgreSQL migration/integration cases, lint/typecheck and diff/history audit (223 blobs, no findings). Local migration and least-privilege grants applied. No codes, JWTs or receipt plaintext written to source/database/report.
 - Still required: server orchestration must generate receipt randomness, deliver it only alongside actual provider-generated codes, recheck provider ownership/status and reconcile interrupted delivery/rotation. No browser endpoint exposed yet; D10/Stage 02 remain incomplete.
+- Commit f588fa62c2ec8ac2db94aae6274edd3ac3217cd0 PUSHED; HEAD and remote master SHA match. Earlier automatic approval review could not run due to usage limit; retry succeeded without bypassing review. Next: server MFA orchestration with safe resumption and recovery delivery.
+
+## Task 02.6l — Server enrollment and verification orchestration
+
+Acceptance: reauthenticate the current account before setup; resolve factor identity from private DB state; verify against provider; commit verified state and replacement app session together while old sessions are revoked.
+
+- Added server-only MfaService.start/verify. Start serializes application enroll requests with account locking and returns only enrollment/version plus provider TOTP setup material. Verify rejects stale versions before provider mutation, resolves the bound factor internally and checks the verified factor belongs to the same provider identity.
+- Migration 0015 provides a caller-scoped bound-factor lookup with an explicit runtime function grant, no table grant. Verification transition and replacement opaque session issuance share one DB transaction. Provider JWTs remain request-local and are not returned or persisted.
+- PASS 4 real provider integration scenarios including service enrollment, stale verification rejection, TOTP verification, invalidation of both prior app sessions, valid replacement and revoked-session replay denial. Typecheck and diff/history scan PASS (227 blobs, no findings). Local migration/grants applied.
+- Limits: provider side effects cannot roll back with a database transaction. Interrupted initial enrollment must be reconciled before retry; recovery generation/acknowledgment and cancellation are not yet wired into this service. No public route is exposed until these paths are handled. Stage 02 remains IN_PROGRESS.
+- Lint completed successfully (exit 0); all task checks above passed.
