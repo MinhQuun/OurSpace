@@ -32,6 +32,7 @@ app_internal.begin_mfa_enrollment(text,text,uuid),
 app_internal.record_mfa_factor(text,text,uuid,bigint,uuid,boolean),
 app_internal.record_mfa_recovery(text,text,uuid,bigint,text,boolean),
 app_internal.bound_mfa_factor(text,uuid),
+app_internal.replace_mfa_recovery_receipt(text,text,uuid,bigint,text),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

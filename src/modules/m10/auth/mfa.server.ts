@@ -110,6 +110,29 @@ export class MfaService {
     });
   }
 
+  async status(token: string) {
+    if (!await this.sessions.actor(token)) throw new AuthProviderError('denied');
+    return (await this.db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)', [digest(token)])).rows[0] ?? null;
+  }
+
+  async replaceRecovery(token: string, credentials: Credentials, enrollmentId: string, version: string, code: string) {
+    const { elevated } = await this.recoveryProof(token, credentials, enrollmentId, version, code);
+    const receipt = randomBytes(32).toString('base64url');
+    const args = [digest(token), elevated.accessToken, enrollmentId, version, digest(receipt)];
+    // Commit invalidation first. Even if the following provider call fails,
+    // an old displayed receipt can never acknowledge a possibly replaced set.
+    const reserved = await this.db.query('SELECT app_internal.replace_mfa_recovery_receipt($1,$2,$3,$4,$5) AS version', args);
+    const nextVersion = String(reserved.rows[0].version);
+    return this.db.transaction(async client => {
+      // Recheck and hold account lock during rotation. A newer reservation wins
+      // before any stale request can mutate the provider's recovery set.
+      await client.query('SELECT app_internal.replace_mfa_recovery_receipt($1,$2,$3,$4,$5)',
+        [args[0], args[1], enrollmentId, nextVersion, args[4]]);
+      const codes = await this.provider.generateRecoveryCodes(elevated.accessToken, true);
+      return { enrollmentId, version: nextVersion, codes, receipt };
+    });
+  }
+
   async verify(
     token: string,
     credentials: Credentials,

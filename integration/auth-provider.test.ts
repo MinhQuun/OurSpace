@@ -79,15 +79,26 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
       localTotp(started.secret),
     ),
   ).rejects.toMatchObject({ kind: "denied" });
-  const recovery = await service.issueRecovery(verified.session.token, credentials, started.enrollmentId, verified.version, localTotp(started.secret));
+  let recovery = await service.issueRecovery(verified.session.token, credentials, started.enrollmentId, verified.version, localTotp(started.secret));
   expect(recovery.version).toBe('4');
   expect(Object.keys(recovery).sort()).toEqual(['codes', 'enrollmentId', 'receipt', 'version']);
   await expect(service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
     localTotp(started.secret), randomBytes(32).toString('base64url'))).rejects.toThrow('Database operation unavailable');
   expect(Boolean(await sessions.actor(verified.session.token))).toBe(true);
+  const oldRecovery = recovery;
+  recovery = await service.replaceRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version, localTotp(started.secret));
+  expect(recovery.version).toBe('5');
+  const resumed = await service.status(verified.session.token);
+  expect(resumed?.state).toBe('verified');
+  expect(resumed?.version).toBe('5');
+  expect('recovery_receipt_hash' in resumed!).toBe(false);
+  await expect(service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
+    localTotp(started.secret), oldRecovery.receipt)).rejects.toThrow('Database operation unavailable');
+  await expect(sessions.login(credentials.email, credentials.password, undefined,
+    { method: 'recovery', code: oldRecovery.codes[0] })).rejects.toMatchObject({ kind: 'denied' });
   const enabled = await service.acknowledgeRecovery(verified.session.token, credentials, started.enrollmentId, recovery.version,
     localTotp(started.secret), recovery.receipt);
-  expect(enabled.version).toBe('5');
+  expect(enabled.version).toBe('6');
   expect(await sessions.actor(verified.session.token)).toBeNull();
   expect(Boolean(await sessions.actor(enabled.session.token))).toBe(true);
   const recovered = await sessions.login(credentials.email, credentials.password, undefined, { method: 'recovery', code: recovery.codes[0] });

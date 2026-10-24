@@ -427,3 +427,13 @@ Acceptance: require fresh password/TOTP proof and the bound verified factor; ret
 - Added MfaService.issueRecovery/acknowledgeRecovery. Issuance locks/checks DB state before calling provider, returns plaintext codes only in the explicit one-time result, and persists only receipt digest. Acknowledgment checks provider recovery availability, records activation and issues the replacement opaque session in one transaction.
 - PASS 4 real Auth integration scenarios. Expanded service test covers complete start/verify/issue/acknowledge path, wrong receipt denial preserving the current session, successful activation invalidating it, working replacement and actual recovery-code login. Lint/typecheck and diff/history audit PASS (232 blobs, no findings).
 - Recovery material/token payloads are not logged, cached or committed. Provider side effects and response delivery still require reconciliation after interruptions; no public endpoint/UI exposed yet. Next: recover safely from lost enrollment/recovery responses and allow cancellation before exposing setup. Stage 02/D10 remain incomplete.
+- Commit 79e7a4a7ae141f67098b1433b25394e075b87ad5 PUSHED; HEAD and remote master SHA match. Next: interrupted recovery delivery reconciliation and setup cancellation.
+
+## Task 02.6n — Recovery redelivery invalidates stale acknowledgment
+
+Acceptance: after losing an issuance response, authenticated user can replace the recovery set; old receipt cannot acknowledge new codes; old codes no longer authenticate; current status provides the version needed to resume.
+
+- Migration 0016 and MfaService.replaceRecovery reserve/commit a new receipt digest before provider rotation. A second transaction rechecks the reservation/version and holds the account lock during provider mutation. Thus an older receipt is already invalid even if rotation or delivery fails. Same reservation check is a no-op; stale versions fail before mutation.
+- Added authenticated metadata-only service status. Original issuance timestamp is preserved; replacement advances version without falsely enabling MFA. No plaintext recovery store introduced.
+- PASS 4 real Auth scenarios, including service issuance/replacement, status resume, old-receipt denial, old-code denial, new acknowledgment and new-code login. Lint/typecheck and diff/history audit PASS (235 blobs, no findings). Local migration and explicit function grant applied.
+- Limits: this path replaces an existing provider recovery set. Recovery-set absence after a failed initial generation, interrupted TOTP enrollment, cancellation and full failure-injection coverage remain to be handled before public settings endpoints. Stage 02/D10 remain incomplete.
