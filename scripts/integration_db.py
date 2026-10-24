@@ -18,6 +18,45 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_mfa_transitions_revoke_only_own_sessions_atomically(self):
+        migrate(database=self.database)
+        seed(self.database)
+        sql("UPDATE m10.accounts SET state='active';", self.database)
+        account = '10000000-0000-4000-8000-000000000001'
+        other = '10000000-0000-4000-8000-000000000002'
+        enrollment = str(uuid.uuid4())
+        sql(f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{enrollment}','{account}');", self.database)
+        def add_session(owner, digest):
+            sql(f"""INSERT INTO m10.sessions(id,account_id,token_hash,expires_at)
+VALUES ('{uuid.uuid4()}','{owner}',repeat('{digest}',64),clock_timestamp()+interval '1 hour');""", self.database)
+        add_session(account, 'a')
+        add_session(account, 'b')
+        add_session(other, 'c')
+        verify = f"UPDATE m10.mfa_enrollments SET state='verified',provider_factor_id='{uuid.uuid4()}',verified_at=clock_timestamp();"
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql('BEGIN;' + verify + 'SELECT 1/0; COMMIT;', self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '0')
+        self.assertEqual(sql('SELECT state FROM m10.mfa_enrollments;', self.database), 'pending')
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('a',64));", self.database), account)
+        sql(verify, self.database)
+        self.assertEqual(sql("SELECT count(*) FROM m10.session_revocations WHERE reason='mfa_changed';", self.database), '2')
+        for digest in ['a', 'b']:
+            self.assertEqual(sql(f"SELECT app_internal.session_actor(repeat('{digest}',64)) IS NULL;", self.database), 't')
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('c',64));", self.database), other)
+        add_session(account, 'd')
+        sql("UPDATE m10.mfa_enrollments SET recovery_issued_at=clock_timestamp();", self.database)
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('d',64));", self.database), account)
+        sql("UPDATE m10.mfa_enrollments SET recovery_acknowledged_at=clock_timestamp(),enabled_at=clock_timestamp(),state='enabled';", self.database)
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('d',64)) IS NULL;", self.database), 't')
+        add_session(account, 'e')
+        sql("UPDATE m10.mfa_enrollments SET state='disabling';", self.database)
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('e',64)) IS NULL;", self.database), 't')
+        add_session(account, 'f')
+        sql("UPDATE m10.mfa_enrollments SET state='disabled';", self.database)
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('f',64)) IS NULL;", self.database), 't')
+        self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '5')
+        self.assertEqual(sql("SELECT app_internal.session_actor(repeat('c',64));", self.database), other)
+
     def test_mfa_activation_requires_verification_and_recovery_acknowledgment(self):
         migrate(database=self.database)
         seed(self.database)
