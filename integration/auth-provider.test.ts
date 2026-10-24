@@ -11,6 +11,42 @@ const db = createDatabase(`postgresql://ourspace_runtime:${readFileSync('.local/
 afterAll(() => db.close());
 const sessions = new SessionService(db, auth);
 
+test('factor binding requires current version and verification requires signed AAL2', async () => {
+  const email = `binding-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + '!Aa9';
+  await auth.signUp(email, password);
+  expect((await fetch(await confirmationLink(email), { redirect: 'manual' })).status).toBe(303);
+  const app = await sessions.login(email, password, 'Synthetic binding');
+  const hash = createHash('sha256').update(app.token).digest('hex');
+  const providerSession = await auth.signIn(email, password);
+  const id = randomUUID();
+  await db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)', [hash, providerSession.accessToken, id]);
+  const factor = await auth.enrollTotp(providerSession.accessToken);
+  const record = (token: string, version: number, factorId: string, verified: boolean) =>
+    db.query('SELECT app_internal.record_mfa_factor($1,$2,$3,$4,$5,$6) AS version',
+      [hash, token, id, version, factorId, verified]);
+  await expect(record(providerSession.accessToken, 99, factor.id, false)).rejects.toThrow('Database operation unavailable');
+  expect((await record(providerSession.accessToken, 1, factor.id, false)).rows[0].version).toBe('2');
+  expect((await record(providerSession.accessToken, 2, factor.id, false)).rows[0].version).toBe('2');
+  await expect(record(providerSession.accessToken, 2, randomUUID(), false)).rejects.toThrow('Database operation unavailable');
+  await expect(record(providerSession.accessToken, 2, factor.id, true)).rejects.toThrow('Database operation unavailable');
+  const challenge = await auth.challengeTotp(providerSession.accessToken, factor.id);
+  const elevated = await auth.verifyTotp(providerSession.accessToken, factor.id, challenge, localTotp(factor.secret));
+  expect((await auth.identity(elevated.accessToken)).totpFactorIds.includes(factor.id)).toBe(true);
+  const attempts = await Promise.allSettled([
+    record(elevated.accessToken, 2, factor.id, true), record(elevated.accessToken, 2, factor.id, true),
+  ]);
+  expect(attempts.filter(result => result.status === 'fulfilled').length).toBe(1);
+  expect(await sessions.actor(app.token)).toBeNull();
+  await expect(record(elevated.accessToken, 3, factor.id, true)).rejects.toThrow('Database operation unavailable');
+  const fresh = await sessions.login(email, password, undefined, { method: 'totp', code: localTotp(factor.secret) });
+  const status = await db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)',
+    [createHash('sha256').update(fresh.token).digest('hex')]);
+  expect(status.rows[0].state).toBe('verified');
+  expect(status.rows[0].version).toBe('3');
+  expect(status.rows[0].enabled_at).toBeNull();
+}, 30_000);
+
 async function confirmationLink(email: string): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt++) {
     const listing = await (await fetch('http://127.0.0.1:55434/api/v1/messages')).json();
@@ -52,6 +88,8 @@ test('real provider requires email confirmation and isolates two identities', as
     if (label === 'b') {
       await expect(db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)',
         [currentHash, firstProviderToken, enrollmentId])).rejects.toThrow('Database operation unavailable');
+      await expect(db.query('SELECT app_internal.record_mfa_factor($1,$2,$3,$4,$5,$6)',
+        [currentHash, firstProviderToken, enrollmentId, 1, randomUUID(), false])).rejects.toThrow('Database operation unavailable');
     }
     const begin = () => db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3) AS id',
       [currentHash, session.accessToken, enrollmentId]);

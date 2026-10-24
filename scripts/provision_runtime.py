@@ -29,6 +29,7 @@ app_internal.issue_verified_session(text,text,uuid,text),
 app_internal.list_sessions(text), app_internal.revoke_other_sessions(text),
 app_internal.authenticate_session(text),
 app_internal.begin_mfa_enrollment(text,text,uuid),
+app_internal.record_mfa_factor(text,text,uuid,bigint,uuid,boolean),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

@@ -388,3 +388,12 @@ Acceptance: enrollment initiation requires a valid application session and signe
 - Runtime provisioning grants only these two functions, without table access. Local migration and grants applied. PASS 2 expanded real-provider integration scenarios: cross-identity denial, concurrent same-ID retry, different-ID conflict, metadata-only result, revoked-session initiation/status denial and direct-table denial.
 - PASS all 14 PostgreSQL migration/integration cases, lint/typecheck, diff/history audit (215 blobs, no findings). User account/page.tsx formatting preserved unstaged.
 - No settings endpoint exposed yet. Next: provider-factor binding, verified transition with signed assurance, recovery issuance/acknowledgment orchestration and UI. Full D10 and Stage 02 remain incomplete.
+- Commit 1391369f40a66adb69af570c69460136b0a0d60b PUSHED; HEAD and remote master SHA verified identical. Next: authenticated factor binding and verification/acknowledgment transitions.
+
+## Task 02.6j — Versioned factor binding and signed verification transition
+
+Acceptance: only the session's signed identity can bind a factor; bound identity cannot be replaced; verification requires signed AAL2 and current version; concurrent verification changes state once and revokes old application sessions.
+
+- Migration 0013 adds a narrowly granted server function for pending factor binding/verification. Account lock precedes enrollment lock, session is rechecked, version is compared, and verification requires prior binding. Binding retry at current version is a no-op. Verification leaves product state verified, not enabled.
+- PASS 3 real provider integration scenarios, including new enrollment/factor binding, stale-version rejection, factor substitution rejection, AAL1 denial, actual TOTP verification, concurrent transition (one success), old-cookie invalidation, fresh MFA login and status verified/version 3 with enabled_at null. Cross-identity mutation denial added and re-run PASS. Local migration/grants applied; lint/typecheck and diff/history scan PASS (219 blobs, no findings).
+- Boundary: signed JWT proves identity/assurance, not a specific factor ID. Trusted server orchestration must source factor IDs from authenticated provider responses and check current factor ownership before invoking this function; no public endpoint accepts this mutation yet. Recovery issuance/acknowledgment and interrupted-operation handling remain next, so D10/Stage 02 remain incomplete.
