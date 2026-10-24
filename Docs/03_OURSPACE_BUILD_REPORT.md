@@ -447,3 +447,13 @@ Acceptance: redelivery can recreate a missing provider set or rotate an existing
 - Redelivery checks current provider status under its existing account lock/reservation before choosing generate or regenerate. The old receipt remains invalidated before either operation.
 - PASS 4 real Auth scenarios: test removes the synthetic user's actual recovery set after app issuance, confirms absence, recreates through service, rotates again, rejects prior codes/receipt and completes activation/new-code login. Invalid token status remains denied. Lint/typecheck and diff/history audit PASS (240 blobs, no findings).
 - Remaining before settings endpoints: interrupted TOTP setup reconciliation, cancellation/disable orchestration and broader failure/concurrency coverage. Stage 02/D10 remain incomplete.
+- Commit 235b7fd278802c85e215391aa775bbfcd2ed2d9d PUSHED; HEAD and remote master SHA match. Edited service/provider/test files also received formatter layout changes. Next: interrupted TOTP setup and cancellation/disable orchestration.
+
+## Task 02.6p — Cancel unverified TOTP setup
+
+Acceptance: authenticated owner can cancel pending setup, remove only its bound unverified factor, terminate enrollment and replace revoked app session; verified factors cannot use this path; already-removed factor permits reconciliation.
+
+- Added scoped cancellation function and MfaService.cancelPending. Account lock/version check precedes provider cleanup. Provider identity is refreshed under lock; any verified factor denies this low-assurance cancellation path. Terminal enrollment metadata is retained through cancelling/cancelled transitions; replacement app session commits with them.
+- Provider identity now exposes validated unverified TOTP IDs to server orchestration. Missing bound factor is treated as completed cleanup after interruption; authentication/provider failures remain errors.
+- PASS 5 real Auth scenarios, plus targeted re-run after adding verified-setup cancellation denial. New scenario covers cancellation, old-cookie revocation, empty active status, provider factor removal, fresh setup, external factor removal followed by reconciliation and stale-cookie replay denial. Lint/typecheck and diff/history scan PASS (244 blobs, no findings). Migration/grants applied locally.
+- Remaining: orphan initial provider factors when DB binding never committed, cancellation of verified-but-not-enabled setup, full MFA disable and public settings UI. Stage 02/D10 remain incomplete.
