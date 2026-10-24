@@ -3,6 +3,12 @@ import subprocess
 import tempfile
 import unittest
 import uuid
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -145,6 +151,42 @@ ROLLBACK;''', self.database)
         # Fresh database connections observe committed revocation immediately.
         self.assertEqual(sql("SELECT app_internal.session_actor(repeat('a',64)) IS NULL;", self.database), 't')
         self.assertEqual(sql('SELECT count(*) FROM m10.session_revocations;', self.database), '1')
+
+    def test_issuance_requires_signed_identity_and_preserves_account_state(self):
+        migrate(database=self.database)
+        key = secrets.token_urlsafe(48)
+        sql(f"INSERT INTO app_internal.auth_verifier VALUES (true, 'https://auth.ourspace.test', '{key}');", self.database)
+        account = str(uuid.uuid4())
+        claims = dict(iss='https://auth.ourspace.test', aud='authenticated', role='authenticated',
+                      sub=account, email='synthetic@ourspace.test', is_anonymous=False,
+                      iat=int(time.time())-5, exp=int(time.time())+300)
+
+        def token(payload, signing_key=key, algorithm='HS256'):
+            def encode(value):
+                return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip('=')
+            body = encode({'alg': algorithm, 'typ': 'JWT'}) + '.' + encode(payload)
+            signature = base64.urlsafe_b64encode(hmac.new(signing_key.encode(), body.encode(), hashlib.sha256).digest()).decode().rstrip('=')
+            return body + '.' + signature
+
+        def issue(jwt, name='Synthetic user'):
+            return sql(f"SELECT app_internal.issue_verified_session('{jwt}','{name}','{uuid.uuid4()}','{secrets.token_hex(32)}');", self.database)
+
+        for invalid in [token(claims, secrets.token_urlsafe(48)), token(claims, algorithm='none'),
+                        token({**claims, 'exp': 1}), token({**claims, 'iss': 'https://wrong.test'}),
+                        token({**claims, 'role': 'service_role'}), token({**claims, 'is_anonymous': True}),
+                        token({**claims, 'sub': str(uuid.uuid4())}, secrets.token_urlsafe(48))]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                issue(invalid)
+        self.assertEqual(sql('SELECT count(*) FROM m10.accounts;', self.database), '0')
+        with self.assertRaises(subprocess.CalledProcessError):
+            issue(token(claims), ' ')
+        self.assertEqual(sql('SELECT count(*) FROM m10.accounts;', self.database), '0')
+        issue(token(claims))
+        self.assertEqual(sql('SELECT account_id FROM m10.sessions;', self.database), account)
+        sql("UPDATE m10.accounts SET state='deactivated';", self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            issue(token(claims))
+        self.assertEqual(sql('SELECT state FROM m10.accounts;', self.database), 'deactivated')
 
     def test_session_constraints_and_private_storage(self):
         migrate(database=self.database)

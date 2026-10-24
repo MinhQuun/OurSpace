@@ -217,3 +217,15 @@ Acceptance: M10 D11 / ENT-M10-14 rejects expired/revoked sessions and non-active
 - CI for 14b7c7c (39986480870) and b85bd2e (39987306872) verified SUCCESS.
 - PostgreSQL security-definer guidance consulted: https://www.postgresql.org/docs/17/sql-createfunction.html. No session TTL policy introduced: tests use synthetic intervals only.
 - Scope: database boundary only. HTTP request integration, session issuance, listing/UI, other-device logout, MFA and account lifecycle invalidation remain; no full D11/P0 acceptance claimed.
+- Commit 30753a91bfa959c4d848f96a063cbd9018e07eba PUSHED and remote master SHA verified. Next: server session service and verified-login issuance, then HTTP/UI integration.
+
+## Task 02.2d — Provider-signed database session issuance
+
+Acceptance: issue an application session only from a cryptographically verified local provider JWT; derive identity and expiry from signed claims; reject tampering/expiry/issuer/audience/role/anonymous violations; never reactivate deactivated accounts; profile/session/account writes are atomic.
+
+- Initial arbitrary-account-ID issuance draft was rejected by automatic approval review before execution. Replaced it with database signature verification and no caller-selected account ID; safer revised action was approved. No bypass or permission workaround used.
+- Migration 0006 uses pgcrypto HMAC for the existing local HS256 Auth configuration. Private verifier table has FORCE RLS and no runtime access; generated local key is loaded over SQL stdin by local Auth provisioning, never committed/logged. Provider token is not persisted. Runtime receives only explicit issuance execution rights.
+- Added explicit GOTRUE_JWT_ISSUER: real integration initially exposed absent iss; configured it and retained fail-closed issuer checking. Official references: https://www.postgresql.org/docs/17/pgcrypto.html, https://supabase.com/docs/guides/auth/jwt-fields, https://github.com/supabase/supabase/blob/master/docker/CONFIG.md.
+- PASS: 11 PostgreSQL tests including forged signatures, wrong algorithm/issuer/role, expired/anonymous token, missing profile rollback and inactive-account denial. Rechecked denial with unique hashes to exclude duplicate-constraint false positives. Real GoTrue integration confirms two verified users receive correctly bound app sessions; forged subject rejected; runtime cannot read signing key.
+- PASS lint/typecheck, 18 unit tests, 4 adapter tests, diff/history scan. No production service or real account credentials used.
+- This is the local HS256 security profile, not approval of production signing/rotation. Current provider identity revalidation, MFA gating, server service, cookies/routes/UI and lifecycle-wide revocation remain required before P0 Auth acceptance. No user-facing login endpoint exposed yet.

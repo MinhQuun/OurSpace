@@ -51,6 +51,9 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='ourspace_auth')
         'GOTRUE_DB_DATABASE_URL=postgres://ourspace_auth_owner:' + password + '@db:5432/ourspace_auth\n'
         + 'GOTRUE_JWT_SECRET=' + jwt_secret + '\n', encoding='utf-8')
     compose_auth('up', '-d', '--wait', 'auth', 'mail')
+    sql(f"""INSERT INTO app_internal.auth_verifier(singleton, issuer, signing_key)
+VALUES (true, 'http://127.0.0.1:55433', '{jwt_secret}')
+ON CONFLICT (singleton) DO UPDATE SET issuer = EXCLUDED.issuer, signing_key = EXCLUDED.signing_key;""")
 
 
 if __name__ == '__main__':

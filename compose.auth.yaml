@@ -15,6 +15,7 @@ services:
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_NAMESPACE: auth
       GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_ISSUER: http://127.0.0.1:55433
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_EXP: 900
