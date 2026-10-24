@@ -378,3 +378,13 @@ Acceptance: a verified live enrollment requires signature-validated AAL2 at data
 - Enrollment state transitions update account security_version, sharing the row lock already used by issuance. The transaction that follows verification observes its assurance requirement; issuance that precedes verification is revoked by the transition trigger.
 - PASS 14 PostgreSQL cases including expanded signed-token assurance and concurrent login/verification; 2 real Auth provider scenarios after local migration; lint/typecheck and diff/history audit (212 blobs, no findings). Tested pending login, missing/aal1/unknown assurance denial, aal2 issuance, cancellation-in-progress denial and completed cancellation behavior.
 - Scope remains local signed-provider profile. Authenticated enrollment mutation functions, safe provider reconciliation, recovery acknowledgment UI and production signing/rotation remain outstanding. Full D10/Stage 02 are not complete.
+- Commit f66b68749f50c09cf633a3bf988cc9e6f449d394 PUSHED; HEAD and remote master SHA match. Next: authenticated enrollment mutation functions and provider orchestration.
+
+## Task 02.6i — Authenticated enrollment initiation/status
+
+Acceptance: enrollment initiation requires a valid application session and signed provider identity for the same account; retrying the same request is idempotent; competing enrollment is rejected; status exposes only the caller's metadata.
+
+- Migration 0012 adds begin_mfa_enrollment and current_mfa_enrollment. Actor comes from the session, is compared to verified JWT subject and rechecked after acquiring account lock. A repeated pending enrollment ID returns the same record without version change; another live ID fails. Status omits provider factor identifiers and all secret material.
+- Runtime provisioning grants only these two functions, without table access. Local migration and grants applied. PASS 2 expanded real-provider integration scenarios: cross-identity denial, concurrent same-ID retry, different-ID conflict, metadata-only result, revoked-session initiation/status denial and direct-table denial.
+- PASS all 14 PostgreSQL migration/integration cases, lint/typecheck, diff/history audit (215 blobs, no findings). User account/page.tsx formatting preserved unstaged.
+- No settings endpoint exposed yet. Next: provider-factor binding, verified transition with signed assurance, recovery issuance/acknowledgment orchestration and UI. Full D10 and Stage 02 remain incomplete.

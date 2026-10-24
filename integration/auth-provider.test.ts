@@ -29,6 +29,7 @@ test('real provider requires email confirmation and isolates two identities', as
   const identities: string[] = [];
   let foreignRecoveryCode = '';
   const issued: Awaited<ReturnType<SessionService['login']>>[] = [];
+  let firstProviderToken = '';
   for (const label of ['a', 'b']) {
     const email = `provider-${label}-${randomUUID()}@ourspace.test`;
     const password = randomUUID() + '!Aa9';
@@ -45,11 +46,35 @@ test('real provider requires email confirmation and isolates two identities', as
     identities.push(identity.id);
     const current = await sessions.login(email, password, `Synthetic ${label}`);
     issued.push(current);
+    const currentHash = createHash('sha256').update(current.token).digest('hex');
+    const enrollmentId = randomUUID();
+    if (label === 'a') firstProviderToken = session.accessToken;
+    if (label === 'b') {
+      await expect(db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)',
+        [currentHash, firstProviderToken, enrollmentId])).rejects.toThrow('Database operation unavailable');
+    }
+    const begin = () => db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3) AS id',
+      [currentHash, session.accessToken, enrollmentId]);
+    const retries = await Promise.all([begin(), begin()]);
+    expect(retries.every(result => result.rows[0].id === enrollmentId)).toBe(true);
+    await expect(db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)',
+      [currentHash, session.accessToken, randomUUID()])).rejects.toThrow('Database operation unavailable');
+    const enrollment = await db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)', [currentHash]);
+    expect(enrollment.rows.length).toBe(1);
+    expect(enrollment.rows[0].id).toBe(enrollmentId);
+    expect(enrollment.rows[0].state).toBe('pending');
+    expect(enrollment.rows[0].version).toBe('1');
+    expect((await db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)', ['invalid'])).rows.length).toBe(0);
+    await expect(db.query('SELECT * FROM m10.mfa_enrollments')).rejects.toThrow('Database operation unavailable');
     expect(await sessions.actor(current.token)).toBe(identity.id);
     const other = await sessions.login(email, password);
     expect(other.token === current.token).toBe(false);
     expect(await sessions.revoke(current.token, other.id)).toBe(true);
     expect(await sessions.actor(other.token)).toBeNull();
+    const revokedHash = createHash('sha256').update(other.token).digest('hex');
+    await expect(db.query('SELECT app_internal.begin_mfa_enrollment($1,$2,$3)',
+      [revokedHash, session.accessToken, enrollmentId])).rejects.toThrow('Database operation unavailable');
+    expect((await db.query('SELECT * FROM app_internal.current_mfa_enrollment($1)', [revokedHash])).rows.length).toBe(0);
     const additional = await sessions.login(email, password);
     const ownList = await sessions.list(current.token);
     expect(ownList.some(item => item.id === current.id && item.is_current)).toBe(true);
