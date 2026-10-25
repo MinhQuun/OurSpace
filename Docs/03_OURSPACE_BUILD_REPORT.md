@@ -600,3 +600,13 @@ Acceptance: a new valid recovery email proof can replace a pending change receip
 - Initial targeted run hit the real provider's recovery email cooldown. Test now respects 60-second cooldown rather than weakening provider configuration. Lint/typecheck/diff check PASS. Migration applied locally; existing grant preserved.
 - Remaining: first-login account materialization, protected HTTP proof/receipt transport, token expiry and browser flows. Stage 02 and reset-password P0 remain incomplete.
 - Targeted real renewal test PASS (63.71 seconds): distinct new emailed proof, stable change ID, changed receipt, old receipt denied, gate stays closed, old password unchanged until completion, new-password login succeeds afterward. History/worktree heuristic audit PASS: 324 blobs, no findings; historical binary caveat unchanged.
+- Commit c7ace5f9ae263b9dea6a0fa52cfe7231440610b1 PUSHED; remote master matches HEAD. Next: recovery for verified accounts before first app login and protected reset HTTP transport.
+
+## Task 02.7g - Recovery before first application login
+
+Acceptance: verified provider identity can reset before an application account/profile has been materialized; existing inactive/deletion states remain unchanged and denied.
+
+- Migration 0026 materializes the signed subject as an active account only when absent, or transitions pending_verification under the account lock. Existing inactive/deletion states fail and transaction rollback preserves them. Profile creation remains normal first-login behavior, using verified provider profile data; reset does not invent a display name or issue a session.
+- PASS real Auth service reset before any app login, followed by first successful new-password login and old-password denial. PASS expanded PostgreSQL signed-identity test (12.161 seconds), including all four inactive/deletion states unchanged and zero credential changes created. Lint/typecheck/diff check PASS; migration applied locally.
+- Next: protected HTTP proof/receipt transport, recovery expiry/throttling and full desktop/mobile reset flow. Stage 02/UC-M10-09 remain incomplete.
+- History/worktree heuristic audit PASS: 328 blobs, no findings; historical binary caveat unchanged.

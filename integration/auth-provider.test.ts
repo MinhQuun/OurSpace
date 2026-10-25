@@ -1251,3 +1251,20 @@ test("fresh recovery email renews lost prepare receipt while keeping the login g
   await new Promise((resolve) => setTimeout(resolve, 1100));
   expect(Boolean(await sessions.actor((await sessions.login(email, next)).token))).toBe(true);
 }, 90_000);
+
+
+test("verified account can reset before its first application login", async () => {
+  const email = `first-reset-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  await auth.signUp(email, password, "Synthetic first recovery");
+  await fetch(await confirmationLink(email), { redirect: "manual" });
+  await auth.requestPasswordRecovery(email);
+  const link = new URL(await confirmationLink(email));
+  const service = new RecoveryService(db, auth);
+  const prepared = await service.prepare(link.searchParams.get("token")!);
+  await service.complete(prepared.accessToken, prepared.id, prepared.receipt, next);
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect(Boolean(await sessions.actor((await sessions.login(email, next)).token))).toBe(true);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
+}, 30_000);

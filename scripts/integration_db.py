@@ -305,6 +305,13 @@ ROLLBACK;''', self.database)
         with self.assertRaises(subprocess.CalledProcessError):
             issue(token(claims))
         self.assertEqual(sql('SELECT state FROM m10.accounts;', self.database), 'deactivated')
+        for state in ['deactivated', 'deletion_requested', 'deletion_processing', 'deleted']:
+            sql(f"UPDATE m10.accounts SET state='{state}';", self.database)
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(f"SELECT app_internal.begin_credential_change('{token(claims)}','{uuid.uuid4()}','{secrets.token_hex(32)}');", self.database)
+            self.assertEqual(sql('SELECT state FROM m10.accounts;', self.database), state)
+        self.assertEqual(sql('SELECT count(*) FROM m10.credential_changes;', self.database), '0')
+
 
     def test_account_reactivation_cannot_resurrect_sessions(self):
         migrate(database=self.database)
