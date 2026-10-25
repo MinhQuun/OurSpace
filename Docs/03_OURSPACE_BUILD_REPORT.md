@@ -590,3 +590,13 @@ Acceptance: prepare revokes app sessions without changing provider password, com
 - PASS real service scenarios: normal reset, recovery after provider was already changed, and TOTP-enabled account reset preserving MFA. Wrong receipt leaves old password intact; terminal replay fails; old app session revoked; normal login with new password (and MFA when enabled) succeeds after completion. Expanded targeted test 8.90 seconds; lint/typecheck/diff check PASS. Migration/runtime grant applied locally.
 - Remaining before HTTP exposure: protected proof/receipt transport, expired/lost prepare response recovery, users not yet materialized in app DB, recovery throttling/expiry tests and desktop/mobile UI. Provider refresh-session policy also needs verification. Stage 02/UC-M10-09 incomplete.
 - History/worktree heuristic audit PASS: 319 blobs, no findings; historical binary caveat unchanged.
+- Commit 18c370dce1072c74fe15973c56a704b288c82ac1 PUSHED; remote master matches HEAD. Next: lost/expired prepare renewal, account materialization and protected reset transport.
+
+## Task 02.7f - Renew a lost password-recovery prepare response
+
+Acceptance: a new valid recovery email proof can replace a pending change receipt without opening the session gate; old receipt is invalidated and the renewed receipt can complete reset.
+
+- Migration 0025 keeps the account lock/assurance checks, rotates receipt digest for the existing pending change and returns that stable ID. RecoveryService uses the returned ID rather than the newly proposed ID. Fresh email proof is still consumed once and MFA step-up remains required by prepare.
+- Initial targeted run hit the real provider's recovery email cooldown. Test now respects 60-second cooldown rather than weakening provider configuration. Lint/typecheck/diff check PASS. Migration applied locally; existing grant preserved.
+- Remaining: first-login account materialization, protected HTTP proof/receipt transport, token expiry and browser flows. Stage 02 and reset-password P0 remain incomplete.
+- Targeted real renewal test PASS (63.71 seconds): distinct new emailed proof, stable change ID, changed receipt, old receipt denied, gate stays closed, old password unchanged until completion, new-password login succeeds afterward. History/worktree heuristic audit PASS: 324 blobs, no findings; historical binary caveat unchanged.

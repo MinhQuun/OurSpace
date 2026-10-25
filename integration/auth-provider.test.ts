@@ -1223,3 +1223,31 @@ test("recovery service prepares before mutation and completes or reconciles prov
     expect(Boolean(await sessions.actor((await sessions.login(email, next, undefined, secret ? { method: "totp", code: localTotp(secret) } : undefined)).token))).toBe(true);
   }
 }, 30_000);
+
+
+test("fresh recovery email renews lost prepare receipt while keeping the login gate closed", async () => {
+  const email = `renew-reset-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  await auth.signUp(email, password);
+  await fetch(await confirmationLink(email), { redirect: "manual" });
+  await sessions.login(email, password, "Synthetic receipt renewal");
+  const service = new RecoveryService(db, auth);
+  await auth.requestPasswordRecovery(email);
+  const firstLink = new URL(await confirmationLink(email));
+  const first = await service.prepare(firstLink.searchParams.get("token")!);
+  // Respect the real provider recovery-email cooldown (60 seconds).
+  await new Promise((resolve) => setTimeout(resolve, 61_000));
+  await auth.requestPasswordRecovery(email);
+  const nextLink = new URL(await confirmationLink(email));
+  expect(nextLink.searchParams.get("token") === firstLink.searchParams.get("token")).toBe(false);
+  const renewed = await service.prepare(nextLink.searchParams.get("token")!);
+  expect(renewed.id === first.id).toBe(true);
+  expect(renewed.receipt === first.receipt).toBe(false);
+  await expect(service.complete(first.accessToken, first.id, first.receipt, next)).rejects.toThrow();
+  await expect(sessions.login(email, password)).rejects.toThrow();
+  await auth.signIn(email, password);
+  await service.complete(renewed.accessToken, renewed.id, renewed.receipt, next);
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect(Boolean(await sessions.actor((await sessions.login(email, next)).token))).toBe(true);
+}, 90_000);

@@ -55,8 +55,8 @@ export class RecoveryService {
       throw new AuthProviderError("denied");
     const id = randomUUID();
     const receipt = randomBytes(32).toString("base64url");
-    await this.db.query(
-      "SELECT app_internal.begin_credential_change($1,$2,$3)",
+    const prepared = await this.db.query<{ id: string }>(
+      "SELECT app_internal.begin_credential_change($1,$2,$3) AS id",
       [
         session.accessToken,
         id,
@@ -64,7 +64,7 @@ export class RecoveryService {
       ],
     );
     return {
-      id,
+      id: prepared.rows[0].id,
       receipt,
       accessToken: session.accessToken,
       expiresIn: session.expiresIn,
