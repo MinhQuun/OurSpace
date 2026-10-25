@@ -2,6 +2,7 @@ import "server-only";
 import { createDatabase } from "./database.server";
 import { AuthProvider } from "../modules/m10/auth/provider.server";
 import { SessionService } from "../modules/m10/auth/session.server";
+import { MfaService } from "../modules/m10/auth/mfa.server";
 
 let instance:
   | {
@@ -9,6 +10,7 @@ let instance:
       secure: boolean;
       provider: AuthProvider;
       sessions: SessionService;
+      mfa: MfaService;
     }
   | undefined;
 export function authRuntime() {
@@ -36,6 +38,7 @@ export function authRuntime() {
     secure: origin.protocol === "https:",
     provider,
     sessions: new SessionService(db, provider),
+    mfa: new MfaService(db, provider),
   };
   return instance;
 }

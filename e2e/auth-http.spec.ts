@@ -3,6 +3,56 @@ import { randomUUID } from "node:crypto";
 import { AuthProvider } from "../src/modules/m10/auth/provider.server";
 import { localTotp } from "../integration/local-totp";
 
+test('MFA HTTP lifecycle protects receipts and replaces sessions', async ({ request }) => {
+  const credentials = { email: `mfa-http-${randomUUID()}@ourspace.test`, password: randomUUID() + '!Aa9' };
+  const post = (action: string, data: object) => request.post(`/api/auth/${action}`, {
+    headers: { Origin: 'http://127.0.0.1:3102' }, data: { ...credentials, ...data } });
+  expect((await request.get('/api/auth/mfa-status')).status()).toBe(401);
+  expect((await post('signup', { displayName: 'Synthetic MFA HTTP' })).status()).toBe(202);
+  const inbox = await (await request.get('http://127.0.0.1:55434/api/v1/messages')).json();
+  const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === credentials.email));
+  expect(Boolean(mail)).toBe(true);
+  const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
+  const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0].replaceAll('&amp;', '&');
+  expect(Boolean(link)).toBe(true);
+  expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(303);
+  expect((await post('login', {})).status()).toBe(200);
+  expect((await request.post('/api/auth/mfa-start', { data: credentials })).status()).toBe(403);
+  const enrollmentId = randomUUID();
+  const start = await post('mfa-start', { enrollmentId });
+  expect(start.status()).toBe(200);
+  expect(start.headers()['cache-control']).toBe('no-store');
+  const setup = await start.json();
+  const verified = await post('mfa-verify', { enrollmentId, version: setup.version, code: localTotp(setup.secret) });
+  expect(verified.status()).toBe(200);
+  expect(Object.keys(await verified.json()).sort()).toEqual(['enrollmentId', 'version']);
+  const issued = await post('mfa-recovery', { enrollmentId, version: (await verified.json()).version, code: localTotp(setup.secret) });
+  expect(issued.status()).toBe(200);
+  const recovery = await issued.json();
+  expect(Object.keys(recovery).sort()).toEqual(['codes', 'enrollmentId', 'version']);
+  const receipt = (await request.storageState()).cookies.find(c => c.name === 'ourspace_mfa_recovery');
+  expect(Boolean(receipt?.httpOnly)).toBe(true);
+  expect(receipt?.sameSite).toBe('Strict');
+  expect(receipt?.path).toBe('/api/auth');
+  expect((await post('mfa-acknowledge', { enrollmentId, version: recovery.version, code: localTotp(setup.secret) })).status()).toBe(400);
+  expect((await post('mfa-acknowledge', { enrollmentId, version: recovery.version, code: localTotp(setup.secret), confirmed: true })).status()).toBe(200);
+  const state = await (await request.get('/api/auth/mfa-status')).json();
+  expect(state.enrollment.state).toBe('enabled');
+  const prepared = await post('mfa-prepare-removal', { enrollmentId, version: state.enrollment.version,
+    secondFactor: { method: 'totp', code: localTotp(setup.secret) }, confirmed: true });
+  expect(prepared.status()).toBe(200);
+  expect(Object.keys(await prepared.json()).sort()).toEqual(['enrollmentId', 'state']);
+  expect(Boolean((await request.storageState()).cookies.find(c => c.name === 'ourspace_mfa_removal')?.httpOnly)).toBe(true);
+  expect((await request.get('/api/auth/session')).status()).toBe(401);
+  expect(await (await request.get('/api/auth/mfa-removal-state')).json()).toEqual({ pending: true });
+  const finished = await post('mfa-resume-removal', { secondFactor: { method: 'totp', code: localTotp(setup.secret) } });
+  expect(finished.status()).toBe(200);
+  expect((await finished.json()).state).toBe('disabled');
+  expect(await (await request.get('/api/auth/mfa-removal-state')).json()).toEqual({ pending: false });
+  expect((await post('mfa-resume-removal', {})).status()).toBe(401);
+  expect((await post('login', {})).status()).toBe(200);
+});
+
 test("write endpoints reject cross-site, malformed and oversized requests", async ({
   request,
 }) => {
