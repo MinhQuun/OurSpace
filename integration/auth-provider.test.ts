@@ -15,50 +15,113 @@ const db = createDatabase(
 afterAll(() => db.close());
 const sessions = new SessionService(db, auth);
 
-test('removal service completes verified setup cancellation and resumes after provider cleanup', async () => {
+test("removal service completes verified setup cancellation and resumes after provider cleanup", async () => {
   const service = new MfaService(db, auth);
   for (const interrupted of [false, true]) {
-    const credentials = { email: `removal-${randomUUID()}@ourspace.test`, password: randomUUID() + '!Aa9' };
+    const credentials = {
+      email: `removal-${randomUUID()}@ourspace.test`,
+      password: randomUUID() + "!Aa9",
+    };
     await auth.signUp(credentials.email, credentials.password);
-    expect((await fetch(await confirmationLink(credentials.email), { redirect: 'manual' })).status).toBe(303);
-    const app = await sessions.login(credentials.email, credentials.password, 'Synthetic removal');
+    expect(
+      (
+        await fetch(await confirmationLink(credentials.email), {
+          redirect: "manual",
+        })
+      ).status,
+    ).toBe(303);
+    const app = await sessions.login(
+      credentials.email,
+      credentials.password,
+      "Synthetic removal",
+    );
     const setup = await service.start(app.token, credentials, randomUUID());
-    const verified = await service.verify(app.token, credentials, setup.enrollmentId, setup.version, localTotp(setup.secret));
+    const verified = await service.verify(
+      app.token,
+      credentials,
+      setup.enrollmentId,
+      setup.version,
+      localTotp(setup.secret),
+    );
     let removalSession = verified;
     if (!interrupted) {
-      const recovery = await service.issueRecovery(verified.session.token, credentials, setup.enrollmentId, verified.version, localTotp(setup.secret));
-      removalSession = await service.acknowledgeRecovery(verified.session.token, credentials, setup.enrollmentId, recovery.version,
-        localTotp(setup.secret), recovery.receipt);
+      const recovery = await service.issueRecovery(
+        verified.session.token,
+        credentials,
+        setup.enrollmentId,
+        verified.version,
+        localTotp(setup.secret),
+      );
+      removalSession = await service.acknowledgeRecovery(
+        verified.session.token,
+        credentials,
+        setup.enrollmentId,
+        recovery.version,
+        localTotp(setup.secret),
+        recovery.receipt,
+      );
     }
-    let pending = await service.prepareRemoval(removalSession.session.token, credentials, setup.enrollmentId, removalSession.version,
-      { method: 'totp', code: localTotp(setup.secret) });
-    expect(pending.state).toBe(interrupted ? 'cancelling' : 'disabling');
+    let pending = await service.prepareRemoval(
+      removalSession.session.token,
+      credentials,
+      setup.enrollmentId,
+      removalSession.version,
+      { method: "totp", code: localTotp(setup.secret) },
+    );
+    expect(pending.state).toBe(interrupted ? "cancelling" : "disabling");
     const lost = pending;
-    const renewedSession = await sessions.login(credentials.email, credentials.password, undefined,
-      { method: 'totp', code: localTotp(setup.secret) });
+    const renewedSession = await sessions.login(
+      credentials.email,
+      credentials.password,
+      undefined,
+      { method: "totp", code: localTotp(setup.secret) },
+    );
     const currentRemoval = await service.status(renewedSession.token);
-    pending = await service.prepareRemoval(renewedSession.token, credentials, setup.enrollmentId, currentRemoval!.version,
-      { method: 'totp', code: localTotp(setup.secret) });
+    pending = await service.prepareRemoval(
+      renewedSession.token,
+      credentials,
+      setup.enrollmentId,
+      currentRemoval!.version,
+      { method: "totp", code: localTotp(setup.secret) },
+    );
     expect(pending.state).toBe(lost.state);
     expect(pending.receipt === lost.receipt).toBe(false);
-    await expect(service.resumeRemoval(credentials, setup.enrollmentId, lost.receipt))
-      .rejects.toThrow('Database operation unavailable');
+    await expect(
+      service.resumeRemoval(credentials, setup.enrollmentId, lost.receipt),
+    ).rejects.toThrow("Database operation unavailable");
     expect(await sessions.actor(verified.session.token)).toBeNull();
-    await expect(service.resumeRemoval(credentials, setup.enrollmentId, randomBytes(32).toString('base64url')))
-      .rejects.toThrow('Database operation unavailable');
+    await expect(
+      service.resumeRemoval(
+        credentials,
+        setup.enrollmentId,
+        randomBytes(32).toString("base64url"),
+      ),
+    ).rejects.toThrow("Database operation unavailable");
     if (interrupted) {
       const login = await auth.signIn(credentials.email, credentials.password);
       const factor = (await auth.identity(login.accessToken)).totpFactorIds[0];
-      const proof = await auth.verifyTotp(login.accessToken, factor, await auth.challengeTotp(login.accessToken, factor), localTotp(setup.secret));
+      const proof = await auth.verifyTotp(
+        login.accessToken,
+        factor,
+        await auth.challengeTotp(login.accessToken, factor),
+        localTotp(setup.secret),
+      );
       await auth.unenrollFactor(proof.accessToken, factor);
     }
-    const result = await service.resumeRemoval(credentials, setup.enrollmentId, pending.receipt,
-      interrupted ? undefined : { method: 'totp', code: localTotp(setup.secret) });
-    expect(result.state).toBe(interrupted ? 'cancelled' : 'disabled');
+    const result = await service.resumeRemoval(
+      credentials,
+      setup.enrollmentId,
+      pending.receipt,
+      interrupted
+        ? undefined
+        : { method: "totp", code: localTotp(setup.secret) },
+    );
+    expect(result.state).toBe(interrupted ? "cancelled" : "disabled");
     const fresh = await sessions.login(credentials.email, credentials.password);
     expect(await service.status(fresh.token)).toBeNull();
-    await expect(service.resumeRemoval(credentials, setup.enrollmentId, pending.receipt))
-      .rejects.toThrow('Database operation unavailable');
+    await expect(
+      service.resumeRemoval(credentials, setup.enrollmentId, pending.receipt),
+    ).rejects.toThrow("Database operation unavailable");
   }
 }, 30_000);
 
@@ -331,30 +394,85 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
     { method: "recovery", code: recovery.codes[0] },
   );
   expect(Boolean(await sessions.actor(recovered.token))).toBe(true);
-  const removalHash = createHash('sha256').update(randomBytes(32)).digest('hex');
-  const actorHash = createHash('sha256').update(enabled.session.token).digest('hex');
-  const removalLogin = await auth.signIn(credentials.email, credentials.password);
-  await expect(db.query('SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5)',
-    [actorHash, removalLogin.accessToken, started.enrollmentId, enabled.version, removalHash])).rejects.toThrow('Database operation unavailable');
-  const removalFactor = (await auth.identity(removalLogin.accessToken)).totpFactorIds[0];
-  const removalChallenge = await auth.challengeTotp(removalLogin.accessToken, removalFactor);
-  const removalProof = await auth.verifyTotp(removalLogin.accessToken, removalFactor, removalChallenge, localTotp(started.secret));
-  const authorized = await db.query('SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5) AS state',
-    [actorHash, removalProof.accessToken, started.enrollmentId, enabled.version, removalHash]);
-  expect(authorized.rows[0].state).toBe('disabling');
+  const removalHash = createHash("sha256")
+    .update(randomBytes(32))
+    .digest("hex");
+  const actorHash = createHash("sha256")
+    .update(enabled.session.token)
+    .digest("hex");
+  const removalLogin = await auth.signIn(
+    credentials.email,
+    credentials.password,
+  );
+  await expect(
+    db.query("SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5)", [
+      actorHash,
+      removalLogin.accessToken,
+      started.enrollmentId,
+      enabled.version,
+      removalHash,
+    ]),
+  ).rejects.toThrow("Database operation unavailable");
+  const removalFactor = (await auth.identity(removalLogin.accessToken))
+    .totpFactorIds[0];
+  const removalChallenge = await auth.challengeTotp(
+    removalLogin.accessToken,
+    removalFactor,
+  );
+  const removalProof = await auth.verifyTotp(
+    removalLogin.accessToken,
+    removalFactor,
+    removalChallenge,
+    localTotp(started.secret),
+  );
+  const authorized = await db.query(
+    "SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5) AS state",
+    [
+      actorHash,
+      removalProof.accessToken,
+      started.enrollmentId,
+      enabled.version,
+      removalHash,
+    ],
+  );
+  expect(authorized.rows[0].state).toBe("disabling");
   expect(await sessions.actor(enabled.session.token)).toBeNull();
   expect(await sessions.actor(recovered.token)).toBeNull();
-  await expect(db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3)',
-    [removalProof.accessToken, started.enrollmentId, 'a'.repeat(64)])).rejects.toThrow('Database operation unavailable');
+  await expect(
+    db.query("SELECT app_internal.finish_mfa_removal($1,$2,$3)", [
+      removalProof.accessToken,
+      started.enrollmentId,
+      "a".repeat(64),
+    ]),
+  ).rejects.toThrow("Database operation unavailable");
   await auth.deleteRecoveryCodes(removalProof.accessToken);
   await auth.unenrollFactor(removalProof.accessToken, removalFactor);
-  const afterRemoval = await auth.signIn(credentials.email, credentials.password);
-  expect((await auth.identity(afterRemoval.accessToken)).mfaRequired).toBe(false);
-  expect((await db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3) AS state',
-    [afterRemoval.accessToken, started.enrollmentId, removalHash])).rows[0].state).toBe('disabled');
-  await expect(db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3)',
-    [afterRemoval.accessToken, started.enrollmentId, removalHash])).rejects.toThrow('Database operation unavailable');
-  const afterDisabled = await sessions.login(credentials.email, credentials.password);
+  const afterRemoval = await auth.signIn(
+    credentials.email,
+    credentials.password,
+  );
+  expect((await auth.identity(afterRemoval.accessToken)).mfaRequired).toBe(
+    false,
+  );
+  expect(
+    (
+      await db.query(
+        "SELECT app_internal.finish_mfa_removal($1,$2,$3) AS state",
+        [afterRemoval.accessToken, started.enrollmentId, removalHash],
+      )
+    ).rows[0].state,
+  ).toBe("disabled");
+  await expect(
+    db.query("SELECT app_internal.finish_mfa_removal($1,$2,$3)", [
+      afterRemoval.accessToken,
+      started.enrollmentId,
+      removalHash,
+    ]),
+  ).rejects.toThrow("Database operation unavailable");
+  const afterDisabled = await sessions.login(
+    credentials.email,
+    credentials.password,
+  );
   expect(Boolean(await sessions.actor(afterDisabled.token))).toBe(true);
 }, 30_000);
 
@@ -869,7 +987,6 @@ test("provider cancellation and MFA removal enforce ownership and step-up", asyn
   ).rejects.toMatchObject({ kind: "denied" });
 }, 30_000);
 
-
 test("password recovery transport updates only the proven identity and rejects later replay", async () => {
   const email = `reset-${randomUUID()}@ourspace.test`;
   const otherEmail = `reset-other-${randomUUID()}@ourspace.test`;
@@ -877,7 +994,9 @@ test("password recovery transport updates only the proven identity and rejects l
   const nextPassword = randomUUID() + "!Bb8";
   for (const address of [email, otherEmail]) {
     await auth.signUp(address, password);
-    const response = await fetch(await confirmationLink(address), { redirect: "manual" });
+    const response = await fetch(await confirmationLink(address), {
+      redirect: "manual",
+    });
     expect(response.status).toBe(303);
   }
   const before = await auth.signIn(email, password);
@@ -887,49 +1006,84 @@ test("password recovery transport updates only the proven identity and rejects l
   const link = new URL(await confirmationLink(email));
   expect(link.searchParams.get("type")).toBe("recovery");
   const token = link.searchParams.get("token")!;
-  await expect(auth.verifyPasswordRecovery("a".repeat(64))).rejects.toMatchObject({ kind: "denied" });
+  await expect(
+    auth.verifyPasswordRecovery("a".repeat(64)),
+  ).rejects.toMatchObject({ kind: "denied" });
   const outcomes = await Promise.allSettled([
-    auth.verifyPasswordRecovery(token), auth.verifyPasswordRecovery(token),
+    auth.verifyPasswordRecovery(token),
+    auth.verifyPasswordRecovery(token),
   ]);
   // Provider alone has a concurrent redemption race (observed two successes).
   // Application integration must serialize redemption before exposing this flow.
-  const successful = outcomes.filter((result) => result.status === "fulfilled").length;
+  const successful = outcomes.filter(
+    (result) => result.status === "fulfilled",
+  ).length;
   expect(successful >= 1 && successful <= 2).toBe(true);
-  const winner = outcomes.find((result) => result.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<AuthProvider["verifyPasswordRecovery"]>>>;
-  expect((await auth.identity(winner.value.accessToken)).id === owner.id).toBe(true);
+  const winner = outcomes.find(
+    (result) => result.status === "fulfilled",
+  ) as PromiseFulfilledResult<
+    Awaited<ReturnType<AuthProvider["verifyPasswordRecovery"]>>
+  >;
+  expect((await auth.identity(winner.value.accessToken)).id === owner.id).toBe(
+    true,
+  );
   await auth.updatePassword(winner.value.accessToken, nextPassword);
-  await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
-  expect((await auth.identity((await auth.signIn(email, nextPassword)).accessToken)).id === owner.id).toBe(true);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({
+    kind: "denied",
+  });
+  expect(
+    (await auth.identity((await auth.signIn(email, nextPassword)).accessToken))
+      .id === owner.id,
+  ).toBe(true);
   await auth.signIn(otherEmail, password);
-  await expect(auth.signIn(otherEmail, nextPassword)).rejects.toMatchObject({ kind: "denied" });
-  await expect(auth.verifyPasswordRecovery(token)).rejects.toMatchObject({ kind: "denied" });
+  await expect(auth.signIn(otherEmail, nextPassword)).rejects.toMatchObject({
+    kind: "denied",
+  });
+  await expect(auth.verifyPasswordRecovery(token)).rejects.toMatchObject({
+    kind: "denied",
+  });
 }, 30_000);
-
 
 test("application recovery consumes proof once across concurrent service instances", async () => {
   const email = `consume-${randomUUID()}@ourspace.test`;
   await auth.signUp(email, randomUUID() + "!Aa9");
-  expect((await fetch(await confirmationLink(email), { redirect: "manual" })).status).toBe(303);
+  expect(
+    (await fetch(await confirmationLink(email), { redirect: "manual" })).status,
+  ).toBe(303);
   await auth.requestPasswordRecovery(email);
   const link = new URL(await confirmationLink(email));
   expect(link.searchParams.get("type")).toBe("recovery");
   const token = link.searchParams.get("token")!;
   const first = new RecoveryService(db, auth);
   const second = new RecoveryService(db, auth);
-  const results = await Promise.allSettled([first.exchange(token), second.exchange(token)]);
-  expect(results.filter((result) => result.status === "fulfilled").length).toBe(1);
-  await expect(second.exchange(token)).rejects.toMatchObject({ kind: "denied" });
+  const results = await Promise.allSettled([
+    first.exchange(token),
+    second.exchange(token),
+  ]);
+  expect(results.filter((result) => result.status === "fulfilled").length).toBe(
+    1,
+  );
+  await expect(second.exchange(token)).rejects.toMatchObject({
+    kind: "denied",
+  });
   // Invalid provider proof is still burned; retries cannot reopen a failed exchange.
   const invalid = randomBytes(32).toString("hex");
-  await expect(first.exchange(invalid)).rejects.toMatchObject({ kind: "denied" });
+  await expect(first.exchange(invalid)).rejects.toMatchObject({
+    kind: "denied",
+  });
   const digest = createHash("sha256").update(invalid).digest("hex");
   const consumed = await db.query<{ consumed: boolean }>(
-    "SELECT app_internal.consume_password_recovery($1) AS consumed", [digest]);
+    "SELECT app_internal.consume_password_recovery($1) AS consumed",
+    [digest],
+  );
   expect(consumed.rows[0].consumed).toBe(false);
-  await expect(db.query("SELECT * FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
-  await expect(db.query("DELETE FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
+  await expect(
+    db.query("SELECT * FROM app_internal.password_recovery_consumptions"),
+  ).rejects.toThrow();
+  await expect(
+    db.query("DELETE FROM app_internal.password_recovery_consumptions"),
+  ).rejects.toThrow();
 }, 30_000);
-
 
 test("credential invalidation revokes own sessions and rejects pre-boundary issuance", async () => {
   const password = randomUUID() + "!Aa9";
@@ -939,20 +1093,98 @@ test("credential invalidation revokes own sessions and rejects pre-boundary issu
     await auth.signUp(address, password);
     await fetch(await confirmationLink(address), { redirect: "manual" });
   }
-  const a = await sessions.login(email, password, "Synthetic credential boundary");
+  const a = await sessions.login(
+    email,
+    password,
+    "Synthetic credential boundary",
+  );
   const b = await sessions.login(other, password, "Synthetic other account");
   const proof = await auth.signIn(email, password);
   const event = randomUUID();
-  const invalidate = () => db.query<{ changed: boolean }>(
-    "SELECT app_internal.invalidate_credential_sessions($1,$2) AS changed", [proof.accessToken, event]);
+  const invalidate = () =>
+    db.query<{ changed: boolean }>(
+      "SELECT app_internal.invalidate_credential_sessions($1,$2) AS changed",
+      [proof.accessToken, event],
+    );
   expect((await invalidate()).rows[0].changed).toBe(true);
   expect((await invalidate()).rows[0].changed).toBe(false);
   expect(await sessions.actor(a.token)).toBeNull();
   expect(Boolean(await sessions.actor(b.token))).toBe(true);
-  await expect(db.query("SELECT app_internal.issue_verified_session($1,$2,$3,$4)",
-    [proof.accessToken, "Synthetic", randomUUID(), randomBytes(32).toString("hex")])).rejects.toThrow();
-  await expect(db.query("SELECT * FROM m10.credential_security_events")).rejects.toThrow();
+  await expect(
+    db.query("SELECT app_internal.issue_verified_session($1,$2,$3,$4)", [
+      proof.accessToken,
+      "Synthetic",
+      randomUUID(),
+      randomBytes(32).toString("hex"),
+    ]),
+  ).rejects.toThrow();
+  await expect(
+    db.query("SELECT * FROM m10.credential_security_events"),
+  ).rejects.toThrow();
   await new Promise((resolve) => setTimeout(resolve, 1100));
   const fresh = await sessions.login(email, password);
   expect(Boolean(await sessions.actor(fresh.token))).toBe(true);
+}, 30_000);
+
+test("credential change gate blocks fresh sessions until same-account receipt completion", async () => {
+  const email = `gate-${randomUUID()}@ourspace.test`;
+  const other = `gate-other-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  for (const address of [email, other]) {
+    await auth.signUp(address, password);
+    await fetch(await confirmationLink(address), { redirect: "manual" });
+  }
+  const old = await sessions.login(email, password, "Synthetic gate");
+  await sessions.login(other, password, "Synthetic other");
+  const proof = await auth.signIn(email, password);
+  const foreign = await auth.signIn(other, password);
+  const id = randomUUID();
+  const receipt = randomBytes(32).toString("hex");
+  await db.query("SELECT app_internal.begin_credential_change($1,$2,$3)", [
+    proof.accessToken,
+    id,
+    receipt,
+  ]);
+  expect(await sessions.actor(old.token)).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  // Freshly issued JWT still cannot pass the durable pending gate.
+  await expect(sessions.login(email, password)).rejects.toThrow();
+  await expect(
+    db.query("SELECT app_internal.finish_credential_change($1,$2,$3)", [
+      foreign.accessToken,
+      id,
+      receipt,
+    ]),
+  ).rejects.toThrow();
+  await expect(
+    db.query("SELECT app_internal.finish_credential_change($1,$2,$3)", [
+      proof.accessToken,
+      id,
+      randomBytes(32).toString("hex"),
+    ]),
+  ).rejects.toThrow();
+  const nextPassword = randomUUID() + "!Bb8";
+  await auth.updatePassword(proof.accessToken, nextPassword);
+  const updatedProof = await auth.signIn(email, nextPassword);
+  await db.query("SELECT app_internal.finish_credential_change($1,$2,$3)", [
+    updatedProof.accessToken,
+    id,
+    receipt,
+  ]);
+  await expect(
+    db.query("SELECT app_internal.finish_credential_change($1,$2,$3)", [
+      updatedProof.accessToken,
+      id,
+      receipt,
+    ]),
+  ).rejects.toThrow();
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect(
+    Boolean(
+      await sessions.actor((await sessions.login(email, nextPassword)).token),
+    ),
+  ).toBe(true);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({
+    kind: "denied",
+  });
 }, 30_000);

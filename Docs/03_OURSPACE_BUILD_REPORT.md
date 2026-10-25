@@ -569,3 +569,13 @@ Acceptance: signed identity invalidates only its own sessions, writes a private 
 - PASS targeted real Auth/PostgreSQL test: own session denied on next request, other account unaffected, stale token issuance denied, event replay no-op, event table private and subsequent fresh login succeeds. Lint/typecheck PASS; migration/runtime grants applied locally.
 - This primitive records credential session invalidation, not a claim that provider password mutation completed. The next orchestration must coordinate pre/post invalidation around provider mutation, handle failures and prevent refreshed old provider sessions from bypassing recovery policy. No reset HTTP endpoint/UI exists yet; UC-M10-09 and Stage 02 remain incomplete.
 - Full Auth regression PASS: 9 real scenarios (35.98 seconds). Diff/history heuristic audit PASS: 311 blobs, no findings; historical binary review caveat unchanged.
+- Commit f5bfacb416bde9a7469e32a96baf9ae37451c5c5 PUSHED; remote master matches HEAD. Next: coordinate provider password mutation, recovery proof/MFA and app-session invalidation before API/UI.
+
+## Task 02.7d - Durable credential mutation gate
+
+Acceptance: once credential mutation starts, fresh as well as old JWTs cannot create application sessions until same-account capability completion; wrong identity/receipt and terminal replay are rejected.
+
+- Migration 0023 adds private pending/completed credential change records with one pending change per account. Begin locks account and atomically revokes sessions; session issuance checks the pending record under the same lock. Finish requires signed same identity, matching capability digest and active account, rechecks MFA assurance through invalidation and advances the cutoff before clearing the gate.
+- PASS targeted real Auth/PostgreSQL scenario: old session revoked, later fresh password login blocked while pending, foreign identity/wrong receipt denied, actual provider password updated, completion accepted once, fresh new-password login succeeds and old password fails. Lint/typecheck PASS; migration/runtime grants applied locally.
+- The database cannot itself prove external provider mutation; server orchestration must verify it before finish. Receipt delivery before mutation, lost-response renewal, MFA recovery and HTTP/UI remain next. No public reset endpoint is exposed. Stage 02/UC-M10-09 remain incomplete.
+- Full Auth regression PASS: 10 real scenarios (40.35 seconds). Diff/history heuristic audit PASS: 315 blobs, no findings; historical binary caveat unchanged. Preserved editor formatting in existing integration tests.
