@@ -80,10 +80,32 @@ async function body(request: NextRequest): Promise<Record<string, unknown>> {
 export async function GET(request: NextRequest, context: Context) {
   const { action } = await context.params;
   if (
-    !["session", "sessions", "mfa-status", "mfa-removal-state"].includes(action)
+    ![
+      "session",
+      "sessions",
+      "mfa-status",
+      "mfa-removal-state",
+      "password-state",
+    ].includes(action)
   )
     return json({ error: "not_found" }, 404);
   try {
+    if (action === "password-state") {
+      const auth = authRuntime();
+      const codec = new RecoveryEnvelopeCodec(
+        process.env.RECOVERY_COOKIE_KEY ?? "",
+        auth.origin,
+      );
+      try {
+        codec.open(
+          request.cookies.get("ourspace_password_recovery")?.value ?? "",
+        );
+        return json({ prepared: true });
+      } catch {
+        return json({ prepared: false });
+      }
+    }
+
     if (action === "mfa-removal-state")
       return json({ pending: Boolean(receiptCookie(request, removalCookie)) });
     const cookie = sessionCookie(request);

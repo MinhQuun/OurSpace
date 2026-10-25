@@ -9,12 +9,12 @@ export default defineConfig({
     { name: "http", testMatch: "auth-http.spec.ts" },
     {
       name: "desktop",
-      testMatch: ["auth-ui.spec.ts", "mfa-ui.spec.ts"],
+      testMatch: ["auth-ui.spec.ts", "mfa-ui.spec.ts", "recovery-ui.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile",
-      testMatch: ["auth-ui.spec.ts", "mfa-ui.spec.ts"],
+      testMatch: ["auth-ui.spec.ts", "mfa-ui.spec.ts", "recovery-ui.spec.ts"],
       use: { ...devices["Pixel 7"] },
     },
   ],

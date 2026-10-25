@@ -634,7 +634,7 @@ async function confirmationLink(email: string): Promise<string> {
         )
       ).json();
       const link = String(detail.HTML).match(
-        /http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/,
+        /http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/,
       );
       if (link) return link[0].replaceAll("&amp;", "&");
     }

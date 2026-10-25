@@ -13,7 +13,7 @@ test('MFA HTTP lifecycle protects receipts and replaces sessions', async ({ requ
   const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === credentials.email));
   expect(Boolean(mail)).toBe(true);
   const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
-  const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0].replaceAll('&amp;', '&');
+  const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0].replaceAll('&amp;', '&');
   expect(Boolean(link)).toBe(true);
   expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(303);
   expect((await post('login', {})).status()).toBe(200);
@@ -129,7 +129,7 @@ test("verified login uses private cookie and logout invalidates a copied cookie"
     await request.get(`http://127.0.0.1:55434/api/v1/message/${message.ID}`)
   ).json();
   const link = String(detail.HTML)
-    .match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0]
+    .match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0]
     .replaceAll("&amp;", "&");
   expect(Boolean(link)).toBe(true);
   expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(303);
@@ -278,7 +278,7 @@ test("password reset HTTP seals proof and requires cookie, origin and confirmati
     const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === email));
     expect(Boolean(mail)).toBe(true);
     const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
-    const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0].replaceAll("&amp;", "&");
+    const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0].replaceAll("&amp;", "&");
     expect(Boolean(link)).toBe(true);
     return new URL(link!);
   };
@@ -292,6 +292,16 @@ test("password reset HTTP seals proof and requires cookie, origin and confirmati
   expect(await absent.json()).toEqual(await known.json());
   const link = await mailLink();
   expect(link.searchParams.get("type")).toBe("recovery");
+  expect(link.pathname).toBe("/account/recovery-link");
+  for (let scan = 0; scan < 2; scan++) {
+    const landing = await request.get(link.href, { maxRedirects: 0 });
+    expect(landing.status()).toBe(303);
+    expect(landing.headers()["cache-control"]).toBe("no-store");
+    expect(landing.headers()["referrer-policy"]).toBe("no-referrer");
+    const target = new URL(landing.headers().location, "http://127.0.0.1:3102");
+    expect(target.pathname === "/account/reset" && !target.search).toBe(true);
+    expect(new URLSearchParams(target.hash.slice(1)).get("token") === link.searchParams.get("token")).toBe(true);
+  }
   const prepared = await post("password-prepare", { tokenHash: link.searchParams.get("token") });
   expect(prepared.status()).toBe(200);
   expect(await prepared.json()).toEqual({ prepared: true });

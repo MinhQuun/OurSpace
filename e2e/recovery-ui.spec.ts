@@ -1,0 +1,44 @@
+import { test, expect } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+test("email recovery link and reload-safe reset work on each viewport", async ({ page }, testInfo) => {
+  const email = `reset-ui-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  const request = page.request;
+  const headers = { Origin: "http://127.0.0.1:3102" };
+  const mailLink = async () => {
+    const inbox = await (await request.get("http://127.0.0.1:55434/api/v1/messages")).json();
+    const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === email));
+    expect(Boolean(mail)).toBe(true);
+    const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
+    const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0].replaceAll("&amp;", "&");
+    expect(Boolean(link)).toBe(true); return link!;
+  };
+  expect((await request.post("/api/auth/signup", { headers, data: { email, password, displayName: "Synthetic reset UI" } })).status()).toBe(202);
+  expect((await request.get(await mailLink(), { maxRedirects: 0 })).status()).toBe(303);
+  await page.goto("/account");
+  await page.getByRole("link", { name: "Quên mật khẩu?" }).click();
+  await expect(page.getByRole("button", { name: /email/ })).toBeVisible();
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Gửi email phục hồi" }).click();
+  await expect(page.getByRole("status")).toContainText("Nếu email đủ điều kiện");
+  await page.goto(await mailLink());
+  await expect(page.getByRole("button", { name: "Tiếp tục phục hồi" })).toBeVisible();
+  expect(new URL(page.url()).hash === "" && new URL(page.url()).search === "").toBe(true);
+  await page.getByRole("button", { name: "Tiếp tục phục hồi" }).click();
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByLabel("Mật khẩu mới", { exact: true }).fill(next);
+  await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill(next);
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
+  await expect(page.getByRole("link", { name: "Đăng nhập lại", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => document.cookie.includes("ourspace_password_recovery"))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: `.local/recovery-${testInfo.project.name}.png`, fullPage: true });
+  expect((await request.post("/api/auth/login", { headers, data: { email, password } })).status()).toBe(401);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  expect((await request.post("/api/auth/login", { headers, data: { email, password: next } })).status()).toBe(200);
+});

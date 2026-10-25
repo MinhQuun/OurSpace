@@ -631,3 +631,14 @@ Acceptance: request/prepare/complete reset over same-origin bounded JSON request
 - PASS production build, lint/typecheck and targeted real HTTP reset test: CSRF denial, equal known/unknown request response, safe JSON keys/no-store, protected cookie flags/expiry, revoked app session, confirmation requirement, tampered cookie rejection, cleared receipt/replay denial, old password rejection and new password login.
 - Remaining: email link landing/custom template and desktop/mobile reset UI, UX for MFA step-up errors, expiry/provider refresh invalidation and abuse controls. HTTP exposure here is local/development; production deployment remains unauthorized. Stage 02/UC-M10-09 incomplete.
 - Full Auth HTTP/desktop/mobile regression PASS: 8 cases (47.3 seconds). Diff/history heuristic audit PASS: 335 blobs, no findings; historical binary caveat unchanged. Preserved editor formatting in Auth route.
+- Commit 6e46fc6e48d63d2d1e66a84105a0ed523703bcd2 PUSHED; remote master matches HEAD. Next: email recovery landing/template, protected browser reset UI, then remaining Stage 02 security work.
+
+## Task 02.7j - Email landing and browser password reset
+
+Acceptance: scanner GET requests do not consume recovery proof; real email opens reset UI, prepare requires explicit submission, reload preserves the protected completion capability, and desktop/mobile can complete reset and log in with the new password.
+
+- Local GoTrue recovery URL now targets the application landing route. It validates token shape/type and redirects only to a relative reset URL, moves proof into a fragment, and emits no-store/no-referrer. Browser removes the fragment and retains proof only in memory until explicit prepare; encrypted HttpOnly cookie supports reload after prepare. State endpoint exposes only a prepared boolean.
+- Added Vietnamese request/prepare/complete/success UI with optional MFA proof, password confirmation and explicit session-revocation consent. No browser storage/provider token exposure. Account page links to recovery.
+- PASS production build, lint/typecheck; targeted HTTP/browser checks 3/3; full real Auth HTTP and desktop/mobile regression 10/10 (53.0 seconds). Reviewed both completion screenshots, with no horizontal overflow. Initial UI failures were test navigation races (Email from old account form); test now waits for recovery form before filling.
+- Remaining: MFA error/expiry browser paths, provider refresh invalidation, abuse controls and production ingress query redaction/key management. The email landing request still carries the emailed proof in its query; production logging must redact it. Stage 02 and full reset P0 remain incomplete.
+- Real provider/service recovery regression PASS: 4 selected tests, 9 unrelated skipped (74.69 seconds), including concurrent consumption and receipt renewal. History/worktree heuristic audit: 341 blobs, no findings; historical binary caveat unchanged.
