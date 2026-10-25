@@ -283,6 +283,31 @@ test("MFA service enrolls and verifies with atomic session replacement", async (
     { method: "recovery", code: recovery.codes[0] },
   );
   expect(Boolean(await sessions.actor(recovered.token))).toBe(true);
+  const removalHash = createHash('sha256').update(randomBytes(32)).digest('hex');
+  const actorHash = createHash('sha256').update(enabled.session.token).digest('hex');
+  const removalLogin = await auth.signIn(credentials.email, credentials.password);
+  await expect(db.query('SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5)',
+    [actorHash, removalLogin.accessToken, started.enrollmentId, enabled.version, removalHash])).rejects.toThrow('Database operation unavailable');
+  const removalFactor = (await auth.identity(removalLogin.accessToken)).totpFactorIds[0];
+  const removalChallenge = await auth.challengeTotp(removalLogin.accessToken, removalFactor);
+  const removalProof = await auth.verifyTotp(removalLogin.accessToken, removalFactor, removalChallenge, localTotp(started.secret));
+  const authorized = await db.query('SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5) AS state',
+    [actorHash, removalProof.accessToken, started.enrollmentId, enabled.version, removalHash]);
+  expect(authorized.rows[0].state).toBe('disabling');
+  expect(await sessions.actor(enabled.session.token)).toBeNull();
+  expect(await sessions.actor(recovered.token)).toBeNull();
+  await expect(db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3)',
+    [removalProof.accessToken, started.enrollmentId, 'a'.repeat(64)])).rejects.toThrow('Database operation unavailable');
+  await auth.deleteRecoveryCodes(removalProof.accessToken);
+  await auth.unenrollFactor(removalProof.accessToken, removalFactor);
+  const afterRemoval = await auth.signIn(credentials.email, credentials.password);
+  expect((await auth.identity(afterRemoval.accessToken)).mfaRequired).toBe(false);
+  expect((await db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3) AS state',
+    [afterRemoval.accessToken, started.enrollmentId, removalHash])).rows[0].state).toBe('disabled');
+  await expect(db.query('SELECT app_internal.finish_mfa_removal($1,$2,$3)',
+    [afterRemoval.accessToken, started.enrollmentId, removalHash])).rejects.toThrow('Database operation unavailable');
+  const afterDisabled = await sessions.login(credentials.email, credentials.password);
+  expect(Boolean(await sessions.actor(afterDisabled.token))).toBe(true);
 }, 30_000);
 
 test("factor binding requires current version and verification requires signed AAL2", async () => {

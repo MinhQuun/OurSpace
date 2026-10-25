@@ -466,3 +466,13 @@ Acceptance: retry setup when provider factor creation succeeded but DB binding d
 - Provider identity exposes a separately filtered list for unverified TOTP factors with exact Our Space friendly name. Start refreshes identity under the account lock, denies verified MFA, cleans only those unbound factors and then generates/binds new setup material. Existing bound enrollments still require explicit cancellation rather than silent replacement.
 - PASS 5 real Auth scenarios, plus targeted expanded test creating an actual orphan Our Space factor and a differently named factor. Retry removes the orphan (challenge denied), leaves the unrelated factor intact, supports cancellation/restart and reconciles missing bound factors. Lint/typecheck and diff/history audit PASS (250 blobs, no findings).
 - Next: elevated cancellation/disable with safe recovery after provider-side deletion, then HTTP/settings UI and desktop/mobile evidence. Stage 02/D10 remain incomplete.
+- Commit 60673e54939dcf57538199af4f6c1a8d7da63a46 PUSHED; HEAD and remote master SHA match. Next: elevated cancellation and disable, including interrupted provider cleanup.
+
+## Task 02.6r — Authorized resumable MFA removal boundary
+
+Acceptance: removal intent needs a live session plus same-account signed AAL2; finalization after provider cleanup requires signed active identity and the previously authorized random capability; wrong capability/replay fails and old sessions are revoked.
+
+- Migration 0018 adds private removal receipt digest and authorize/finish functions. Authorization chooses cancelling or disabling, clears pending recovery acknowledgment and revokes sessions. Finalization checks active account, signed subject, transitional state and receipt, then clears the receipt and preserves terminal enrollment metadata.
+- Finalization can use a fresh password-authenticated provider token plus capability because a deleted TOTP factor cannot supply another challenge. The capability must originate from AAL2 authorization; server orchestration must verify actual provider cleanup before finalizing. No public endpoint is exposed yet.
+- PASS 5 real Auth scenarios, including AAL1 authorization denial, AAL2 removal intent, session revocation, wrong receipt denial, actual recovery/TOTP deletion, fresh identity completion, replay denial and subsequent password login. PASS 14 PostgreSQL migration/integration cases, lint/typecheck, diff/history audit (271 blobs, no findings). Local migration/grants applied.
+- Preserved intervening user formatting commit d87aa8a. Next: server prepare/resume removal methods with cleanup checks and safe receipt delivery, then HTTP/settings UI. Stage 02/D10 remain incomplete.
