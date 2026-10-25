@@ -610,3 +610,13 @@ Acceptance: verified provider identity can reset before an application account/p
 - PASS real Auth service reset before any app login, followed by first successful new-password login and old-password denial. PASS expanded PostgreSQL signed-identity test (12.161 seconds), including all four inactive/deletion states unchanged and zero credential changes created. Lint/typecheck/diff check PASS; migration applied locally.
 - Next: protected HTTP proof/receipt transport, recovery expiry/throttling and full desktop/mobile reset flow. Stage 02/UC-M10-09 remain incomplete.
 - History/worktree heuristic audit PASS: 328 blobs, no findings; historical binary caveat unchanged.
+- Commit 3fda344ff33b30a7c8a4bf0006ee561dda3145f1 PUSHED; remote master matches HEAD. Next: protected HTTP recovery proof/receipt transport and browser reset flow.
+
+## Task 02.7h - Authenticated recovery proof envelope
+
+Acceptance: protect internal provider proof/receipt for future cookie transport, reject tampering/wrong key/wrong origin/expired envelopes and bound cookie payload size.
+
+- Added server-only AES-256-GCM codec using Node crypto, random 96-bit nonce per seal and origin/purpose/version-bound authenticated context. Strict 32-byte base64url key, UUID/receipt/token/expiry validation, canonical encoding and 3800-character envelope bound. Errors never include proof data. This envelope is not an application session and does not replace DB capability checks.
+- PASS all 21 unit tests, lint/typecheck/diff check. New tests cover randomized encryption, round trip without plaintext exposure, exact expiry boundary, nonce/tag/ciphertext modifications, cross-origin/wrong-key rejection, malformed/oversized input and invalid configuration. No live credential or persistent encryption key is created by this task.
+- HTTP cookie flags/key configuration and expiry capped by actual signed provider expiry remain the next integration task. Current codec accepts explicit caller expiry; route must derive it from trusted provider proof, not client input. Production key rotation/secret management remains a readiness gate. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 332 blobs, no findings; historical binary review caveat unchanged.
