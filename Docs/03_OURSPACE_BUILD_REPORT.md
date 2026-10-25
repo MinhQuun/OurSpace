@@ -476,3 +476,13 @@ Acceptance: removal intent needs a live session plus same-account signed AAL2; f
 - Finalization can use a fresh password-authenticated provider token plus capability because a deleted TOTP factor cannot supply another challenge. The capability must originate from AAL2 authorization; server orchestration must verify actual provider cleanup before finalizing. No public endpoint is exposed yet.
 - PASS 5 real Auth scenarios, including AAL1 authorization denial, AAL2 removal intent, session revocation, wrong receipt denial, actual recovery/TOTP deletion, fresh identity completion, replay denial and subsequent password login. PASS 14 PostgreSQL migration/integration cases, lint/typecheck, diff/history audit (271 blobs, no findings). Local migration/grants applied.
 - Preserved intervening user formatting commit d87aa8a. Next: server prepare/resume removal methods with cleanup checks and safe receipt delivery, then HTTP/settings UI. Stage 02/D10 remain incomplete.
+- Commit 2452b43a16ea01d92a45bbe3890ff5c396149d3b PUSHED; HEAD and remote master SHA match. Next: server removal prepare/resume orchestration with provider cleanup verification.
+
+## Task 02.6s — Server MFA removal prepare/resume
+
+Acceptance: step-up authorizes removal before provider mutation; capability is checked before cleanup; resume handles already-removed factor; completion checks provider state and rejects wrong/replayed capability.
+
+- Added prepareRemoval/resumeRemoval service methods and a private capability-scoped lookup that locks the account before external cleanup. Prepare accepts TOTP or recovery step-up and returns a random receipt without deleting factors. Resume requires password authentication, receipt and step-up while factors remain; after verified cleanup it finalizes the terminal state. New normal login is required afterward.
+- Cleanup removes recovery set before the bound TOTP factor, then rereads identity/status to prove both absent. Provider failures roll back DB finalization; the previously committed capability remains available for retry. No raw provider token is persisted/returned.
+- PASS 6 real Auth integration scenarios and a targeted expanded re-run covering enabled-MFA disable with recovery cleanup plus verified-setup cancellation resumed after external TOTP removal. Wrong receipt/replay denied, old sessions revoked, normal login works after completion. Lint/typecheck and diff/history audit PASS (275 blobs, no findings). Migration/grants applied locally.
+- Remaining before HTTP/UI exposure: deliver removal receipt safely across requests and recover from losing the prepare response before provider mutation; complete error mapping and browser desktop/mobile flows. Stage 02/D10 remain incomplete.

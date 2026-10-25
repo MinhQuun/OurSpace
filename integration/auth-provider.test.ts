@@ -14,6 +14,43 @@ const db = createDatabase(
 afterAll(() => db.close());
 const sessions = new SessionService(db, auth);
 
+test('removal service completes verified setup cancellation and resumes after provider cleanup', async () => {
+  const service = new MfaService(db, auth);
+  for (const interrupted of [false, true]) {
+    const credentials = { email: `removal-${randomUUID()}@ourspace.test`, password: randomUUID() + '!Aa9' };
+    await auth.signUp(credentials.email, credentials.password);
+    expect((await fetch(await confirmationLink(credentials.email), { redirect: 'manual' })).status).toBe(303);
+    const app = await sessions.login(credentials.email, credentials.password, 'Synthetic removal');
+    const setup = await service.start(app.token, credentials, randomUUID());
+    const verified = await service.verify(app.token, credentials, setup.enrollmentId, setup.version, localTotp(setup.secret));
+    let removalSession = verified;
+    if (!interrupted) {
+      const recovery = await service.issueRecovery(verified.session.token, credentials, setup.enrollmentId, verified.version, localTotp(setup.secret));
+      removalSession = await service.acknowledgeRecovery(verified.session.token, credentials, setup.enrollmentId, recovery.version,
+        localTotp(setup.secret), recovery.receipt);
+    }
+    const pending = await service.prepareRemoval(removalSession.session.token, credentials, setup.enrollmentId, removalSession.version,
+      { method: 'totp', code: localTotp(setup.secret) });
+    expect(pending.state).toBe(interrupted ? 'cancelling' : 'disabling');
+    expect(await sessions.actor(verified.session.token)).toBeNull();
+    await expect(service.resumeRemoval(credentials, setup.enrollmentId, randomBytes(32).toString('base64url')))
+      .rejects.toThrow('Database operation unavailable');
+    if (interrupted) {
+      const login = await auth.signIn(credentials.email, credentials.password);
+      const factor = (await auth.identity(login.accessToken)).totpFactorIds[0];
+      const proof = await auth.verifyTotp(login.accessToken, factor, await auth.challengeTotp(login.accessToken, factor), localTotp(setup.secret));
+      await auth.unenrollFactor(proof.accessToken, factor);
+    }
+    const result = await service.resumeRemoval(credentials, setup.enrollmentId, pending.receipt,
+      interrupted ? undefined : { method: 'totp', code: localTotp(setup.secret) });
+    expect(result.state).toBe(interrupted ? 'cancelled' : 'disabled');
+    const fresh = await sessions.login(credentials.email, credentials.password);
+    expect(await service.status(fresh.token)).toBeNull();
+    await expect(service.resumeRemoval(credentials, setup.enrollmentId, pending.receipt))
+      .rejects.toThrow('Database operation unavailable');
+  }
+}, 30_000);
+
 test("pending MFA cancellation removes provider factor and permits fresh setup", async () => {
   const credentials = {
     email: `cancel-${randomUUID()}@ourspace.test`,

@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { createDatabase } from "../../../server/database.server";
 import { AuthProvider, AuthProviderError } from "./provider.server";
 import { SessionService } from "./session.server";
+import type { SecondFactor } from "./session.server";
 
 type Database = ReturnType<typeof createDatabase>;
 type Credentials = { email: string; password: string };
@@ -33,6 +34,55 @@ export class MfaService {
     const identity = await this.provider.identity(session.accessToken);
     if (identity.id !== actor) throw new AuthProviderError("denied");
     return { session, identity };
+  }
+
+  async prepareRemoval(token: string, credentials: Credentials, enrollmentId: string, version: string, secondFactor: SecondFactor) {
+    const { session, identity } = await this.reauthenticate(token, credentials);
+    const current = (await this.db.query('SELECT * FROM app_internal.bound_mfa_factor($1,$2)',
+      [digest(token), enrollmentId])).rows[0];
+    if (!current || !['pending', 'verified', 'enabled'].includes(current.state) || String(current.version) !== version ||
+        !identity.totpFactorIds.includes(current.provider_factor_id)) throw new AuthProviderError('denied');
+    const proof = secondFactor.method === 'recovery'
+      ? await this.provider.verifyRecoveryCode(session.accessToken, secondFactor.code)
+      : await this.provider.verifyTotp(session.accessToken, current.provider_factor_id,
+        await this.provider.challengeTotp(session.accessToken, current.provider_factor_id), secondFactor.code);
+    const receipt = randomBytes(32).toString('base64url');
+    const result = await this.db.query('SELECT app_internal.authorize_mfa_removal($1,$2,$3,$4,$5) AS state',
+      [digest(token), proof.accessToken, enrollmentId, version, digest(receipt)]);
+    // Caller must durably deliver this opaque capability before invoking resume;
+    // do not delete provider factors while the browser has no recovery handle.
+    return { enrollmentId, state: String(result.rows[0].state), receipt };
+  }
+
+  async resumeRemoval(credentials: Credentials, enrollmentId: string, receipt: string, secondFactor?: SecondFactor) {
+    const receiptHash = digest(receipt);
+    const initial = await this.provider.signIn(credentials.email, credentials.password);
+    return this.db.transaction(async client => {
+      const pending = (await client.query('SELECT * FROM app_internal.pending_mfa_removal($1,$2,$3)',
+        [initial.accessToken, enrollmentId, receiptHash])).rows[0];
+      let proof = initial;
+      const identity = await this.provider.identity(initial.accessToken);
+      const factorPresent = identity.totpFactorIds.includes(pending.provider_factor_id);
+      const recoveryPresent = await this.provider.recoveryStatusIfEnrolled(initial.accessToken);
+      if (factorPresent || recoveryPresent) {
+        if (!secondFactor) throw new AuthProviderError('mfa_required');
+        proof = secondFactor.method === 'recovery'
+          ? await this.provider.verifyRecoveryCode(initial.accessToken, secondFactor.code)
+          : await this.provider.verifyTotp(initial.accessToken, pending.provider_factor_id,
+            await this.provider.challengeTotp(initial.accessToken, pending.provider_factor_id), secondFactor.code);
+        if (recoveryPresent) await this.provider.deleteRecoveryCodes(proof.accessToken);
+        if (factorPresent) await this.provider.unenrollFactor(proof.accessToken, pending.provider_factor_id);
+      }
+      const after = await this.provider.identity(proof.accessToken);
+      if (after.id !== identity.id || after.totpFactorIds.includes(pending.provider_factor_id) ||
+          after.pendingTotpFactorIds.includes(pending.provider_factor_id) ||
+          await this.provider.recoveryStatusIfEnrolled(proof.accessToken)) throw new AuthProviderError('denied');
+      const result = await client.query('SELECT app_internal.finish_mfa_removal($1,$2,$3) AS state',
+        [proof.accessToken, enrollmentId, receiptHash]);
+      // Completion deliberately requires a new normal login; no stale provider
+      // assurance is converted into an application session after factor removal.
+      return { enrollmentId, state: String(result.rows[0].state) };
+    });
   }
 
   async start(token: string, credentials: Credentials, enrollmentId: string) {
