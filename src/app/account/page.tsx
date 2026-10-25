@@ -8,6 +8,7 @@ export default function AccountPage() {
         OUR SPACE
       </Link>
       <AccountForm />
+      <Link href="/account/security">Cài đặt xác thực hai bước</Link>
     </main>
   );
 }
