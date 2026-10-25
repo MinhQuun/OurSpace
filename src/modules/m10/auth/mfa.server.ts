@@ -40,7 +40,7 @@ export class MfaService {
     const { session, identity } = await this.reauthenticate(token, credentials);
     const current = (await this.db.query('SELECT * FROM app_internal.bound_mfa_factor($1,$2)',
       [digest(token), enrollmentId])).rows[0];
-    if (!current || !['pending', 'verified', 'enabled'].includes(current.state) || String(current.version) !== version ||
+    if (!current || !['pending', 'verified', 'enabled', 'cancelling', 'disabling'].includes(current.state) || String(current.version) !== version ||
         !identity.totpFactorIds.includes(current.provider_factor_id)) throw new AuthProviderError('denied');
     const proof = secondFactor.method === 'recovery'
       ? await this.provider.verifyRecoveryCode(session.accessToken, secondFactor.code)

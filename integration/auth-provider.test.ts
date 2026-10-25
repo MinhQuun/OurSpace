@@ -29,9 +29,19 @@ test('removal service completes verified setup cancellation and resumes after pr
       removalSession = await service.acknowledgeRecovery(verified.session.token, credentials, setup.enrollmentId, recovery.version,
         localTotp(setup.secret), recovery.receipt);
     }
-    const pending = await service.prepareRemoval(removalSession.session.token, credentials, setup.enrollmentId, removalSession.version,
+    let pending = await service.prepareRemoval(removalSession.session.token, credentials, setup.enrollmentId, removalSession.version,
       { method: 'totp', code: localTotp(setup.secret) });
     expect(pending.state).toBe(interrupted ? 'cancelling' : 'disabling');
+    const lost = pending;
+    const renewedSession = await sessions.login(credentials.email, credentials.password, undefined,
+      { method: 'totp', code: localTotp(setup.secret) });
+    const currentRemoval = await service.status(renewedSession.token);
+    pending = await service.prepareRemoval(renewedSession.token, credentials, setup.enrollmentId, currentRemoval!.version,
+      { method: 'totp', code: localTotp(setup.secret) });
+    expect(pending.state).toBe(lost.state);
+    expect(pending.receipt === lost.receipt).toBe(false);
+    await expect(service.resumeRemoval(credentials, setup.enrollmentId, lost.receipt))
+      .rejects.toThrow('Database operation unavailable');
     expect(await sessions.actor(verified.session.token)).toBeNull();
     await expect(service.resumeRemoval(credentials, setup.enrollmentId, randomBytes(32).toString('base64url')))
       .rejects.toThrow('Database operation unavailable');

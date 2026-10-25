@@ -486,3 +486,12 @@ Acceptance: step-up authorizes removal before provider mutation; capability is c
 - Cleanup removes recovery set before the bound TOTP factor, then rereads identity/status to prove both absent. Provider failures roll back DB finalization; the previously committed capability remains available for retry. No raw provider token is persisted/returned.
 - PASS 6 real Auth integration scenarios and a targeted expanded re-run covering enabled-MFA disable with recovery cleanup plus verified-setup cancellation resumed after external TOTP removal. Wrong receipt/replay denied, old sessions revoked, normal login works after completion. Lint/typecheck and diff/history audit PASS (275 blobs, no findings). Migration/grants applied locally.
 - Remaining before HTTP/UI exposure: deliver removal receipt safely across requests and recover from losing the prepare response before provider mutation; complete error mapping and browser desktop/mobile flows. Stage 02/D10 remain incomplete.
+- Commit 5cee3b3310264ab2ebbf5297ac7ff3bc1f6b5eae PUSHED; HEAD and remote master SHA match. Next: lost prepare-response recovery and safe removal receipt transport, then MFA settings routes/UI.
+
+## Task 02.6t — Renew lost removal-prepare response
+
+Acceptance: while provider factor remains, user can log in with MFA and reauthorize a pending cancellation/disable; a new receipt invalidates the old receipt and preserves intent/current-version checks.
+
+- Migration 0020 permits AAL2-authorized receipt replacement in cancelling/disabling states. Service prepareRemoval supports those states after a fresh password/second-factor check. Same-state renewal preserves lifecycle intent and advances version; terminal states remain excluded.
+- PASS 6 real Auth scenarios. Removal service test now loses/replaces the prepare capability for both cancellation and disable, proves old receipt denial, then completes with the new receipt (including cleanup already completed at provider). Lint/typecheck and diff/history audit PASS (280 blobs, no findings). Local migration applied; function signature/grant preserved.
+- Scope: renewal requires the factor still available for step-up. The next HTTP task must deliver a durable HttpOnly removal receipt before initiating provider deletion; completed cleanup resumes via that receipt. Full browser workflows remain outstanding; Stage 02/D10 not complete.
