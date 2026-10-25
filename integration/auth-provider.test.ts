@@ -1188,3 +1188,38 @@ test("credential change gate blocks fresh sessions until same-account receipt co
     kind: "denied",
   });
 }, 30_000);
+
+
+test("recovery service prepares before mutation and completes or reconciles provider update", async () => {
+  for (const mode of ["normal", "interrupted", "mfa"]) {
+    const email = `reset-service-${randomUUID()}@ourspace.test`;
+    const password = randomUUID() + "!Aa9";
+    const next = randomUUID() + "!Bb8";
+    await auth.signUp(email, password);
+    await fetch(await confirmationLink(email), { redirect: "manual" });
+    const old = await sessions.login(email, password, "Synthetic reset service");
+    let secret = "";
+    if (mode === "mfa") {
+      const login = await auth.signIn(email, password);
+      const factor = await auth.enrollTotp(login.accessToken);
+      secret = factor.secret;
+      await auth.verifyTotp(login.accessToken, factor.id,
+        await auth.challengeTotp(login.accessToken, factor.id), localTotp(secret));
+    }
+    await auth.requestPasswordRecovery(email);
+    const link = new URL(await confirmationLink(email));
+    const service = new RecoveryService(db, auth);
+    const prepared = await service.prepare(link.searchParams.get("token")!, secret ? { method: "totp", code: localTotp(secret) } : undefined);
+    expect(await sessions.actor(old.token)).toBeNull();
+    await auth.signIn(email, password); // prepare has not changed provider password
+    await expect(service.complete(prepared.accessToken, prepared.id,
+      randomBytes(32).toString("base64url"), next)).rejects.toThrow();
+    await auth.signIn(email, password); // wrong receipt has no credential side effect
+    if (mode === "interrupted") await auth.updatePassword(prepared.accessToken, next);
+    await service.complete(prepared.accessToken, prepared.id, prepared.receipt, next);
+    await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
+    await expect(service.complete(prepared.accessToken, prepared.id, prepared.receipt, randomUUID()+"!Cc7")).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    expect(Boolean(await sessions.actor((await sessions.login(email, next, undefined, secret ? { method: "totp", code: localTotp(secret) } : undefined)).token))).toBe(true);
+  }
+}, 30_000);
