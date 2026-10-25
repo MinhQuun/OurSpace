@@ -867,3 +867,39 @@ test("provider cancellation and MFA removal enforce ownership and step-up", asyn
     auth.challengeTotp(fresh.accessToken, factor.id),
   ).rejects.toMatchObject({ kind: "denied" });
 }, 30_000);
+
+
+test("password recovery transport updates only the proven identity and rejects later replay", async () => {
+  const email = `reset-${randomUUID()}@ourspace.test`;
+  const otherEmail = `reset-other-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const nextPassword = randomUUID() + "!Bb8";
+  for (const address of [email, otherEmail]) {
+    await auth.signUp(address, password);
+    const response = await fetch(await confirmationLink(address), { redirect: "manual" });
+    expect(response.status).toBe(303);
+  }
+  const before = await auth.signIn(email, password);
+  const owner = await auth.identity(before.accessToken);
+  await auth.requestPasswordRecovery(`absent-${randomUUID()}@ourspace.test`);
+  await auth.requestPasswordRecovery(email);
+  const link = new URL(await confirmationLink(email));
+  expect(link.searchParams.get("type")).toBe("recovery");
+  const token = link.searchParams.get("token")!;
+  await expect(auth.verifyPasswordRecovery("a".repeat(64))).rejects.toMatchObject({ kind: "denied" });
+  const outcomes = await Promise.allSettled([
+    auth.verifyPasswordRecovery(token), auth.verifyPasswordRecovery(token),
+  ]);
+  // Provider alone has a concurrent redemption race (observed two successes).
+  // Application integration must serialize redemption before exposing this flow.
+  const successful = outcomes.filter((result) => result.status === "fulfilled").length;
+  expect(successful >= 1 && successful <= 2).toBe(true);
+  const winner = outcomes.find((result) => result.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<AuthProvider["verifyPasswordRecovery"]>>>;
+  expect((await auth.identity(winner.value.accessToken)).id === owner.id).toBe(true);
+  await auth.updatePassword(winner.value.accessToken, nextPassword);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
+  expect((await auth.identity((await auth.signIn(email, nextPassword)).accessToken)).id === owner.id).toBe(true);
+  await auth.signIn(otherEmail, password);
+  await expect(auth.signIn(otherEmail, nextPassword)).rejects.toMatchObject({ kind: "denied" });
+  await expect(auth.verifyPasswordRecovery(token)).rejects.toMatchObject({ kind: "denied" });
+}, 30_000);

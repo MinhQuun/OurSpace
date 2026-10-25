@@ -57,7 +57,7 @@ export class AuthProvider {
     path: string,
     body?: unknown,
     token?: string,
-    method?: "DELETE",
+    method?: "DELETE" | "PUT",
   ): Promise<Record<string, unknown>> {
     if (typeof window !== "undefined") throw new AuthProviderError("denied");
     let response: Response;
@@ -144,6 +144,32 @@ export class AuthProvider {
       this.credentials(email, password),
     );
     return this.session(data);
+  }
+
+  async requestPasswordRecovery(email: string): Promise<void> {
+    const normalized = email.trim();
+    if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+      throw new AuthProviderError("invalid_input");
+    await this.request("/recover", { email: normalized });
+  }
+
+  /** Exchanges the emailed one-time capability; never accepts an account ID. */
+  async verifyPasswordRecovery(tokenHash: string): Promise<ProviderSession> {
+    if (!/^[a-zA-Z0-9_-]{32,256}$/.test(tokenHash))
+      throw new AuthProviderError("invalid_input");
+    return this.session(await this.request("/verify", {
+      type: "recovery", token_hash: tokenHash,
+    }));
+  }
+
+  /** Transport primitive only. Caller must enforce recovery intent, MFA,
+   * application session revocation and audit before exposing password reset. */
+  async updatePassword(accessToken: string, password: string): Promise<void> {
+    if (password.length < 12 || password.length > 1024)
+      throw new AuthProviderError("invalid_input");
+    const identity = await this.identity(accessToken);
+    const result = await this.request("/user", { password }, accessToken, "PUT");
+    if (result.id !== identity.id) throw new AuthProviderError("denied");
   }
 
   private async session(

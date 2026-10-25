@@ -536,3 +536,14 @@ Acceptance: render a scannable TOTP QR without external image services, retain m
 - npm install audit reports zero vulnerabilities. Windows optional-package cleanup warnings did not prevent installation/build/tests. Diff reviewed; dependency lock changes correspond to QR encoder/types/test decoder.
 - Stage 02 remains incomplete. Next: review remaining MFA recovery/rotation and password reset requirements against M10 before proceeding to pairing/security foundations.
 - History/worktree heuristic audit PASS: 297 blobs, no findings; authorized historical binary review caveat unchanged.
+- Commit 4700c60bbe212716016668492ad5fe47bf1dc01a PUSHED; remote master matches HEAD. Next: remaining M10 MFA recovery/rotation and password reset requirements.
+
+## Task 02.7a - Password recovery provider transport and capability probe
+
+Acceptance: request recovery without returning account metadata, exchange emailed recovery proof, update only the authenticated identity, reject invalid/later-used proof and old password. This is a server transport task, not completed reset-password P0.
+
+- Added bounded recovery email/token validation and provider recover/verify/password-update methods. Password update has no caller-supplied target account ID and validates returned identity. No HTTP reset endpoint/UI is exposed yet. API reference: https://raw.githubusercontent.com/supabase/auth/v2.197.0/openapi.yaml.
+- Real provider probe found a concurrency limitation: two simultaneous exchanges of the same recovery token both succeeded. Sequential replay is denied. Do not rely on provider redemption alone for BR-M10-22 / UC-M10-09. Next application boundary must serialize/consume a token digest before provider exchange and keep recovery intent separate from normal login.
+- Targeted real test PASS for known/unknown-email request, invalid proof denial, password change on proven identity, old password rejection, other identity unchanged and later token replay denied. Concurrent probe records supported outcomes without claiming single-use concurrency acceptance. Lint/typecheck PASS.
+- Remaining before exposure: application one-time/concurrency guard, expiration evidence, password-change session revocation/security audit, MFA step-up, durable recovery flow, generic response and desktop/mobile UI. Stage 02 and UC-M10-09 incomplete.
+- Full Auth integration PASS: 7 scenarios (33.31 seconds). Diff/history heuristic audit PASS: 303 blobs, no findings; historical binary caveat unchanged.
