@@ -929,3 +929,30 @@ test("application recovery consumes proof once across concurrent service instanc
   await expect(db.query("SELECT * FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
   await expect(db.query("DELETE FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
 }, 30_000);
+
+
+test("credential invalidation revokes own sessions and rejects pre-boundary issuance", async () => {
+  const password = randomUUID() + "!Aa9";
+  const email = `boundary-${randomUUID()}@ourspace.test`;
+  const other = `boundary-other-${randomUUID()}@ourspace.test`;
+  for (const address of [email, other]) {
+    await auth.signUp(address, password);
+    await fetch(await confirmationLink(address), { redirect: "manual" });
+  }
+  const a = await sessions.login(email, password, "Synthetic credential boundary");
+  const b = await sessions.login(other, password, "Synthetic other account");
+  const proof = await auth.signIn(email, password);
+  const event = randomUUID();
+  const invalidate = () => db.query<{ changed: boolean }>(
+    "SELECT app_internal.invalidate_credential_sessions($1,$2) AS changed", [proof.accessToken, event]);
+  expect((await invalidate()).rows[0].changed).toBe(true);
+  expect((await invalidate()).rows[0].changed).toBe(false);
+  expect(await sessions.actor(a.token)).toBeNull();
+  expect(Boolean(await sessions.actor(b.token))).toBe(true);
+  await expect(db.query("SELECT app_internal.issue_verified_session($1,$2,$3,$4)",
+    [proof.accessToken, "Synthetic", randomUUID(), randomBytes(32).toString("hex")])).rejects.toThrow();
+  await expect(db.query("SELECT * FROM m10.credential_security_events")).rejects.toThrow();
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const fresh = await sessions.login(email, password);
+  expect(Boolean(await sessions.actor(fresh.token))).toBe(true);
+}, 30_000);

@@ -38,6 +38,7 @@ app_internal.authorize_mfa_removal(text,text,uuid,bigint,text),
 app_internal.finish_mfa_removal(text,uuid,text),
 app_internal.pending_mfa_removal(text,uuid,text),
 app_internal.consume_password_recovery(text),
+app_internal.invalidate_credential_sessions(text,uuid),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

@@ -558,3 +558,14 @@ Acceptance: concurrent redemption through separate application service instances
 - On timeout/failure after committed consumption, user must request a new email proof; this deliberately prevents ambiguous provider side effects from reopening the token. No endpoint/UI is exposed yet. Rate limiting/ledger retention and full recovery intent, expiry, MFA, password mutation revocation/audit remain required before complete reset acceptance.
 - Next: credential-change revocation/security event boundary and recovery session orchestration. Stage 02 remains incomplete.
 - PostgreSQL regression PASS: 14 tests (52.781 seconds). Diff/history heuristic audit PASS: 306 blobs, no findings; historical binary review caveat unchanged.
+- Commit 8123fb4c6b2edd8d5f687ac26fb3a6300cedb77c PUSHED; remote master matches HEAD. Next: credential-change revocation/audit and recovery orchestration before HTTP exposure.
+
+## Task 02.7c - Credential session invalidation boundary
+
+Acceptance: signed identity invalidates only its own sessions, writes a private security event atomically, and pre-boundary provider tokens cannot issue a new application session. Retrying the same event is idempotent.
+
+- Migration 0022 adds credential invalidation epoch, private security event table and a narrow signed-identity function. It locks the account, enforces AAL2 for active verified MFA, increments security version and revokes sessions with an explicit reason in one transaction. No target account ID is accepted. Same-account event retry is a no-op.
+- Session issuance checks signed iat against the cutoff under the same account row lock. JWTs issued in the cutoff second are conservatively rejected; fresh login in a later second succeeds. Existing grants/signatures and MFA checks are preserved.
+- PASS targeted real Auth/PostgreSQL test: own session denied on next request, other account unaffected, stale token issuance denied, event replay no-op, event table private and subsequent fresh login succeeds. Lint/typecheck PASS; migration/runtime grants applied locally.
+- This primitive records credential session invalidation, not a claim that provider password mutation completed. The next orchestration must coordinate pre/post invalidation around provider mutation, handle failures and prevent refreshed old provider sessions from bypassing recovery policy. No reset HTTP endpoint/UI exists yet; UC-M10-09 and Stage 02 remain incomplete.
+- Full Auth regression PASS: 9 real scenarios (35.98 seconds). Diff/history heuristic audit PASS: 311 blobs, no findings; historical binary review caveat unchanged.
