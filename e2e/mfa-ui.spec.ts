@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { localTotp } from "../integration/local-totp";
 
-test("MFA settings enables and disables with reload-safe removal on each viewport", async ({
+test("MFA settings recovers interrupted setup and codes then enables and disables on each viewport", async ({
   page,
 }, testInfo) => {
   const email = `mfa-ui-${randomUUID()}@ourspace.test`;
@@ -51,6 +51,14 @@ test("MFA settings enables and disables with reload-safe removal on each viewpor
   await fill();
   await page.getByRole("button", { name: "Bắt đầu thiết lập TOTP" }).click();
   await expect(page.getByTestId("mfa-state")).toHaveText("Chờ xác minh TOTP");
+  await page.reload();
+  await expect(page.getByTestId("totp-secret")).toHaveCount(0);
+  await fill(undefined, true);
+  await page.locator('button[value="mfa-cancel"]').click();
+  await expect(page.locator('button[value="mfa-start"]')).toBeVisible();
+  await fill();
+  await page.locator('button[value="mfa-start"]').click();
+  await expect(page.getByTestId("totp-secret")).toBeVisible();
   const secret = (await page.getByTestId("totp-secret").textContent())!;
   expect(
     await page.evaluate(
@@ -75,6 +83,25 @@ test("MFA settings enables and disables with reload-safe removal on each viewpor
   expect(
     await page.evaluate(() => document.cookie.includes("ourspace_mfa")),
   ).toBe(false);
+  const oldCode = await page.locator(".mfa-settings li code").first().textContent();
+  await page.reload();
+  await expect(page.locator(".mfa-settings li code")).toHaveCount(0);
+  await expect(page.locator('button[value="mfa-acknowledge"]')).toHaveCount(0);
+  await fill(localTotp(secret));
+  await page.locator('button[value="mfa-replace-recovery"]').click();
+  await expect(page.locator(".mfa-settings li code").first()).toBeVisible();
+  const newCodes = await page.locator(".mfa-settings li code").allTextContents();
+  expect(newCodes.includes(oldCode!)).toBe(false);
+  const isolated = await page.context().browser()!.newContext();
+  try {
+    const rejected = await isolated.request.post("http://127.0.0.1:3102/api/auth/login", {
+      headers,
+      data: { email, password, secondFactor: { method: "recovery", code: oldCode } },
+    });
+    expect(rejected.status()).toBe(401);
+  } finally {
+    await isolated.close();
+  }
   await fill(localTotp(secret));
   await page.getByRole("button", { name: "Đã lưu mã — bật MFA" }).click();
   await expect(page.locator(".mfa-settings").getByRole("alert")).toContainText(

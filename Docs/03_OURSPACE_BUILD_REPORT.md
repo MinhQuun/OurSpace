@@ -515,3 +515,13 @@ Acceptance: authenticated users can enroll and verify TOTP, view and acknowledge
 - PASS lint, production build, typecheck and all 7 Auth HTTP/browser cases (3 HTTP, 2 desktop, 2 mobile). Real local Auth/browser tests enroll, verify, issue codes, reject acknowledgment without confirmation, enable MFA, prepare removal, reload, finish removal and log in again. Browser storage remains empty and HttpOnly receipts are not visible to JavaScript. Desktop/mobile screenshots inspected; no horizontal overflow.
 - Diff check PASS; history/worktree audit scanned 288 blobs with no findings. Historical binary media remains manually reviewed under the owner's public-release authorization; heuristic scanning is not proof of absence of all sensitive content.
 - Remaining: QR setup, expanded cancellation/recovery-replacement browser coverage, receipt lifetime/recovery review, refined failure UX and other Stage 02 requirements. This task does not complete D10 or Stage 02. Next: test interrupted setup/recovery replacement through the UI.
+- Commit 3f3923e7b937b1ec49a97c2a6bf8f025a74dd506 PUSHED; remote master SHA matches HEAD. Next: interrupted setup/recovery replacement browser acceptance, then remaining Stage 02 work.
+
+## Task 02.6w - Interrupted MFA setup browser acceptance
+
+Acceptance: after reload loses transient setup material, a user can cancel/restart pending enrollment, replace undisplayed recovery codes and complete MFA. Replaced recovery codes must fail actual login.
+
+- Expanded real browser lifecycle coverage on desktop and mobile: reload pending setup, cancel and restart, verify TOTP, issue codes, reload to hide codes/acknowledgment, replace codes, prove old recovery code rejected from an isolated browser context, then enable and disable normally.
+- PASS both expanded browser cases (21 seconds), lint and typecheck. Existing production build used because this task changes only test coverage. Initial test failure was an encoding issue in newly inserted test strings, corrected before the successful run. No application failure observed in these scenarios.
+- Stage 02 remains incomplete. Next: QR enrollment support and remaining security lifecycle requirements; preserve full Stage 00-15 scope.
+- Diff/history audit PASS: 295 blobs, no findings; historical binary review limitations unchanged.
