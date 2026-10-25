@@ -5,6 +5,7 @@ import { AuthProvider } from "../src/modules/m10/auth/provider.server";
 import { createDatabase } from "../src/server/database.server";
 import { SessionService } from "../src/modules/m10/auth/session.server";
 import { localTotp } from "./local-totp";
+import { RecoveryService } from "../src/modules/m10/auth/recovery.server";
 import { MfaService } from "../src/modules/m10/auth/mfa.server";
 
 const auth = new AuthProvider("http://127.0.0.1:55433");
@@ -902,4 +903,29 @@ test("password recovery transport updates only the proven identity and rejects l
   await auth.signIn(otherEmail, password);
   await expect(auth.signIn(otherEmail, nextPassword)).rejects.toMatchObject({ kind: "denied" });
   await expect(auth.verifyPasswordRecovery(token)).rejects.toMatchObject({ kind: "denied" });
+}, 30_000);
+
+
+test("application recovery consumes proof once across concurrent service instances", async () => {
+  const email = `consume-${randomUUID()}@ourspace.test`;
+  await auth.signUp(email, randomUUID() + "!Aa9");
+  expect((await fetch(await confirmationLink(email), { redirect: "manual" })).status).toBe(303);
+  await auth.requestPasswordRecovery(email);
+  const link = new URL(await confirmationLink(email));
+  expect(link.searchParams.get("type")).toBe("recovery");
+  const token = link.searchParams.get("token")!;
+  const first = new RecoveryService(db, auth);
+  const second = new RecoveryService(db, auth);
+  const results = await Promise.allSettled([first.exchange(token), second.exchange(token)]);
+  expect(results.filter((result) => result.status === "fulfilled").length).toBe(1);
+  await expect(second.exchange(token)).rejects.toMatchObject({ kind: "denied" });
+  // Invalid provider proof is still burned; retries cannot reopen a failed exchange.
+  const invalid = randomBytes(32).toString("hex");
+  await expect(first.exchange(invalid)).rejects.toMatchObject({ kind: "denied" });
+  const digest = createHash("sha256").update(invalid).digest("hex");
+  const consumed = await db.query<{ consumed: boolean }>(
+    "SELECT app_internal.consume_password_recovery($1) AS consumed", [digest]);
+  expect(consumed.rows[0].consumed).toBe(false);
+  await expect(db.query("SELECT * FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
+  await expect(db.query("DELETE FROM app_internal.password_recovery_consumptions")).rejects.toThrow();
 }, 30_000);

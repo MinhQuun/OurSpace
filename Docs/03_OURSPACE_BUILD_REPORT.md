@@ -547,3 +547,14 @@ Acceptance: request recovery without returning account metadata, exchange emaile
 - Targeted real test PASS for known/unknown-email request, invalid proof denial, password change on proven identity, old password rejection, other identity unchanged and later token replay denied. Concurrent probe records supported outcomes without claiming single-use concurrency acceptance. Lint/typecheck PASS.
 - Remaining before exposure: application one-time/concurrency guard, expiration evidence, password-change session revocation/security audit, MFA step-up, durable recovery flow, generic response and desktop/mobile UI. Stage 02 and UC-M10-09 incomplete.
 - Full Auth integration PASS: 7 scenarios (33.31 seconds). Diff/history heuristic audit PASS: 303 blobs, no findings; historical binary caveat unchanged.
+- Commit 37f8fe3a1d814d41e110d3ef85853e19660fd1bf PUSHED; remote master matches HEAD. Next: application recovery token consumption/concurrency boundary before HTTP exposure.
+
+## Task 02.7b - Application recovery token single-consumption boundary
+
+Acceptance: concurrent redemption through separate application service instances permits exactly one provider exchange; replay is denied, consumption cannot be undone by runtime table access, raw proof is not stored.
+
+- Migration 0021 adds a private RLS-forced digest ledger and a narrow SECURITY DEFINER insert-on-conflict function. Runtime receives execute only, no table grants. RecoveryService hashes the proof and commits consumption before calling Auth; no in-memory lock or provider race assumption.
+- PASS targeted real PostgreSQL/Auth test: two service instances concurrently exchange one emailed proof, exactly one succeeds, subsequent replay is denied. Invalid provider proof remains consumed; runtime direct read/delete denied. Lint/typecheck PASS; migration and runtime grant applied locally.
+- On timeout/failure after committed consumption, user must request a new email proof; this deliberately prevents ambiguous provider side effects from reopening the token. No endpoint/UI is exposed yet. Rate limiting/ledger retention and full recovery intent, expiry, MFA, password mutation revocation/audit remain required before complete reset acceptance.
+- Next: credential-change revocation/security event boundary and recovery session orchestration. Stage 02 remains incomplete.
+- PostgreSQL regression PASS: 14 tests (52.781 seconds). Diff/history heuristic audit PASS: 306 blobs, no findings; historical binary review caveat unchanged.
