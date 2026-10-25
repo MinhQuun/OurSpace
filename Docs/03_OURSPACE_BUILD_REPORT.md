@@ -525,3 +525,14 @@ Acceptance: after reload loses transient setup material, a user can cancel/resta
 - PASS both expanded browser cases (21 seconds), lint and typecheck. Existing production build used because this task changes only test coverage. Initial test failure was an encoding issue in newly inserted test strings, corrected before the successful run. No application failure observed in these scenarios.
 - Stage 02 remains incomplete. Next: QR enrollment support and remaining security lifecycle requirements; preserve full Stage 00-15 scope.
 - Diff/history audit PASS: 295 blobs, no findings; historical binary review limitations unchanged.
+- Commit 26f0e2821fcb44f1f33e503d7fab0c7a81203198 PUSHED; remote master matches HEAD. Next: QR enrollment support and remaining Stage 02 security requirements.
+
+## Task 02.6x - Local TOTP QR enrollment
+
+Acceptance: render a scannable TOTP QR without external image services, retain manual setup key, and remove QR with transient setup material after reload/completion.
+
+- Added client canvas QR rendering using pinned qrcode 1.5.4; no external QR request or persisted image. QR URI follows the same transient lifecycle as the manual secret. Canvas pixels clear on unmount; manual key remains usable if rendering fails. Library API reference: https://github.com/soldair/node-qrcode.
+- PASS lint, build, typecheck and both expanded real desktop/mobile MFA browser scenarios. Independent jsQR decoder reads actual canvas pixels and proves otpauth TOTP payload matches the real provider secret; tests verify QR disappears after reload/completion and continue through recovery replacement, enable and disable. No QR secret was written to screenshots or logs.
+- npm install audit reports zero vulnerabilities. Windows optional-package cleanup warnings did not prevent installation/build/tests. Diff reviewed; dependency lock changes correspond to QR encoder/types/test decoder.
+- Stage 02 remains incomplete. Next: review remaining MFA recovery/rotation and password reset requirements against M10 before proceeding to pairing/security foundations.
+- History/worktree heuristic audit PASS: 297 blobs, no findings; authorized historical binary review caveat unchanged.

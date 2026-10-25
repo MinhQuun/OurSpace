@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import TotpQr from "./totp-qr";
 
 type Enrollment = {
   id: string;
@@ -38,6 +39,7 @@ export default function MfaSettings() {
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [secret, setSecret] = useState("");
+  const [uri, setUri] = useState("");
   const [codes, setCodes] = useState<string[]>([]);
   const [method, setMethod] = useState<"totp" | "recovery">("totp");
 
@@ -48,6 +50,7 @@ export default function MfaSettings() {
     setRemoval(status.removal);
     if (!status.signedIn) {
       setSecret("");
+      setUri("");
       setCodes([]);
     }
   }
@@ -119,6 +122,7 @@ export default function MfaSettings() {
         return;
       }
       const result = await response.json();
+      setUri(typeof result.uri === "string" ? result.uri : "");
       setSecret(typeof result.secret === "string" ? result.secret : "");
       setCodes(Array.isArray(result.codes) ? result.codes : []);
       form.reset();
@@ -171,6 +175,7 @@ export default function MfaSettings() {
             <>
               {secret && (
                 <div className="form-message">
+                  {uri && <TotpQr uri={uri} />}
                   <p>
                     Thêm tài khoản TOTP trong ứng dụng xác thực bằng khóa này:
                   </p>

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import jsQR from "jsqr";
 import { randomUUID } from "node:crypto";
 import { localTotp } from "../integration/local-totp";
 
@@ -53,6 +54,7 @@ test("MFA settings recovers interrupted setup and codes then enables and disable
   await expect(page.getByTestId("mfa-state")).toHaveText("Chờ xác minh TOTP");
   await page.reload();
   await expect(page.getByTestId("totp-secret")).toHaveCount(0);
+  await expect(page.getByTestId("totp-qr")).toHaveCount(0);
   await fill(undefined, true);
   await page.locator('button[value="mfa-cancel"]').click();
   await expect(page.locator('button[value="mfa-start"]')).toBeVisible();
@@ -60,6 +62,17 @@ test("MFA settings recovers interrupted setup and codes then enables and disable
   await page.locator('button[value="mfa-start"]').click();
   await expect(page.getByTestId("totp-secret")).toBeVisible();
   const secret = (await page.getByTestId("totp-secret").textContent())!;
+  const pixels = await page.getByTestId("totp-qr").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    return { width: canvas.width, height: canvas.height,
+      data: Array.from(canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data) };
+  });
+  const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
+  expect(Boolean(decoded)).toBe(true);
+  const otp = new URL(decoded!.data);
+  expect(otp.protocol === "otpauth:" && otp.hostname === "totp").toBe(true);
+  expect(otp.searchParams.get("secret") === secret).toBe(true);
+
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -114,6 +127,7 @@ test("MFA settings recovers interrupted setup and codes then enables and disable
     page.getByRole("heading", { name: "Lưu mã khôi phục" }),
   ).toHaveCount(0);
   await expect(page.getByTestId("totp-secret")).toHaveCount(0);
+  await expect(page.getByTestId("totp-qr")).toHaveCount(0);
   await page.screenshot({
     path: `.local/mfa-settings-${testInfo.project.name}.png`,
     fullPage: true,
