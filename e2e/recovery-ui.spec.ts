@@ -32,6 +32,22 @@ test("email recovery link and reload-safe reset work on each viewport", async ({
   await page.getByLabel("Mật khẩu mới", { exact: true }).fill(next);
   await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill(next);
   await page.getByRole("checkbox").check();
+  const proofCookies = (await page.context().cookies("http://127.0.0.1:3102/api/auth")).filter(cookie => cookie.name === "ourspace_password_recovery");
+  expect(proofCookies.length).toBe(1);
+  // Simulate browser cookie expiry between rendering and submission, without mocking HTTP.
+  await page.context().clearCookies({ name: "ourspace_password_recovery" });
+  await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Chưa thể hoàn tất" })).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Đăng nhập lại", exact: true })).toHaveCount(0);
+  expect((await request.post("/api/auth/login", { headers, data: { email, password: next } })).status()).toBe(401);
+  // Restore the still-valid server proof to show the denied submission did not consume it.
+  await page.context().addCookies(proofCookies);
+  await page.reload();
+  await page.getByLabel("Mật khẩu mới", { exact: true }).fill(next);
+  await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill(next);
+  await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
   await expect(page.getByRole("link", { name: "Đăng nhập lại", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -41,4 +57,19 @@ test("email recovery link and reload-safe reset work on each viewport", async ({
   expect((await request.post("/api/auth/login", { headers, data: { email, password } })).status()).toBe(401);
   await new Promise(resolve => setTimeout(resolve, 1100));
   expect((await request.post("/api/auth/login", { headers, data: { email, password: next } })).status()).toBe(200);
+});
+
+
+test("invalid and rejected recovery links offer a fresh request without success", async ({ page }) => {
+  await page.goto("/account/recovery-link?type=recovery&token=bad&redirect_to=https://example.com");
+  await expect(page.getByRole("alert").filter({ hasText: "Link phục hồi không hợp lệ" })).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  expect(new URL(page.url()).origin).toBe("http://127.0.0.1:3102");
+  expect(new URL(page.url()).hash).toBe("");
+  await page.goto(`/account/recovery-link?type=recovery&token=${randomUUID().replaceAll("-", "")}`);
+  await page.getByRole("button", { name: "Tiếp tục phục hồi" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Chưa thể hoàn tất" })).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
 });

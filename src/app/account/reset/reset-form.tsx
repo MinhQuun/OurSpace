@@ -4,11 +4,13 @@ import Link from "next/link";
 
 export default function ResetForm() {
   const token = useRef("");
+  const invalidLink = useRef(false);
   const [stage, setStage] = useState("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    invalidLink.current ||= location.hash === "#invalid";
     token.current ||=
       new URLSearchParams(location.hash.slice(1)).get("token") ?? "";
     history.replaceState(null, "", location.pathname);
@@ -21,8 +23,12 @@ export default function ResetForm() {
         if (!response.ok) throw new Error();
         const state = await response.json();
         setStage(
-          token.current ? "prepare" : state.prepared ? "complete" : "request",
+          invalidLink.current ? "request" : token.current ? "prepare" : state.prepared ? "complete" : "request",
         );
+        if (invalidLink.current) {
+          setFailed(true);
+          setMessage("Link phục hồi không hợp lệ. Hãy yêu cầu email mới.");
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -81,7 +87,8 @@ export default function ResetForm() {
         setMessage(
           "Chưa thể hoàn tất. Nếu link hoặc phiên phục hồi không còn hiệu lực, hãy yêu cầu email mới. Tài khoản bật MFA cần mã xác thực hợp lệ.",
         );
-        if (stage === "prepare") {
+        if (stage === "prepare" || (stage === "complete" && response.status === 401)) {
+          form.reset();
           token.current = "";
           setStage("request");
         }
@@ -201,9 +208,9 @@ export default function ResetForm() {
       )}
       {stage === "complete" && (
         <p>
-          <Link href="/account/reset#new" onClick={() => setStage("request")}>
+          <button type="button" disabled={busy} onClick={() => { setStage("request"); setMessage(""); setFailed(false); }}>
             Yêu cầu email mới
-          </Link>{" "}
+          </button>{" "}
           nếu phiên đã hết hạn.
         </p>
       )}

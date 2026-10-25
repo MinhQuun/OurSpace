@@ -642,3 +642,12 @@ Acceptance: scanner GET requests do not consume recovery proof; real email opens
 - PASS production build, lint/typecheck; targeted HTTP/browser checks 3/3; full real Auth HTTP and desktop/mobile regression 10/10 (53.0 seconds). Reviewed both completion screenshots, with no horizontal overflow. Initial UI failures were test navigation races (Email from old account form); test now waits for recovery form before filling.
 - Remaining: MFA error/expiry browser paths, provider refresh invalidation, abuse controls and production ingress query redaction/key management. The email landing request still carries the emailed proof in its query; production logging must redact it. Stage 02 and full reset P0 remain incomplete.
 - Real provider/service recovery regression PASS: 4 selected tests, 9 unrelated skipped (74.69 seconds), including concurrent consumption and receipt renewal. History/worktree heuristic audit: 341 blobs, no findings; historical binary caveat unchanged.
+- Commit 68cd78263032f3673781d08f514ba1a6b4b5c9b1 PUSHED; remote master matches HEAD. Next: recovery error/expiry/MFA browser coverage and remaining Stage 02 security gates.
+
+## Task 02.7k - Recovery rejection and lost-cookie UX
+
+Acceptance: malformed/provider-rejected links explain failure and allow a new email request; missing recovery cookie during completion never reports success, removes password inputs and permits a fresh request.
+
+- Invalid landing marker now displays an explicit error. Completion HTTP 401 clears form data and returns to the request form. Request-new-email control is a local button (disabled while saving), with stale messages cleared.
+- PASS production build, final lint/typecheck/diff check. Real desktop/mobile cookie-loss tests PASS: missing cookie denies mutation, proposed password cannot log in, restored still-valid proof can complete. Invalid/rejected email link tests PASS 2/2 after correcting test navigation through the actual email landing URL (initial direct fragment-only navigation did not remount the page). No HTTP mocks used.
+- History/worktree heuristic audit PASS: 352 blobs, no findings; historical binary caveat unchanged. Browser-cookie loss is simulated by removing the cookie; this does not claim real provider token-expiry testing. Remaining: timed provider expiry, MFA recovery browser paths, refresh-token invalidation and abuse controls. Stage 02 remains in progress.
