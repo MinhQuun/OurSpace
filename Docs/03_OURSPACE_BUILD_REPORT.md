@@ -651,3 +651,13 @@ Acceptance: malformed/provider-rejected links explain failure and allow a new em
 - Invalid landing marker now displays an explicit error. Completion HTTP 401 clears form data and returns to the request form. Request-new-email control is a local button (disabled while saving), with stale messages cleared.
 - PASS production build, final lint/typecheck/diff check. Real desktop/mobile cookie-loss tests PASS: missing cookie denies mutation, proposed password cannot log in, restored still-valid proof can complete. Invalid/rejected email link tests PASS 2/2 after correcting test navigation through the actual email landing URL (initial direct fragment-only navigation did not remount the page). No HTTP mocks used.
 - History/worktree heuristic audit PASS: 352 blobs, no findings; historical binary caveat unchanged. Browser-cookie loss is simulated by removing the cookie; this does not claim real provider token-expiry testing. Remaining: timed provider expiry, MFA recovery browser paths, refresh-token invalidation and abuse controls. Stage 02 remains in progress.
+- Commit a05df043860efaadb71ebe0942268d1114f27097 PUSHED; remote master matches HEAD. Next: real MFA reset browser flow and provider expiry/revocation checks.
+
+## Task 02.7l - MFA password recovery browser acceptance
+
+Acceptance: actual enabled MFA can reset using TOTP or a one-time recovery code on desktop/mobile; missing MFA cannot advance or replay the emailed token; reset preserves MFA and denies the old password/consumed code.
+
+- Added six real browser cases, with synthetic accounts enrolled/verified/acknowledged through Auth HTTP endpoints before opening actual Mailpit recovery links. Browser selects and submits the second factor and completes password reset. No mocks, secrets, screenshots of codes or provider tokens are persisted.
+- PASS 6/6 desktop/mobile cases (38.4 seconds): TOTP reset, recovery-code reset, missing-factor denial; consumed emailed proof rejected on retry; unchanged old password still works with MFA after denied prepare; completed reset requires new password plus MFA, rejects used recovery code and retains enabled enrollment.
+- Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 355 blobs, no findings; historical binary caveat unchanged. Preserved editor formatting in the test file. Application code/build unchanged in this test-only task.
+- Remaining Stage 02 gates include actual provider expiry/refresh revocation and abuse controls. Missing-factor prepare currently consumes the email proof and requires a fresh email, as documented by the UI and tested here. Full Stage 02/P0 is not yet complete.
