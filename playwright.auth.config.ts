@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 export default defineConfig({
@@ -26,6 +27,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60000,
     env: {
+      RECOVERY_COOKIE_KEY: randomBytes(32).toString("base64url"),
       APP_ORIGIN: "http://127.0.0.1:3102",
       SUPABASE_AUTH_URL: "http://127.0.0.1:55433",
       DATABASE_URL: `postgresql://ourspace_runtime:${readFileSync(".local/runtime-db-password", "utf8").trim()}@127.0.0.1:55432/ourspace`,

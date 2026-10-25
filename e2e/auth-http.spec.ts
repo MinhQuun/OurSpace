@@ -265,3 +265,56 @@ test("verified login uses private cookie and logout invalidates a copied cookie"
     ).status(),
   ).toBe(401);
 });
+
+
+test("password reset HTTP seals proof and requires cookie, origin and confirmation", async ({ request, playwright }) => {
+  const email = `reset-http-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  const headers = { Origin: "http://127.0.0.1:3102" };
+  const post = (action: string, data: object) => request.post(`/api/auth/${action}`, { headers, data });
+  const mailLink = async () => {
+    const inbox = await (await request.get("http://127.0.0.1:55434/api/v1/messages")).json();
+    const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === email));
+    expect(Boolean(mail)).toBe(true);
+    const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
+    const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0].replaceAll("&amp;", "&");
+    expect(Boolean(link)).toBe(true);
+    return new URL(link!);
+  };
+  expect((await post("signup", { email, password, displayName: "Synthetic reset HTTP" })).status()).toBe(202);
+  expect((await request.get((await mailLink()).href, { maxRedirects: 0 })).status()).toBe(303);
+  expect((await post("login", { email, password })).status()).toBe(200);
+  expect((await request.post("/api/auth/password-recovery", { data: { email } })).status()).toBe(403);
+  const absent = await post("password-recovery", { email: `absent-${randomUUID()}@ourspace.test` });
+  const known = await post("password-recovery", { email });
+  expect(absent.status()).toBe(202); expect(known.status()).toBe(202);
+  expect(await absent.json()).toEqual(await known.json());
+  const link = await mailLink();
+  expect(link.searchParams.get("type")).toBe("recovery");
+  const prepared = await post("password-prepare", { tokenHash: link.searchParams.get("token") });
+  expect(prepared.status()).toBe(200);
+  expect(await prepared.json()).toEqual({ prepared: true });
+  expect(prepared.headers()["cache-control"]).toBe("no-store");
+  const cookie = (await request.storageState()).cookies.find(c => c.name === "ourspace_password_recovery")!;
+  expect(Boolean(cookie)).toBe(true);
+  expect(cookie.httpOnly && cookie.sameSite === "Strict" && cookie.path === "/api/auth").toBe(true);
+  expect(cookie.expires > Date.now()/1000 && cookie.expires <= Date.now()/1000 + 901).toBe(true);
+  expect(cookie.value.includes(link.searchParams.get("token")!)).toBe(false);
+  expect((await request.get("/api/auth/session")).status()).toBe(401);
+  expect((await post("password-complete", { password: next })).status()).toBe(400);
+  const attacker = await playwright.request.newContext();
+  try {
+    const altered = (cookie.value[0] === "A" ? "B" : "A") + cookie.value.slice(1);
+    expect((await attacker.post("http://127.0.0.1:3102/api/auth/password-complete", {
+      headers: { ...headers, Cookie: `ourspace_password_recovery=${altered}` },
+      data: { password: next, confirmed: true },
+    })).status()).toBe(401);
+  } finally { await attacker.dispose(); }
+  expect((await post("password-complete", { password: next, confirmed: true })).status()).toBe(200);
+  expect(Boolean((await request.storageState()).cookies.find(c => c.name === "ourspace_password_recovery"))).toBe(false);
+  expect((await post("password-complete", { password: next, confirmed: true })).status()).toBe(401);
+  expect((await post("login", { email, password })).status()).toBe(401);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  expect((await post("login", { email, password: next })).status()).toBe(200);
+});

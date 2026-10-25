@@ -4,6 +4,8 @@ import { AuthProvider } from "../modules/m10/auth/provider.server";
 import { SessionService } from "../modules/m10/auth/session.server";
 import { MfaService } from "../modules/m10/auth/mfa.server";
 
+import { RecoveryService } from "../modules/m10/auth/recovery.server";
+
 let instance:
   | {
       origin: string;
@@ -11,6 +13,7 @@ let instance:
       provider: AuthProvider;
       sessions: SessionService;
       mfa: MfaService;
+      recovery: RecoveryService;
     }
   | undefined;
 export function authRuntime() {
@@ -39,6 +42,7 @@ export function authRuntime() {
     provider,
     sessions: new SessionService(db, provider),
     mfa: new MfaService(db, provider),
+    recovery: new RecoveryService(db, provider),
   };
   return instance;
 }
