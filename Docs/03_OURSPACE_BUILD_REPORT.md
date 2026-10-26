@@ -835,3 +835,13 @@ Acceptance: real local GoTrue password, TOTP and recovery-code proofs pass the i
 - PASS real provider test (2.58 seconds; 16 unrelated skipped): password before MFA accepted, password-only after verification denied, fresh TOTP and recovery proofs accepted, revoked app session denied. Synthetic signed negative-case regression PASS (6.216 seconds); lint/typecheck/diff check PASS.
 - Next: atomic disconnect command with unilateral consent, record/Space transition, invite invalidation, audit/outbox and concurrency tests, then service/API/UI. Stage 02 remains incomplete; no disconnect workflow completion claim.
 - History/worktree heuristic audit PASS: 416 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 8d7071615e8f6f9969d937172f4660956c6f2e54 PUSHED; remote master matches HEAD. Next: atomic unilateral disconnect command and concurrency boundary.
+
+## Task 02.9d - Atomic unilateral disconnect command
+
+Acceptance: a current member with fresh signed reauthentication and explicit consent stops an Active Space without partner approval; version checks, processing origin, invitation invalidation, receipt, audit and outbox commit atomically and retries do not duplicate effects.
+
+- Migration 0037 adds ungranted internal disconnect_space command. Locks both member accounts in deterministic pairing order, then reauth/session and Space. Does not require partner active session. Transitions through Disconnecting to Frozen, records immutable 30-day window, revokes pending/awaiting invitations involving either member, writes one audit/outbox event with no private content payload.
+- Real Auth/PostgreSQL integration PASS (2.92 seconds, 16 unrelated skipped): real pair and MFA recovery proof, partner logout, false consent/stale version denied, transaction rollback retains Active and no disconnect origin, concurrent identical commands over two DB connections return same Space, Frozen state and stale invite revoked, exactly one audit/event, new conflicting command denied. Existing real password/TOTP/recovery proof checks remain passing.
+- Applied migration locally, checksums verified. Lint/typecheck/diff review PASS. No runtime grant or HTTP endpoint yet. Next: execute-only runtime negative tests, shared-write serialization boundary and scoped read/service/API/UI. D35 queued-domain enforcement remains pending domain models/jobs; no full disconnect/P0 completion claim. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 419 blobs, no findings; authorized historical binary caveat unchanged.

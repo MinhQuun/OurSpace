@@ -1457,9 +1457,9 @@ test("pairing service joins two real verified sessions only after both consent",
 },30_000);
 
 
-test("disconnect guard accepts real password TOTP and recovery proofs", async () => {
+test("disconnect guard and atomic command accept real password TOTP and recovery proofs", async () => {
   const owner = new Pool({ host: "127.0.0.1", port: 55432, database: "ourspace",
-    user: "ourspace_owner", password: readFileSync(".local/db-password", "utf8").trim(), max: 1 });
+    user: "ourspace_owner", password: readFileSync(".local/db-password", "utf8").trim(), max: 2 });
   const credentials = { email: `disconnect-${randomUUID()}@ourspace.test`, password: randomUUID()+"!Aa9" };
   try {
     await auth.signUp(credentials.email, credentials.password);
@@ -1489,6 +1489,38 @@ test("disconnect guard accepts real password TOTP and recovery proofs", async ()
     expect(methods).toContain("password");
     expect(methods).toContain("mfa/recovery_code");
     expect(await check(verified.session.token, recovery.accessToken)).toBe(identity);
+    const partnerCredentials = { email: `disconnect-partner-${randomUUID()}@ourspace.test`, password: randomUUID()+"!Aa9" };
+    await auth.signUp(partnerCredentials.email, partnerCredentials.password);
+    await fetch(await confirmationLink(partnerCredentials.email), { redirect: "manual" });
+    const partner = await sessions.login(partnerCredentials.email, partnerCredentials.password, "Synthetic partner");
+    const pairing = new PairingService(db);
+    const stale = await pairing.create(verified.session.token);
+    const invitation = await pairing.create(verified.session.token);
+    const accepted = await pairing.decide(partner.token, randomUUID(), invitation.id, "accept", true, invitation.token);
+    const partnerId = (await sessions.actor(partner.token))!;
+    const space = await pairing.confirm(verified.session.token, randomUUID(), invitation.id, partnerId, Number(accepted.version), true);
+    // Partner need not remain online or consent to disconnect.
+    await sessions.revoke(partner.token, partner.id);
+    const command = randomUUID();
+    const params = [createHash("sha256").update(verified.session.token).digest("hex"), recovery.accessToken, command, space.spaceId, 1, true];
+    const statement = "SELECT app_internal.disconnect_space($1,$2,$3,$4,$5,$6) AS id";
+    await expect(owner.query(statement, [...params.slice(0,5),false])).rejects.toMatchObject({ code: "22023" });
+    await expect(owner.query(statement, [...params.slice(0,4),2,true])).rejects.toMatchObject({ code: "23505" });
+    const transaction = await owner.connect();
+    try {
+      await transaction.query("BEGIN");
+      await transaction.query(statement, params);
+      await transaction.query("ROLLBACK");
+    } finally { transaction.release(); }
+    expect((await owner.query("SELECT state FROM m10.couple_spaces WHERE id=$1", [space.spaceId])).rows[0].state).toBe("active");
+    expect((await owner.query("SELECT count(*)::int AS n FROM m10.space_disconnects WHERE space_id=$1", [space.spaceId])).rows[0].n).toBe(0);
+    const concurrent = await Promise.all([owner.query(statement, params), owner.query(statement, params)]);
+    expect(concurrent.map(result => result.rows[0].id)).toEqual([space.spaceId, space.spaceId]);
+    await expect(owner.query(statement, [params[0],params[1],randomUUID(),space.spaceId,1,true])).rejects.toMatchObject({ code: "23505" });
+    expect((await owner.query("SELECT state FROM m10.couple_spaces WHERE id=$1", [space.spaceId])).rows[0].state).toBe("frozen");
+    expect((await owner.query("SELECT state FROM m10.pairing_invitations WHERE id=$1", [stale.id])).rows[0].state).toBe("revoked");
+    expect((await owner.query("SELECT count(*)::int AS n FROM app_internal.audit_events WHERE command_id=$1", [command])).rows[0].n).toBe(1);
+    expect((await owner.query("SELECT count(*)::int AS n FROM app_internal.outbox WHERE command_id=$1", [command])).rows[0].n).toBe(1);
     await sessions.revoke(verified.session.token, verified.session.id);
     await expect(check(verified.session.token, recovery.accessToken)).rejects.toMatchObject({ code: "42501" });
   } finally { await owner.end(); }
