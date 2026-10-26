@@ -26,12 +26,23 @@ const labels: Record<string, string> = {
   rejected: "Đã từ chối",
   expired: "Đã hết hạn",
 };
+class RequestLimitError extends Error {}
+function checkRequestLimit(response: Response) {
+  if (response.status !== 429) return;
+  const seconds = Number(response.headers.get("Retry-After"));
+  throw new RequestLimitError(
+    Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 86400
+      ? `Bạn thao tác quá nhanh. Hãy chờ ${seconds} giây rồi thử lại.`
+      : "Bạn thao tác quá nhanh. Hãy chờ một lúc rồi thử lại.",
+  );
+}
 async function post(action: string, data: object) {
   const response = await fetch(`/api/pairing/${action}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+  checkRequestLimit(response);
   if (!response.ok)
     throw new Error(
       "Không thể thực hiện. Hãy làm mới trạng thái; lời mời có thể hết hạn, bị thu hồi hoặc tài khoản chưa đủ điều kiện.",
@@ -66,6 +77,7 @@ export default function PairingPanel() {
     if (!response.ok) {
       setItems([]);
       setPreview(null);
+      checkRequestLimit(response);
       throw new Error("Chưa thể tải lời mời.");
     }
     const data = await response.json();
@@ -73,8 +85,9 @@ export default function PairingPanel() {
     if (capability.current) {
       try {
         setPreview(await post("inspect", capability.current));
-      } catch {
+      } catch (error) {
         setPreview(null);
+        if (error instanceof RequestLimitError) throw error;
         throw new Error(
           "Link mời không còn hợp lệ hoặc bạn không có quyền xem. Hãy xin link mới từ người mời.",
         );

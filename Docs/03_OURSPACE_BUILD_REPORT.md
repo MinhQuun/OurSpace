@@ -793,3 +793,13 @@ Acceptance: all authenticated pairing actions consume a committed account/action
 - Applied migration/runtime grants locally. PASS lint, typecheck, production build, diff check and real pairing HTTP + desktop/mobile regression 3/3 (9.9 seconds). HTTP exercises 30 denied inspect attempts followed by 429/positive Retry-After/no-store; same actor list and another actor inspection remain available. Existing consent, CSRF, body limits and logout checks pass.
 - Remaining: UI-specific rate-limit messaging, anonymous/edge abuse protection and production threshold review; current account budget does not claim volumetric DDoS protection. Stage 02 disconnect/frozen/object ACL POC and later stages still pending.
 - History/worktree heuristic audit PASS: 402 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit de53a62a29ea34a72d232a36837f23120bc7d8ce PUSHED; remote master matches HEAD. Editor formatting preserved. Next: rate-limit UI feedback then disconnect/frozen/object ACL foundation.
+
+## Task 02.8l - Pairing rate-limit feedback
+
+Acceptance: HTTP 429 shows a safe Vietnamese retry instruction instead of implying the invitation is invalid; other action budgets and paired state remain usable.
+
+- Added bounded numeric Retry-After handling for POST actions and list, with generic wait fallback for malformed headers. Capability inspection preserves rate-limit errors instead of replacing them with invalid-link guidance. No automatic retries or capability persistence.
+- Real desktop/mobile browser tests exhaust create budget using nine invalid requests after initial create, submit through UI, assert wait message and retained paired state, then refresh independently and clear message. PASS 2/2 (7.7 seconds). Initial test locator matched Next route announcer as well; corrected to scope pairing panel, no application suppression.
+- PASS final lint/typecheck, production build and diff review. History/worktree heuristic audit: 407 blobs, no findings; authorized historical binary caveat unchanged.
+- Stage 02 remains incomplete. Next: disconnect/frozen lifecycle and object ACL security POC; production abuse controls/threshold review remain open.

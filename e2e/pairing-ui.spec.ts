@@ -122,6 +122,18 @@ test("two browsers pair only after identity checks and both consents", async ({
         ),
       ).toBe(true);
     }
+    // Real account budget: initial successful creation used one of ten requests.
+    for (let index = 0; index < 9; index++) {
+      expect((await page.request.post("/api/pairing/create", {
+        headers, data: { confirmed: false },
+      })).status()).toBe(400);
+    }
+    await create.getByRole("checkbox").check();
+    await create.getByRole("button").click();
+    await expect(page.locator(".pairing-panel").getByRole("alert")).toContainText("Bạn thao tác quá nhanh. Hãy chờ");
+    await expect(page.getByRole("heading", { name: "Đã ghép đôi", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Làm mới trạng thái" }).click();
+    await expect(page.locator(".pairing-panel").getByRole("alert")).toHaveCount(0);
     await page.screenshot({
       path: `.local/pairing-${testInfo.project.name}.png`,
       fullPage: true,
