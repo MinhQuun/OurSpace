@@ -18,6 +18,50 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_final_pairing_confirmation_runtime_concurrency_and_rollback(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        c = str(uuid.uuid4())
+        role = 'confirm_test_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.confirm_pairing(text,uuid,uuid,uuid,bigint,boolean) TO {role}; INSERT INTO m10.accounts(id) VALUES ('{c}'); UPDATE m10.accounts SET state='active';",self.database)
+        try:
+            for account,token in [(a,'a'),(b,'b'),(c,'c')]:
+                sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+            def invite(creator):
+                key=str(uuid.uuid4())
+                sql(f"INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{key}','{creator}','{secrets.token_hex(32)}'); UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{key}';",self.database)
+                return key
+            first,second=invite(a),invite(c)
+            def command(key=first,actor='a',recipient=b,version=2,confirmed='true',receipt=None,suffix=''):
+                return f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.confirm_pairing(repeat('{actor}',64),'{receipt or uuid.uuid4()}','{key}','{recipient}',{version},{confirmed}); {suffix} COMMIT;"
+            def denied(statement):
+                with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+            for statement in [command(actor='b'),command(recipient=c),command(version=1),command(confirmed='false'),command(suffix='SELECT 1/0;')]:
+                denied(statement)
+            self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;',self.database),'0')
+            self.assertEqual(sql('SELECT count(*) FROM app_internal.audit_events;',self.database),'0')
+            self.assertEqual(sql(f"SELECT state FROM m10.pairing_invitations WHERE id='{first}';",self.database),'awaiting_confirmation')
+            receipt1,receipt2=str(uuid.uuid4()),str(uuid.uuid4())
+            statements=[command(receipt=receipt1),command(key=second,actor='c',receipt=receipt2)]
+            def attempt(statement):
+                try: return sql(statement,self.database)
+                except subprocess.CalledProcessError: return 'denied'
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                outcomes=list(pool.map(attempt,statements))
+            self.assertEqual(outcomes.count('denied'),1)
+            winner=0 if outcomes[0]!='denied' else 1
+            self.assertEqual(sql(statements[winner],self.database),outcomes[winner])
+            self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;',self.database),'1')
+            self.assertEqual(sql('SELECT count(*) FROM m10.couple_memberships;',self.database),'2')
+            for table in ['command_receipts','audit_events','outbox']:
+                self.assertEqual(sql(f'SELECT count(*) FROM app_internal.{table};',self.database),'1')
+            denied(f'BEGIN; SET LOCAL ROLE {role}; SELECT * FROM m10.couple_memberships; COMMIT;')
+            self.assertEqual(sql("SELECT count(*) FROM m10.pairing_invitations WHERE state='awaiting_confirmation';",self.database),'1')
+        finally:
+            sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_invitation_decisions_authorization_race_and_replay(self):
         migrate(database=self.database)
         seed(self.database)
