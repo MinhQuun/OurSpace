@@ -55,7 +55,8 @@ app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     # Independent action windows keep inspection spam from exhausting revocation.
     sql("""INSERT INTO app_internal.pairing_request_policies(action,max_requests,window_seconds)
 VALUES ('create',10,60),('inspect',30,60),('list',60,60),
-('accept',10,60),('reject',10,60),('revoke',20,60),('confirm',10,60)
+('accept',10,60),('reject',10,60),('revoke',20,60),('confirm',10,60),
+('spaces_list',60,60),('disconnect',10,60)
 ON CONFLICT(action) DO NOTHING;""")
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

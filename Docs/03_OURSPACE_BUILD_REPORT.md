@@ -885,3 +885,13 @@ Acceptance: server service lists scoped status and invokes disconnect only after
 - Real Auth/PostgreSQL integration PASS (4.48 seconds; 16 unrelated skipped): scoped list/revoked-session denial now exercises service, false consent/wrong-account/missing MFA denied, TOTP and fresh recovery-code service retries return exact committed Space ID. Existing atomic initial disconnect and lock-concurrency assertions continue to use runtime DB directly; initial service mutation/browser completion not claimed.
 - Lint/typecheck PASS after correcting nullable timestamp test access; diff review PASS. Next: protected HTTP orchestration and direct first-mutation service coverage, then desktop/mobile disconnect UI. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 432 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 600f6392c3a0580e838dfadb5c0c0b2abd8b7f4c PUSHED; remote master matches HEAD. Next: first-disconnect service/HTTP coverage and protected lifecycle API/UI.
+
+## Task 02.9i - Protected Space lifecycle HTTP endpoints
+
+Acceptance: current sessions can list only their Spaces; disconnect requires same-origin bounded JSON, explicit consent and credential/MFA reauthentication, with independent committed abuse budget and no secret response.
+
+- Added GET /api/spaces/list and POST /api/spaces/disconnect; shared runtime now composes SpaceService. Session/Origin/Sec-Fetch-Site guards, 4096-byte body cap, typed factor input, no-store/Vary Cookie/nosniff/no-referrer and sanitized error statuses. Response is only spaceId; credentials/provider proofs are never serialized.
+- Migration 0040 extends internal request-policy action allowlist. Local evaluation policies: spaces_list 60/minute and disconnect 10/minute; independent of pairing budgets. Production threshold review remains open. Applied migration/provisioning locally.
+- Real HTTP test PASS (3.0 seconds, total 5.1): member Active status, unrelated list empty, origin/false consent/wrong-account/nonmember denial, partner logout, first successful service mutation to Frozen, identical retry, exact safe response, oversized body denial, exhausted budget returns 429/Retry-After while list still works, post-logout list 401. First run used stale production build and returned 404; rebuilt and reran successfully.
+- Final lint/typecheck, production build and diff check PASS. History/worktree heuristic audit PASS: 435 blobs, no findings; authorized historical binary caveat unchanged. Next: desktop/mobile Space/disconnect interface and MFA HTTP coverage; object ACL POC and Stage 02 remain incomplete.

@@ -489,11 +489,13 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
   );
   const [a, b, c] = contexts;
   const headers = { Origin: "http://127.0.0.1:3102" };
+  const credentials: {email:string;password:string}[] = [];
   try {
     expect((await a.get("/api/pairing/list")).status()).toBe(401);
     for (const request of contexts) {
       const email = `pair-http-${randomUUID()}@ourspace.test`,
         password = randomUUID() + "!Aa9";
+      credentials.push({email,password});
       expect(
         (
           await request.post("/api/auth/signup", {
@@ -653,7 +655,36 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
         })
       ).status(),
     ).toBe(200);
+    const current = (await (await a.get("/api/spaces/list")).json()).spaces[0];
+    expect(current.state).toBe("active");
+    expect((await (await c.get("/api/spaces/list")).json()).spaces).toEqual([]);
+    const disconnect = { ...credentials[0], spaceId: current.id, version: Number(current.version), commandId: randomUUID(), confirmed: true };
+    expect((await a.post("/api/spaces/disconnect", { data: disconnect })).status()).toBe(403);
+    expect((await a.post("/api/spaces/disconnect", { headers, data: {...disconnect, confirmed:false} })).status()).toBe(400);
+    expect((await a.post("/api/spaces/disconnect", { headers, data: {...disconnect, ...credentials[1]} })).status()).toBe(403);
+    expect((await c.post("/api/spaces/disconnect", { headers, data: {...disconnect,...credentials[2]} })).status()).toBe(403);
+    expect((await b.post("/api/auth/logout", { headers })).status()).toBe(200);
+    const stopped = await a.post("/api/spaces/disconnect", { headers, data: disconnect });
+    expect(stopped.status()).toBe(200);
+    expect(stopped.headers()["cache-control"]).toBe("no-store");
+    expect(await stopped.json()).toEqual({spaceId:current.id});
+    expect((await a.post("/api/spaces/disconnect", { headers, data: disconnect })).status()).toBe(200);
+    expect((await (await a.get("/api/spaces/list")).json()).spaces[0].state).toBe("frozen");
+    expect((await a.post("/api/spaces/disconnect", { headers, data: {padding:"x".repeat(5000)} })).status()).toBe(400);
+    let exhausted = false;
+    for (let index=0; index<10; index++) {
+      const attempt = await a.post("/api/spaces/disconnect", { headers, data: {...disconnect,confirmed:false} });
+      if (attempt.status() === 429) {
+        expect(Number(attempt.headers()["retry-after"])).toBeGreaterThan(0);
+        exhausted = true;
+        break;
+      }
+      expect(attempt.status()).toBe(400);
+    }
+    expect(exhausted).toBe(true);
+    expect((await a.get("/api/spaces/list")).status()).toBe(200);
     expect((await a.post("/api/auth/logout", { headers })).status()).toBe(200);
+    expect((await a.get("/api/spaces/list")).status()).toBe(401);
     expect((await a.get("/api/pairing/list")).status()).toBe(401);
   } finally {
     await Promise.all(contexts.map((context) => context.dispose()));
