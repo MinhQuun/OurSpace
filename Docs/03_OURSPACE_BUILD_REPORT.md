@@ -845,3 +845,13 @@ Acceptance: a current member with fresh signed reauthentication and explicit con
 - Real Auth/PostgreSQL integration PASS (2.92 seconds, 16 unrelated skipped): real pair and MFA recovery proof, partner logout, false consent/stale version denied, transaction rollback retains Active and no disconnect origin, concurrent identical commands over two DB connections return same Space, Frozen state and stale invite revoked, exactly one audit/event, new conflicting command denied. Existing real password/TOTP/recovery proof checks remain passing.
 - Applied migration locally, checksums verified. Lint/typecheck/diff review PASS. No runtime grant or HTTP endpoint yet. Next: execute-only runtime negative tests, shared-write serialization boundary and scoped read/service/API/UI. D35 queued-domain enforcement remains pending domain models/jobs; no full disconnect/P0 completion claim. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 419 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit d8a8ae13ca8b762c08dd718fce5791c85e3ffa54 PUSHED; remote master matches HEAD. Next: runtime command authorization/negative tests and shared-write boundary before API/UI.
+
+## Task 02.9e - Execute-only disconnect runtime boundary
+
+Acceptance: runtime can execute authorized disconnect with deferred private-table constraints, while false consent, mismatched proof, stale/revoked session, inaccessible Space and raw table/helper access fail safely.
+
+- Local runtime provisioning grants only disconnect_space(text,text,uuid,uuid,bigint,boolean); disconnect_actor and tables remain ungranted. Existing private schema/RLS boundaries retained.
+- Real Auth/runtime integration PASS (3.03 seconds; 16 unrelated skipped): successful concurrent duplicate disconnect now executes through createDatabase with actual restricted runtime login; deferred triggers and idempotency succeed. False consent, stale version, proof from partner, revoked partner session, random nonexistent Space, conflicting command reuse and revoked-session replay denied with sanitized categories. Direct reads of Space/disconnect/invitation/audit tables and direct helper call denied.
+- Lint/typecheck/diff review PASS. Migration command rollback, state/invite and exactly-once audit/outbox assertions remain in same integration flow. No API exposure yet. Next: shared-write lifecycle serialization guard and scoped Space service/read/API/UI. Stage 02 and D35 domain integration remain incomplete.
+- History/worktree heuristic audit PASS: 422 blobs, no findings; authorized historical binary caveat unchanged.

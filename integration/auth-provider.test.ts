@@ -1504,8 +1504,16 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
     const command = randomUUID();
     const params = [createHash("sha256").update(verified.session.token).digest("hex"), recovery.accessToken, command, space.spaceId, 1, true];
     const statement = "SELECT app_internal.disconnect_space($1,$2,$3,$4,$5,$6) AS id";
-    await expect(owner.query(statement, [...params.slice(0,5),false])).rejects.toMatchObject({ code: "22023" });
-    await expect(owner.query(statement, [...params.slice(0,4),2,true])).rejects.toMatchObject({ code: "23505" });
+    await expect(db.query(statement, [...params.slice(0,5),false])).rejects.toMatchObject({ reason: "invalid_input" });
+    await expect(db.query(statement, [...params.slice(0,4),2,true])).rejects.toMatchObject({ reason: "conflict" });
+    const otherProof = await auth.signIn(partnerCredentials.email, partnerCredentials.password);
+    await expect(db.query(statement, [params[0],otherProof.accessToken,...params.slice(2)])).rejects.toMatchObject({ reason: "denied" });
+    await expect(db.query(statement, [params[0],params[1],command,randomUUID(),1,true])).rejects.toMatchObject({ reason: "denied" });
+    await expect(db.query(statement, [createHash("sha256").update(partner.token).digest("hex"),otherProof.accessToken,...params.slice(2)])).rejects.toMatchObject({ reason: "denied" });
+    for (const table of ["m10.couple_spaces","m10.space_disconnects","m10.pairing_invitations","app_internal.audit_events"]) {
+      await expect(db.query(`SELECT * FROM ${table}`)).rejects.toMatchObject({ reason: "denied" });
+    }
+    await expect(db.query("SELECT app_internal.disconnect_actor($1,$2)",params.slice(0,2))).rejects.toMatchObject({ reason: "denied" });
     const transaction = await owner.connect();
     try {
       await transaction.query("BEGIN");
@@ -1514,14 +1522,16 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
     } finally { transaction.release(); }
     expect((await owner.query("SELECT state FROM m10.couple_spaces WHERE id=$1", [space.spaceId])).rows[0].state).toBe("active");
     expect((await owner.query("SELECT count(*)::int AS n FROM m10.space_disconnects WHERE space_id=$1", [space.spaceId])).rows[0].n).toBe(0);
-    const concurrent = await Promise.all([owner.query(statement, params), owner.query(statement, params)]);
+    const concurrent = await Promise.all([db.query(statement, params), db.query(statement, params)]);
     expect(concurrent.map(result => result.rows[0].id)).toEqual([space.spaceId, space.spaceId]);
-    await expect(owner.query(statement, [params[0],params[1],randomUUID(),space.spaceId,1,true])).rejects.toMatchObject({ code: "23505" });
+    await expect(db.query(statement, [params[0],params[1],randomUUID(),space.spaceId,1,true])).rejects.toMatchObject({ reason: "conflict" });
     expect((await owner.query("SELECT state FROM m10.couple_spaces WHERE id=$1", [space.spaceId])).rows[0].state).toBe("frozen");
     expect((await owner.query("SELECT state FROM m10.pairing_invitations WHERE id=$1", [stale.id])).rows[0].state).toBe("revoked");
     expect((await owner.query("SELECT count(*)::int AS n FROM app_internal.audit_events WHERE command_id=$1", [command])).rows[0].n).toBe(1);
     expect((await owner.query("SELECT count(*)::int AS n FROM app_internal.outbox WHERE command_id=$1", [command])).rows[0].n).toBe(1);
+    await expect(db.query(statement, [params[0],params[1],command,space.spaceId,2,true])).rejects.toMatchObject({ reason: "invalid_input" });
     await sessions.revoke(verified.session.token, verified.session.id);
+    await expect(db.query(statement, params)).rejects.toMatchObject({ reason: "denied" });
     await expect(check(verified.session.token, recovery.accessToken)).rejects.toMatchObject({ code: "42501" });
   } finally { await owner.end(); }
 }, 30_000);

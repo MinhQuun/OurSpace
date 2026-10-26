@@ -48,6 +48,7 @@ app_internal.confirm_pairing(text,uuid,uuid,uuid,bigint,boolean),
 app_internal.inspect_pairing_invitation(text,uuid,text),
 app_internal.list_pairing_invitations(text),
 app_internal.consume_pairing_request(text,text),
+app_internal.disconnect_space(text,text,uuid,uuid,bigint,boolean),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     # Local evaluation defaults only; production thresholds require separate review.
     # Independent action windows keep inspection spam from exhausting revocation.
