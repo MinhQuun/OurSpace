@@ -731,3 +731,13 @@ Acceptance: only invitation creator with a current session can explicitly confir
 - Targeted PostgreSQL PASS (6.679 seconds): wrong actor/recipient/version and missing confirmation denied, forced transaction failure rolls back consumed state/Space/audit, two competing creators sharing one recipient yield one Space, same-command retry returns original ID, one receipt/audit/outbox and two members persist, direct runtime table read remains denied.
 - Full PostgreSQL regression PASS: 19/19 (82.259 seconds). Lint/typecheck/diff check PASS. Migration/runtime grant applied locally. History/worktree heuristic audit PASS: 375 blobs, no findings; historical binary caveat unchanged.
 - Remaining: scoped identity inspection, service/API with token-safe transport and rate limiting, two-browser pairing UI, disconnect/frozen enforcement and object ACL POC. No browser pairing completion claimed; Stage 02 remains incomplete.
+- Commit 599acafb5f6cc073691393871091ebc98275f060 PUSHED; remote master matches HEAD. Next: scoped invitation/partner identity inspection for authenticated service/API/UI.
+
+## Task 02.8f - Scoped invitation and consent identity inspection
+
+Acceptance: authenticated participants can inspect their invitation status; a nonparticipant requires the correct capability for an unexpired pending invitation; accepting binds visibility to participants; no email, token hash or unrelated profile fields are returned.
+
+- Migration 0032 adds inspect/list functions with current session checks and explicit output columns (invitation metadata, participant IDs/display names, Space ID). Capability access ends when pending state ends; participant history remains scoped. Inactive participant display names are hidden; inactive caller cannot inspect. Expired pending states are reported as expired without mutating on read. List is bounded to the most recent 100 owned/accepted invitations; history pagination remains future work.
+- Targeted real PostgreSQL test PASS (8.589 seconds), under a temporary execute-only role with three synthetic identities: wrong/absent session or capability denied, pending capability reveals only inviter, unrelated lists empty, accepted recipient visible to creator, third-party old capability denied, exact output-key allowlist, inactive caller denial/name redaction and revoked visibility restrictions.
+- No browser/API completion claimed. Next: server service/API carrying invitation tokens safely, bounded request handling/rate controls and desktop/mobile consent flow. Stage 02 remains incomplete.
+- Lint/typecheck/diff check PASS. Migration and explicit runtime grants applied locally. History/worktree heuristic audit PASS: 379 blobs, no findings; historical binary caveat unchanged.

@@ -18,6 +18,45 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_pairing_identity_inspection_is_capability_and_participant_scoped(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        c = str(uuid.uuid4())
+        key = str(uuid.uuid4())
+        role = 'inspect_test_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.inspect_pairing_invitation(text,uuid,text),app_internal.list_pairing_invitations(text) TO {role}; INSERT INTO m10.accounts(id) VALUES ('{c}'); UPDATE m10.accounts SET state='active';",self.database)
+        try:
+            for account,token in [(a,'a'),(b,'b'),(c,'c')]:
+                sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+            sql(f"INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{key}','{a}',repeat('d',64));",self.database)
+            def inspect(actor,digest='e',columns='count(*)'):
+                return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT {columns} FROM app_internal.inspect_pairing_invitation(repeat('{actor}',64),'{key}',repeat('{digest}',64)); COMMIT;",self.database)
+            def listing(actor):
+                return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM app_internal.list_pairing_invitations(repeat('{actor}',64)); COMMIT;",self.database)
+            self.assertEqual(inspect('a'),'1')
+            self.assertEqual(inspect('b'),'0')
+            self.assertEqual(inspect('e','d'),'0')
+            self.assertEqual(inspect('b','d','creator_id'),a)
+            self.assertEqual(inspect('b','d','recipient_id IS NULL'),'t')
+            self.assertEqual(listing('b'),'0')
+            sql(f"UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{key}';",self.database)
+            self.assertEqual(inspect('c','d'),'0')
+            self.assertEqual(inspect('b'),'1')
+            self.assertEqual(listing('b'),'1')
+            fields=json.loads(inspect('a',columns='row_to_json(inspect_pairing_invitation)'))
+            self.assertEqual(set(fields),{'id','state','expires_at','version','creator_id','creator_name','recipient_id','recipient_name','space_id'})
+            self.assertEqual(fields['recipient_id'],b)
+            sql(f"UPDATE m10.accounts SET state='deactivated' WHERE id='{b}';",self.database)
+            self.assertEqual(inspect('b'),'0')
+            self.assertEqual(inspect('a',columns='recipient_name IS NULL'),'t')
+            sql(f"UPDATE m10.pairing_invitations SET state='revoked',ended_at=clock_timestamp() WHERE id='{key}';",self.database)
+            self.assertEqual(inspect('c','d'),'0')
+            self.assertEqual(inspect('a',columns='state'),'revoked')
+        finally:
+            sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_final_pairing_confirmation_runtime_concurrency_and_rollback(self):
         migrate(database=self.database)
         seed(self.database)
