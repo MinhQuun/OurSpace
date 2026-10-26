@@ -59,3 +59,35 @@ test("runtime cannot read private tables or modify schema", async () => {
     );
   }
 });
+
+test("database errors expose only allowlisted categories without SQL details", async () => {
+  await expect(db.query("SELECT * FROM m10.accounts")).rejects.toMatchObject({
+    reason: "denied",
+    message: "Database operation unavailable",
+  });
+  await expect(
+    db.query("SELECT app_internal.create_pairing_invitation($1,$2,$3)", [
+      "invalid",
+      null,
+      "invalid",
+    ]),
+  ).rejects.toMatchObject({
+    reason: "invalid_input",
+    message: "Database operation unavailable",
+  });
+  await expect(
+    db.transaction(async (client) => {
+      await client.query(
+        "CREATE TEMP TABLE duplicate_probe (id integer PRIMARY KEY)",
+      );
+      await client.query("INSERT INTO duplicate_probe VALUES (1),(1)");
+    }),
+  ).rejects.toMatchObject({
+    reason: "conflict",
+    message: "Database operation unavailable",
+  });
+  await expect(db.query("SELECT 1/0")).rejects.toMatchObject({
+    reason: "unavailable",
+    message: "Database operation unavailable",
+  });
+});

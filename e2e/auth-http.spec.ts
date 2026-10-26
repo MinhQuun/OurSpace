@@ -3,54 +3,129 @@ import { randomUUID } from "node:crypto";
 import { AuthProvider } from "../src/modules/m10/auth/provider.server";
 import { localTotp } from "../integration/local-totp";
 
-test('MFA HTTP lifecycle protects receipts and replaces sessions', async ({ request }) => {
-  const credentials = { email: `mfa-http-${randomUUID()}@ourspace.test`, password: randomUUID() + '!Aa9' };
-  const post = (action: string, data: object) => request.post(`/api/auth/${action}`, {
-    headers: { Origin: 'http://127.0.0.1:3102' }, data: { ...credentials, ...data } });
-  expect((await request.get('/api/auth/mfa-status')).status()).toBe(401);
-  expect((await post('signup', { displayName: 'Synthetic MFA HTTP' })).status()).toBe(202);
-  const inbox = await (await request.get('http://127.0.0.1:55434/api/v1/messages')).json();
-  const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === credentials.email));
+test("MFA HTTP lifecycle protects receipts and replaces sessions", async ({
+  request,
+}) => {
+  const credentials = {
+    email: `mfa-http-${randomUUID()}@ourspace.test`,
+    password: randomUUID() + "!Aa9",
+  };
+  const post = (action: string, data: object) =>
+    request.post(`/api/auth/${action}`, {
+      headers: { Origin: "http://127.0.0.1:3102" },
+      data: { ...credentials, ...data },
+    });
+  expect((await request.get("/api/auth/mfa-status")).status()).toBe(401);
+  expect(
+    (await post("signup", { displayName: "Synthetic MFA HTTP" })).status(),
+  ).toBe(202);
+  const inbox = await (
+    await request.get("http://127.0.0.1:55434/api/v1/messages")
+  ).json();
+  const mail = inbox.messages.find((m: { To: { Address: string }[] }) =>
+    m.To.some((to) => to.Address === credentials.email),
+  );
   expect(Boolean(mail)).toBe(true);
-  const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
-  const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0].replaceAll('&amp;', '&');
+  const detail = await (
+    await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)
+  ).json();
+  const link = String(detail.HTML)
+    .match(
+      /http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/,
+    )?.[0]
+    .replaceAll("&amp;", "&");
   expect(Boolean(link)).toBe(true);
   expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(303);
-  expect((await post('login', {})).status()).toBe(200);
-  expect((await request.post('/api/auth/mfa-start', { data: credentials })).status()).toBe(403);
+  expect((await post("login", {})).status()).toBe(200);
+  expect(
+    (await request.post("/api/auth/mfa-start", { data: credentials })).status(),
+  ).toBe(403);
   const enrollmentId = randomUUID();
-  const start = await post('mfa-start', { enrollmentId });
+  const start = await post("mfa-start", { enrollmentId });
   expect(start.status()).toBe(200);
-  expect(start.headers()['cache-control']).toBe('no-store');
+  expect(start.headers()["cache-control"]).toBe("no-store");
   const setup = await start.json();
-  const verified = await post('mfa-verify', { enrollmentId, version: setup.version, code: localTotp(setup.secret) });
+  const verified = await post("mfa-verify", {
+    enrollmentId,
+    version: setup.version,
+    code: localTotp(setup.secret),
+  });
   expect(verified.status()).toBe(200);
-  expect(Object.keys(await verified.json()).sort()).toEqual(['enrollmentId', 'version']);
-  const issued = await post('mfa-recovery', { enrollmentId, version: (await verified.json()).version, code: localTotp(setup.secret) });
+  expect(Object.keys(await verified.json()).sort()).toEqual([
+    "enrollmentId",
+    "version",
+  ]);
+  const issued = await post("mfa-recovery", {
+    enrollmentId,
+    version: (await verified.json()).version,
+    code: localTotp(setup.secret),
+  });
   expect(issued.status()).toBe(200);
   const recovery = await issued.json();
-  expect(Object.keys(recovery).sort()).toEqual(['codes', 'enrollmentId', 'version']);
-  const receipt = (await request.storageState()).cookies.find(c => c.name === 'ourspace_mfa_recovery');
+  expect(Object.keys(recovery).sort()).toEqual([
+    "codes",
+    "enrollmentId",
+    "version",
+  ]);
+  const receipt = (await request.storageState()).cookies.find(
+    (c) => c.name === "ourspace_mfa_recovery",
+  );
   expect(Boolean(receipt?.httpOnly)).toBe(true);
-  expect(receipt?.sameSite).toBe('Strict');
-  expect(receipt?.path).toBe('/api/auth');
-  expect((await post('mfa-acknowledge', { enrollmentId, version: recovery.version, code: localTotp(setup.secret) })).status()).toBe(400);
-  expect((await post('mfa-acknowledge', { enrollmentId, version: recovery.version, code: localTotp(setup.secret), confirmed: true })).status()).toBe(200);
-  const state = await (await request.get('/api/auth/mfa-status')).json();
-  expect(state.enrollment.state).toBe('enabled');
-  const prepared = await post('mfa-prepare-removal', { enrollmentId, version: state.enrollment.version,
-    secondFactor: { method: 'totp', code: localTotp(setup.secret) }, confirmed: true });
+  expect(receipt?.sameSite).toBe("Strict");
+  expect(receipt?.path).toBe("/api/auth");
+  expect(
+    (
+      await post("mfa-acknowledge", {
+        enrollmentId,
+        version: recovery.version,
+        code: localTotp(setup.secret),
+      })
+    ).status(),
+  ).toBe(400);
+  expect(
+    (
+      await post("mfa-acknowledge", {
+        enrollmentId,
+        version: recovery.version,
+        code: localTotp(setup.secret),
+        confirmed: true,
+      })
+    ).status(),
+  ).toBe(200);
+  const state = await (await request.get("/api/auth/mfa-status")).json();
+  expect(state.enrollment.state).toBe("enabled");
+  const prepared = await post("mfa-prepare-removal", {
+    enrollmentId,
+    version: state.enrollment.version,
+    secondFactor: { method: "totp", code: localTotp(setup.secret) },
+    confirmed: true,
+  });
   expect(prepared.status()).toBe(200);
-  expect(Object.keys(await prepared.json()).sort()).toEqual(['enrollmentId', 'state']);
-  expect(Boolean((await request.storageState()).cookies.find(c => c.name === 'ourspace_mfa_removal')?.httpOnly)).toBe(true);
-  expect((await request.get('/api/auth/session')).status()).toBe(401);
-  expect(await (await request.get('/api/auth/mfa-removal-state')).json()).toEqual({ pending: true });
-  const finished = await post('mfa-resume-removal', { secondFactor: { method: 'totp', code: localTotp(setup.secret) } });
+  expect(Object.keys(await prepared.json()).sort()).toEqual([
+    "enrollmentId",
+    "state",
+  ]);
+  expect(
+    Boolean(
+      (await request.storageState()).cookies.find(
+        (c) => c.name === "ourspace_mfa_removal",
+      )?.httpOnly,
+    ),
+  ).toBe(true);
+  expect((await request.get("/api/auth/session")).status()).toBe(401);
+  expect(
+    await (await request.get("/api/auth/mfa-removal-state")).json(),
+  ).toEqual({ pending: true });
+  const finished = await post("mfa-resume-removal", {
+    secondFactor: { method: "totp", code: localTotp(setup.secret) },
+  });
   expect(finished.status()).toBe(200);
-  expect((await finished.json()).state).toBe('disabled');
-  expect(await (await request.get('/api/auth/mfa-removal-state')).json()).toEqual({ pending: false });
-  expect((await post('mfa-resume-removal', {})).status()).toBe(401);
-  expect((await post('login', {})).status()).toBe(200);
+  expect((await finished.json()).state).toBe("disabled");
+  expect(
+    await (await request.get("/api/auth/mfa-removal-state")).json(),
+  ).toEqual({ pending: false });
+  expect((await post("mfa-resume-removal", {})).status()).toBe(401);
+  expect((await post("login", {})).status()).toBe(200);
 });
 
 test("write endpoints reject cross-site, malformed and oversized requests", async ({
@@ -129,7 +204,9 @@ test("verified login uses private cookie and logout invalidates a copied cookie"
     await request.get(`http://127.0.0.1:55434/api/v1/message/${message.ID}`)
   ).json();
   const link = String(detail.HTML)
-    .match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0]
+    .match(
+      /http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/,
+    )?.[0]
     .replaceAll("&amp;", "&");
   expect(Boolean(link)).toBe(true);
   expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(303);
@@ -266,29 +343,59 @@ test("verified login uses private cookie and logout invalidates a copied cookie"
   ).toBe(401);
 });
 
-
-test("password reset HTTP seals proof and requires cookie, origin and confirmation", async ({ request, playwright }) => {
+test("password reset HTTP seals proof and requires cookie, origin and confirmation", async ({
+  request,
+  playwright,
+}) => {
   const email = `reset-http-${randomUUID()}@ourspace.test`;
   const password = randomUUID() + "!Aa9";
   const next = randomUUID() + "!Bb8";
   const headers = { Origin: "http://127.0.0.1:3102" };
-  const post = (action: string, data: object) => request.post(`/api/auth/${action}`, { headers, data });
+  const post = (action: string, data: object) =>
+    request.post(`/api/auth/${action}`, { headers, data });
   const mailLink = async () => {
-    const inbox = await (await request.get("http://127.0.0.1:55434/api/v1/messages")).json();
-    const mail = inbox.messages.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === email));
+    const inbox = await (
+      await request.get("http://127.0.0.1:55434/api/v1/messages")
+    ).json();
+    const mail = inbox.messages.find((m: { To: { Address: string }[] }) =>
+      m.To.some((to) => to.Address === email),
+    );
     expect(Boolean(mail)).toBe(true);
-    const detail = await (await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)).json();
-    const link = String(detail.HTML).match(/http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/)?.[0].replaceAll("&amp;", "&");
+    const detail = await (
+      await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)
+    ).json();
+    const link = String(detail.HTML)
+      .match(
+        /http:\/\/127\.0\.0\.1:(?:55433\/verify|3102\/account\/recovery-link)[^"<>\s]+/,
+      )?.[0]
+      .replaceAll("&amp;", "&");
     expect(Boolean(link)).toBe(true);
     return new URL(link!);
   };
-  expect((await post("signup", { email, password, displayName: "Synthetic reset HTTP" })).status()).toBe(202);
-  expect((await request.get((await mailLink()).href, { maxRedirects: 0 })).status()).toBe(303);
+  expect(
+    (
+      await post("signup", {
+        email,
+        password,
+        displayName: "Synthetic reset HTTP",
+      })
+    ).status(),
+  ).toBe(202);
+  expect(
+    (await request.get((await mailLink()).href, { maxRedirects: 0 })).status(),
+  ).toBe(303);
   expect((await post("login", { email, password })).status()).toBe(200);
-  expect((await request.post("/api/auth/password-recovery", { data: { email } })).status()).toBe(403);
-  const absent = await post("password-recovery", { email: `absent-${randomUUID()}@ourspace.test` });
+  expect(
+    (
+      await request.post("/api/auth/password-recovery", { data: { email } })
+    ).status(),
+  ).toBe(403);
+  const absent = await post("password-recovery", {
+    email: `absent-${randomUUID()}@ourspace.test`,
+  });
   const known = await post("password-recovery", { email });
-  expect(absent.status()).toBe(202); expect(known.status()).toBe(202);
+  expect(absent.status()).toBe(202);
+  expect(known.status()).toBe(202);
   expect(await absent.json()).toEqual(await known.json());
   const link = await mailLink();
   expect(link.searchParams.get("type")).toBe("recovery");
@@ -300,31 +407,228 @@ test("password reset HTTP seals proof and requires cookie, origin and confirmati
     expect(landing.headers()["referrer-policy"]).toBe("no-referrer");
     const target = new URL(landing.headers().location, "http://127.0.0.1:3102");
     expect(target.pathname === "/account/reset" && !target.search).toBe(true);
-    expect(new URLSearchParams(target.hash.slice(1)).get("token") === link.searchParams.get("token")).toBe(true);
+    expect(
+      new URLSearchParams(target.hash.slice(1)).get("token") ===
+        link.searchParams.get("token"),
+    ).toBe(true);
   }
-  const prepared = await post("password-prepare", { tokenHash: link.searchParams.get("token") });
+  const prepared = await post("password-prepare", {
+    tokenHash: link.searchParams.get("token"),
+  });
   expect(prepared.status()).toBe(200);
   expect(await prepared.json()).toEqual({ prepared: true });
   expect(prepared.headers()["cache-control"]).toBe("no-store");
-  const cookie = (await request.storageState()).cookies.find(c => c.name === "ourspace_password_recovery")!;
+  const cookie = (await request.storageState()).cookies.find(
+    (c) => c.name === "ourspace_password_recovery",
+  )!;
   expect(Boolean(cookie)).toBe(true);
-  expect(cookie.httpOnly && cookie.sameSite === "Strict" && cookie.path === "/api/auth").toBe(true);
-  expect(cookie.expires > Date.now()/1000 && cookie.expires <= Date.now()/1000 + 901).toBe(true);
+  expect(
+    cookie.httpOnly &&
+      cookie.sameSite === "Strict" &&
+      cookie.path === "/api/auth",
+  ).toBe(true);
+  expect(
+    cookie.expires > Date.now() / 1000 &&
+      cookie.expires <= Date.now() / 1000 + 901,
+  ).toBe(true);
   expect(cookie.value.includes(link.searchParams.get("token")!)).toBe(false);
   expect((await request.get("/api/auth/session")).status()).toBe(401);
-  expect((await post("password-complete", { password: next })).status()).toBe(400);
+  expect((await post("password-complete", { password: next })).status()).toBe(
+    400,
+  );
   const attacker = await playwright.request.newContext();
   try {
-    const altered = (cookie.value[0] === "A" ? "B" : "A") + cookie.value.slice(1);
-    expect((await attacker.post("http://127.0.0.1:3102/api/auth/password-complete", {
-      headers: { ...headers, Cookie: `ourspace_password_recovery=${altered}` },
-      data: { password: next, confirmed: true },
-    })).status()).toBe(401);
-  } finally { await attacker.dispose(); }
-  expect((await post("password-complete", { password: next, confirmed: true })).status()).toBe(200);
-  expect(Boolean((await request.storageState()).cookies.find(c => c.name === "ourspace_password_recovery"))).toBe(false);
-  expect((await post("password-complete", { password: next, confirmed: true })).status()).toBe(401);
+    const altered =
+      (cookie.value[0] === "A" ? "B" : "A") + cookie.value.slice(1);
+    expect(
+      (
+        await attacker.post(
+          "http://127.0.0.1:3102/api/auth/password-complete",
+          {
+            headers: {
+              ...headers,
+              Cookie: `ourspace_password_recovery=${altered}`,
+            },
+            data: { password: next, confirmed: true },
+          },
+        )
+      ).status(),
+    ).toBe(401);
+  } finally {
+    await attacker.dispose();
+  }
+  expect(
+    (
+      await post("password-complete", { password: next, confirmed: true })
+    ).status(),
+  ).toBe(200);
+  expect(
+    Boolean(
+      (await request.storageState()).cookies.find(
+        (c) => c.name === "ourspace_password_recovery",
+      ),
+    ),
+  ).toBe(false);
+  expect(
+    (
+      await post("password-complete", { password: next, confirmed: true })
+    ).status(),
+  ).toBe(401);
   expect((await post("login", { email, password })).status()).toBe(401);
-  await new Promise(resolve => setTimeout(resolve, 1100));
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   expect((await post("login", { email, password: next })).status()).toBe(200);
+});
+
+test("pairing HTTP enforces session, origin, capability and two-party consent", async ({
+  playwright,
+}) => {
+  const contexts = await Promise.all(
+    [0, 1, 2].map(() =>
+      playwright.request.newContext({ baseURL: "http://127.0.0.1:3102" }),
+    ),
+  );
+  const [a, b, c] = contexts;
+  const headers = { Origin: "http://127.0.0.1:3102" };
+  try {
+    expect((await a.get("/api/pairing/list")).status()).toBe(401);
+    for (const request of contexts) {
+      const email = `pair-http-${randomUUID()}@ourspace.test`,
+        password = randomUUID() + "!Aa9";
+      expect(
+        (
+          await request.post("/api/auth/signup", {
+            headers,
+            data: { email, password, displayName: "Synthetic pairing" },
+          })
+        ).status(),
+      ).toBe(202);
+      const inbox = await (
+        await request.get("http://127.0.0.1:55434/api/v1/messages")
+      ).json();
+      const mail = inbox.messages.find((m: { To: { Address: string }[] }) =>
+        m.To.some((to) => to.Address === email),
+      );
+      expect(Boolean(mail)).toBe(true);
+      const detail = await (
+        await request.get(`http://127.0.0.1:55434/api/v1/message/${mail.ID}`)
+      ).json();
+      const link = String(detail.HTML)
+        .match(/http:\/\/127\.0\.0\.1:55433\/verify[^"<>\s]+/)?.[0]
+        .replaceAll("&amp;", "&");
+      expect(Boolean(link)).toBe(true);
+      expect((await request.get(link!, { maxRedirects: 0 })).status()).toBe(
+        303,
+      );
+      expect(
+        (
+          await request.post("/api/auth/login", {
+            headers,
+            data: { email, password },
+          })
+        ).status(),
+      ).toBe(200);
+    }
+    expect(
+      (
+        await a.post("/api/pairing/create", { data: { confirmed: true } })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await a.post("/api/pairing/create", {
+          headers,
+          data: { confirmed: false },
+        })
+      ).status(),
+    ).toBe(400);
+    expect(
+      (
+        await a.post("/api/pairing/create", {
+          headers,
+          data: { padding: "x".repeat(5000) },
+        })
+      ).status(),
+    ).toBe(400);
+    const created = await a.post("/api/pairing/create", {
+      headers,
+      data: { confirmed: true },
+    });
+    expect(created.status()).toBe(201);
+    expect(created.headers()["cache-control"]).toBe("no-store");
+    const invite = await created.json();
+    expect(
+      (
+        await b.post("/api/pairing/inspect", {
+          headers,
+          data: { id: invite.id },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await b.post("/api/pairing/inspect", {
+          headers,
+          data: { id: invite.id, token: invite.token },
+        })
+      ).status(),
+    ).toBe(200);
+    const accept = {
+      id: invite.id,
+      token: invite.token,
+      commandId: randomUUID(),
+      confirmed: true,
+    };
+    expect(
+      (await b.post("/api/pairing/accept", { headers, data: accept })).status(),
+    ).toBe(200);
+    expect(
+      (
+        await c.post("/api/pairing/inspect", {
+          headers,
+          data: { id: invite.id, token: invite.token },
+        })
+      ).status(),
+    ).toBe(403);
+    const inspected = await (
+      await a.post("/api/pairing/inspect", { headers, data: { id: invite.id } })
+    ).json();
+    expect(inspected.space_id).toBeNull();
+    const confirm = {
+      id: invite.id,
+      recipientId: inspected.recipient_id,
+      version: Number(inspected.version),
+      commandId: randomUUID(),
+      confirmed: true,
+    };
+    expect(
+      (
+        await b.post("/api/pairing/confirm", { headers, data: confirm })
+      ).status(),
+    ).toBe(403);
+    const paired = await a.post("/api/pairing/confirm", {
+      headers,
+      data: confirm,
+    });
+    expect(paired.status()).toBe(200);
+    expect(
+      await (
+        await a.post("/api/pairing/confirm", { headers, data: confirm })
+      ).json(),
+    ).toEqual(await paired.json());
+    expect(
+      (
+        await b.post("/api/pairing/create", {
+          headers,
+          data: { confirmed: true },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(await (await c.get("/api/pairing/list")).json()).toEqual({
+      invitations: [],
+    });
+    expect((await a.post("/api/auth/logout", { headers })).status()).toBe(200);
+    expect((await a.get("/api/pairing/list")).status()).toBe(401);
+  } finally {
+    await Promise.all(contexts.map((context) => context.dispose()));
+  }
 });

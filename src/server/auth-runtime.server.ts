@@ -1,4 +1,5 @@
 import "server-only";
+import { PairingService } from "../modules/m10/pairing/service.server";
 import { createDatabase } from "./database.server";
 import { AuthProvider } from "../modules/m10/auth/provider.server";
 import { SessionService } from "../modules/m10/auth/session.server";
@@ -14,6 +15,7 @@ let instance:
       sessions: SessionService;
       mfa: MfaService;
       recovery: RecoveryService;
+      pairing: PairingService;
     }
   | undefined;
 export function authRuntime() {
@@ -43,6 +45,7 @@ export function authRuntime() {
     sessions: new SessionService(db, provider),
     mfa: new MfaService(db, provider),
     recovery: new RecoveryService(db, provider),
+    pairing: new PairingService(db),
   };
   return instance;
 }

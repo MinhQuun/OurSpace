@@ -2,7 +2,13 @@ import "server-only";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 
 export class DatabaseUnavailableError extends Error {
-  constructor() {
+  constructor(
+    public readonly reason:
+      | "unavailable"
+      | "denied"
+      | "conflict"
+      | "invalid_input" = "unavailable",
+  ) {
     super("Database operation unavailable");
     this.name = "DatabaseUnavailableError";
   }
@@ -57,7 +63,7 @@ export function createDatabase(connectionString: string) {
       const result = await work(client);
       await client.query("COMMIT");
       return result;
-    } catch {
+    } catch (error) {
       if (client) {
         try {
           await client.query("ROLLBACK");
@@ -65,7 +71,19 @@ export function createDatabase(connectionString: string) {
           discard = true;
         }
       }
-      throw new DatabaseUnavailableError();
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? error.code
+          : undefined;
+      throw new DatabaseUnavailableError(
+        code === "42501"
+          ? "denied"
+          : code === "23505"
+            ? "conflict"
+            : code === "22023"
+              ? "invalid_input"
+              : "unavailable",
+      );
     } finally {
       client?.release(discard);
     }
