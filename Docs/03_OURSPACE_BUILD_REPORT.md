@@ -855,3 +855,13 @@ Acceptance: runtime can execute authorized disconnect with deferred private-tabl
 - Real Auth/runtime integration PASS (3.03 seconds; 16 unrelated skipped): successful concurrent duplicate disconnect now executes through createDatabase with actual restricted runtime login; deferred triggers and idempotency succeed. False consent, stale version, proof from partner, revoked partner session, random nonexistent Space, conflicting command reuse and revoked-session replay denied with sanitized categories. Direct reads of Space/disconnect/invitation/audit tables and direct helper call denied.
 - Lint/typecheck/diff review PASS. Migration command rollback, state/invite and exactly-once audit/outbox assertions remain in same integration flow. No API exposure yet. Next: shared-write lifecycle serialization guard and scoped Space service/read/API/UI. Stage 02 and D35 domain integration remain incomplete.
 - History/worktree heuristic audit PASS: 422 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 108eda02d439cec25a83b0ba9bfe12422f83b07c PUSHED; remote master matches HEAD. Next: shared-write lifecycle serialization and scoped Space service/API/UI.
+
+## Task 02.9f - Shared-write lifecycle serialization gate
+
+Acceptance: an Active member's shared mutation can retain lifecycle authorization through its transaction; disconnect cannot overtake that transaction, and new writes after Frozen fail. This gate is not object ACL authorization.
+
+- Migration 0038 adds internal lock_active_space_write with deterministic member account SHARE locks, current actor/session recheck and Space SHARE lock held through transaction completion. No public/runtime grant. Future domain commands must call it in the same transaction as object ACL and mutation; separate autocommit checks are insufficient.
+- Real Auth/PostgreSQL integration PASS (3.06 seconds, 16 unrelated skipped): owner-side lifecycle probe transaction acquires gate, restricted runtime disconnect is observed actually blocked through pg_blocking_pids, probe commit releases it, disconnect completes and subsequent gate call is denied. Nonexistent Space and direct runtime helper call denied; concurrent disconnect retry/atomic assertions still pass.
+- This is a lifecycle-lock POC, not proof that any unimplemented M01-M09 mutation is protected. Object permission, scheduled reveal and actual shared-domain writes still require integration and tests. Next: scoped Space read/service/API/UI and object ACL POC. Stage 02 incomplete.
+- Lint/typecheck/diff check PASS; local migration/checksums PASS. History/worktree heuristic audit PASS: 425 blobs, no findings; authorized historical binary caveat unchanged.

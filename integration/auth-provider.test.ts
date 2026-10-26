@@ -1522,6 +1522,28 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
     } finally { transaction.release(); }
     expect((await owner.query("SELECT state FROM m10.couple_spaces WHERE id=$1", [space.spaceId])).rows[0].state).toBe("active");
     expect((await owner.query("SELECT count(*)::int AS n FROM m10.space_disconnects WHERE space_id=$1", [space.spaceId])).rows[0].n).toBe(0);
+    const writer = await owner.connect();
+    const gate = "SELECT app_internal.lock_active_space_write($1,$2) AS actor";
+    await expect(owner.query(gate, [params[0],randomUUID()])).rejects.toMatchObject({ code: "42501" });
+    await expect(db.query(gate, [params[0],space.spaceId])).rejects.toMatchObject({ reason: "denied" });
+    let pending: ReturnType<typeof db.query> | undefined;
+    try {
+      await writer.query("BEGIN");
+      expect((await writer.query(gate, [params[0],space.spaceId])).rows[0].actor).toBe(identity);
+      const pid = (await writer.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
+      pending = db.query(statement, params);
+      // Observe actual PostgreSQL lock blocking, not an assumed timing delay.
+      await expect.poll(async () => (await owner.query(
+        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))", [pid],
+      )).rows[0].n).toBeGreaterThan(0);
+      await writer.query("COMMIT");
+      expect((await pending).rows[0].id).toBe(space.spaceId);
+    } finally {
+      await writer.query("ROLLBACK");
+      writer.release();
+      if (pending) await pending.catch(() => undefined);
+    }
+    await expect(owner.query(gate, [params[0],space.spaceId])).rejects.toMatchObject({ code: "42501" });
     const concurrent = await Promise.all([db.query(statement, params), db.query(statement, params)]);
     expect(concurrent.map(result => result.rows[0].id)).toEqual([space.spaceId, space.spaceId]);
     await expect(db.query(statement, [params[0],params[1],randomUUID(),space.spaceId,1,true])).rejects.toMatchObject({ reason: "conflict" });
