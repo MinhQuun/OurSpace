@@ -43,6 +43,7 @@ app_internal.begin_credential_change(text,uuid,text),
 app_internal.finish_credential_change(text,uuid,text),
 app_internal.pending_credential_change(text,uuid,text),
 app_internal.create_pairing_invitation(text,uuid,text),
+app_internal.decide_pairing_invitation(text,uuid,uuid,text,text),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

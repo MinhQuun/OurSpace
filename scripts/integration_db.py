@@ -18,6 +18,54 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_invitation_decisions_authorization_race_and_replay(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        c = str(uuid.uuid4())
+        role = 'decision_test_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.decide_pairing_invitation(text,uuid,uuid,text,text) TO {role}; INSERT INTO m10.accounts(id) VALUES ('{c}'); UPDATE m10.accounts SET state='active';",self.database)
+        try:
+            for account,token in [(a,'a'),(b,'b'),(c,'c')]:
+                sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+            def invite(expired=False):
+                key=str(uuid.uuid4())
+                dates=",created_at,expires_at" if expired else ''
+                values=",now()-interval '3 days',now()-interval '1 day'" if expired else ''
+                sql(f"INSERT INTO m10.pairing_invitations(id,creator_id,token_hash{dates}) VALUES ('{key}','{a}','{hashlib.sha256(key.encode()).hexdigest()}'{values});",self.database)
+                return key
+            def command(key,actor,action,receipt=None,wrong=False):
+                digest='0'*64 if wrong else hashlib.sha256(key.encode()).hexdigest()
+                return f"BEGIN; SET LOCAL ROLE {role}; SELECT state FROM app_internal.decide_pairing_invitation(repeat('{actor}',64),'{receipt or uuid.uuid4()}','{key}','{action}','{digest}'); COMMIT;"
+            def denied(statement):
+                with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+            key=invite()
+            denied(command(key,'a','accept'))
+            denied(command(key,'b','revoke'))
+            denied(command(key,'b','accept',wrong=True))
+            receipt=str(uuid.uuid4())
+            self.assertEqual(sql(command(key,'b','accept',receipt),self.database),'awaiting_confirmation')
+            self.assertEqual(sql(command(key,'b','accept',receipt),self.database),'awaiting_confirmation')
+            denied(command(key,'c','accept'))
+            denied(command(key,'c','reject'))
+            self.assertEqual(sql('SELECT count(*) FROM app_internal.audit_events;',self.database),'1')
+            self.assertEqual(sql(command(key,'b','reject'),self.database),'rejected')
+            denied(command(key,'b','accept'))
+            denied(command(invite(True),'b','accept'))
+            key=invite()
+            def attempt(statement):
+                try: return sql(statement,self.database)
+                except subprocess.CalledProcessError: return 'denied'
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                outcomes=list(pool.map(attempt,[command(key,'b','accept'),command(key,'a','revoke')]))
+            self.assertIn('revoked',outcomes)
+            self.assertEqual(sql(f"SELECT state FROM m10.pairing_invitations WHERE id='{key}';",self.database),'revoked')
+            denied(command(key,'b','accept'))
+            self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;',self.database),'0')
+        finally:
+            sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_create_invitation_runtime_authorization_idempotency_and_audit(self):
         migrate(database=self.database)
         seed(self.database)
