@@ -681,3 +681,13 @@ Acceptance: a genuinely expired provider email proof cannot prepare/reset creden
 - Targeted integration PASS (1 selected, 14 unrelated skipped; 2.22 seconds): expired proof denied, old password retained, proposed password denied, distinct fresh email proof succeeds, old password denied after completion. This verifies provider expiry evaluation using an aged persisted timestamp; it does not claim a wall-clock two-day wait or production policy approval.
 - Stage 02 remains in progress: abuse controls, invitation/pairing, disconnected/frozen states and two-account object ACL/security POC remain required before Stage 03.
 - Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 359 blobs, no findings; historical binary caveat unchanged.
+- Commit f0157c27accdf990a6a3870bb990c1b11a55f4ee PUSHED; remote master matches HEAD. Next: finish Auth abuse-control review and begin Stage 02 invitation/pairing foundation with D01-D06 invariants.
+
+## Task 02.8a - Pairing invitation persistence and transition constraints
+
+Acceptance: persist only hashed invitation capability; fixed default 48-hour expiry; different inviter/recipient; recipient acceptance precedes creator confirmation; expired and terminal invitations cannot be reused; deny direct runtime access.
+
+- Migration 0027 adds private RLS-forced m10.pairing_invitations with restrictive account references, unique SHA-256 token digest, immutable identity/expiry/accepted-recipient bindings, consent timestamps and monotonically increasing version. Trigger rejects skipped transitions, self-pairing, early expiry and acceptance/confirmation after expiry. Terminal states cannot be reopened.
+- Targeted real PostgreSQL test PASS (6.045 seconds), including state/version progression, denial of consumed-before-acceptance, self-pairing, early expiry, reopening consumed state, deleting referenced account and backdated acceptance of an expired invitation. Fresh test DB is isolated and removed afterward. Migration applied locally with checksum verification; lint/typecheck PASS.
+- This task is persistence only, with no runtime table grants or public endpoints. Creator identity authorization, active-account/Space checks, audited commands, exact two-member Space activation and concurrency/idempotency are next tasks. A stored consumed state alone is not evidence that pairing P0 works. No data sharing or Space creation is added here; Stage 02 remains incomplete.
+- Full PostgreSQL regression PASS: 15/15 (56.710 seconds). Diff check and history/worktree heuristic audit PASS: 361 blobs, no findings; historical binary caveat unchanged.

@@ -18,6 +18,32 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_pairing_invitation_consent_expiry_and_immutability(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        invitation = str(uuid.uuid4())
+        sql(f"INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));", self.database)
+        self.assertEqual(sql("SELECT expires_at-created_at = interval '48 hours' FROM m10.pairing_invitations;", self.database), 't')
+        def denied(statement):
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement, self.database)
+        denied("UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp();")
+        denied(f"UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{a}',accepted_at=clock_timestamp();")
+        denied("UPDATE m10.pairing_invitations SET state='expired',ended_at=clock_timestamp();")
+        sql(f"UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp();", self.database)
+        self.assertEqual(sql("SELECT state || ':' || version FROM m10.pairing_invitations;", self.database), 'awaiting_confirmation:2')
+        denied("UPDATE m10.pairing_invitations SET state='pending',accepted_by=NULL,accepted_at=NULL;")
+        sql("UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp();", self.database)
+        denied("UPDATE m10.pairing_invitations SET state='pending',confirmed_at=NULL,ended_at=NULL,accepted_by=NULL,accepted_at=NULL;")
+        denied(f"DELETE FROM m10.accounts WHERE id='{a}';")
+        expired = str(uuid.uuid4())
+        sql(f"INSERT INTO m10.pairing_invitations(id,creator_id,token_hash,created_at,expires_at) VALUES ('{expired}','{a}',repeat('b',64),now()-interval '3 days',now()-interval '1 day');", self.database)
+        denied(f"UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=created_at+interval '1 hour' WHERE id='{expired}';")
+        sql(f"UPDATE m10.pairing_invitations SET state='expired',ended_at=clock_timestamp() WHERE id='{expired}';", self.database)
+        self.assertEqual(sql("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='m10.pairing_invitations'::regclass;", self.database), 't')
+
     def test_mfa_transitions_revoke_only_own_sessions_atomically(self):
         migrate(database=self.database)
         seed(self.database)
