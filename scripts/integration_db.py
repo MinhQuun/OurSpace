@@ -18,6 +18,44 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_create_invitation_runtime_authorization_idempotency_and_audit(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        role = 'invite_test_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.create_pairing_invitation(text,uuid,text) TO {role};",self.database)
+        try:
+            sql(f"UPDATE m10.accounts SET state='active' WHERE id='{a}'; INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{a}',repeat('a',64),now()+interval '1 hour'),('{uuid.uuid4()}','{b}',repeat('b',64),now()+interval '1 hour');",self.database)
+            invitation = str(uuid.uuid4())
+            def command(session='a', key=invitation, digest='c', suffix=''):
+                return f"BEGIN; SET LOCAL ROLE {role}; SELECT id FROM app_internal.create_pairing_invitation(repeat('{session}',64),'{key}',repeat('{digest}',64)); {suffix} COMMIT;"
+            for token in ['b','d']:
+                with self.assertRaises(subprocess.CalledProcessError): sql(command(token),self.database)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                for result in pool.map(lambda _: sql(command(),self.database),range(2)):
+                    self.assertEqual(result,invitation)
+            for table in ['m10.pairing_invitations','app_internal.command_receipts','app_internal.audit_events','app_internal.outbox']:
+                self.assertEqual(sql(f'SELECT count(*) FROM {table};',self.database),'1')
+                with self.assertRaises(subprocess.CalledProcessError):
+                    sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT * FROM {table}; COMMIT;',self.database)
+            with self.assertRaises(subprocess.CalledProcessError): sql(command(digest='e'),self.database)
+            with self.assertRaises(subprocess.CalledProcessError): sql(command(key=str(uuid.uuid4()),digest='f',suffix='SELECT 1/0;'),self.database)
+            self.assertEqual(sql('SELECT count(*) FROM m10.pairing_invitations;',self.database),'1')
+            space = str(uuid.uuid4())
+            sql(f"""BEGIN;
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+            with self.assertRaises(subprocess.CalledProcessError): sql(command(key=str(uuid.uuid4()),digest='e'),self.database)
+            sql("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE token_hash=repeat('a',64);",self.database)
+            with self.assertRaises(subprocess.CalledProcessError): sql(command(),self.database)
+            self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;',self.database),'1')
+        finally:
+            sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_couple_space_exact_membership_and_competing_activation(self):
         migrate(database=self.database)
         seed(self.database)
