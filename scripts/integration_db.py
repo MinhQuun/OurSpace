@@ -18,6 +18,50 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_couple_space_exact_membership_and_competing_activation(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        c = str(uuid.uuid4())
+        sql(f"INSERT INTO m10.accounts(id,state) VALUES ('{c}','active');", self.database)
+        def invitation(recipient):
+            key = str(uuid.uuid4())
+            sql(f"""INSERT INTO m10.pairing_invitations(id,creator_id,token_hash)
+VALUES ('{key}','{a}','{secrets.token_hex(32)}');
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{recipient}',accepted_at=clock_timestamp() WHERE id='{key}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{key}';""", self.database)
+            return key
+        first, second = invitation(b), invitation(c)
+        def activation(invite, recipient, incomplete=False):
+            space = str(uuid.uuid4())
+            statement = f"BEGIN; INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invite}'); INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1)"
+            if not incomplete:
+                statement += f",('{space}','{recipient}',2)"
+            return statement + '; COMMIT;'
+        for statement in [activation(first,b,True), activation(first,c)]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement, self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;', self.database), '0')
+        def attempt(statement):
+            try:
+                sql(statement,self.database)
+                return True
+            except subprocess.CalledProcessError:
+                return False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt,[activation(first,b),activation(second,c)]))
+        self.assertEqual(sum(results),1)
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_spaces;', self.database),'1')
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_memberships;', self.database),'2')
+        for statement in ["DELETE FROM m10.couple_memberships;", "UPDATE m10.couple_memberships SET slot=3;", "UPDATE m10.couple_memberships SET space_state='frozen';"]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(statement,self.database)
+        sql("UPDATE m10.couple_spaces SET state='disconnecting'; UPDATE m10.couple_spaces SET state='frozen';",self.database)
+        self.assertEqual(sql("SELECT count(*) FROM m10.couple_memberships WHERE space_state='frozen';",self.database),'2')
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql("UPDATE m10.couple_spaces SET state='active';",self.database)
+
     def test_pairing_invitation_consent_expiry_and_immutability(self):
         migrate(database=self.database)
         seed(self.database)
