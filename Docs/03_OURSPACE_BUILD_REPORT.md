@@ -762,3 +762,13 @@ Acceptance: pairing routes require current HttpOnly session, same-origin POST an
 - PASS production build, final lint/typecheck/diff check, all 5 database adapter tests (including permission/input/unique-conflict/unavailable classification), targeted real HTTP pairing test (3.5 seconds). Test covers three verified sessions, origin/body/consent denial, capability preview, accepted-recipient scope, wrong confirmer, successful confirmation/replay, paired-account new invitation denial and logout invalidation.
 - Preserved editor formatting in existing tests. Remaining: request abuse limits, desktop/mobile pairing UI, invitation history pagination and disconnect/ACL POC. These endpoints are local/development, no production deployment authorized or performed. Stage 02 remains incomplete.
 - Full HTTP project regression PASS: 5/5 (13.8 seconds), covering Auth/MFA/reset/pairing. History/worktree heuristic audit PASS: 386 blobs, no findings; historical binary caveat unchanged.
+- Commit 7a1975950e37b0f53e15ff7bc8c6e0fdfd95840d PUSHED; remote master matches HEAD. Next: desktop/mobile pairing UI with two-party identity confirmation and safe link handling, then abuse controls and remaining security POC.
+
+## Task 02.8i - Desktop/mobile two-party pairing interface
+
+Acceptance: authenticated users create/revoke invitations, recipients inspect inviter identity and accept/reject, and creator explicitly confirms the accepted recipient before Space creation; capabilities stay out of query strings and browser storage.
+
+- Added /account/pairing with required consent checkboxes, participant names/IDs, invitation states, expiry and explicit refresh. Invitation link uses a fragment removed on opening; capability stays in memory, with lost-link guidance to revoke/recreate. Reload preserves server state, not capability. Account navigation links to pairing.
+- PASS lint, production build, typecheck and diff check. Initial React lint findings (effect invocation and render-time ref access) corrected without suppressions. Real Auth/PostgreSQL browser tests PASS desktop/mobile 2/2 (6.6 seconds): independent sessions, consent gates, B acceptance alone does not create Space, A sees B identity and confirms, both see persisted paired state, fragment cleared, no browser storage and no horizontal overflow. Desktop/mobile screenshots inspected locally.
+- Remaining: abuse controls, invitation history pagination, fuller negative-path browser coverage, disconnect/frozen workflow and object ACL security POC. UI requires explicit refresh; no realtime pairing claim. Stage 02 and overall P0 remain incomplete.
+- History/worktree heuristic audit PASS: 392 blobs, no findings; authorized historical binary caveat unchanged.

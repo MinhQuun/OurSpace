@@ -172,3 +172,13 @@ a:focus-visible {
 .mfa-settings code {
   overflow-wrap: anywhere;
 }
+
+.pairing-invitation {
+  border-top: 1px solid #b9a4ad;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  overflow-wrap: anywhere;
+}
+.pairing-panel small {
+  overflow-wrap: anywhere;
+}
