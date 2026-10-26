@@ -18,6 +18,37 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_disconnect_step_up_uses_signed_fresh_password_not_refresh_iat(self):
+        migrate(database=self.database)
+        seed(self.database)
+        account='10000000-0000-4000-8000-000000000001'
+        key=secrets.token_urlsafe(48)
+        sql(f"INSERT INTO app_internal.auth_verifier VALUES (true,'https://auth.ourspace.test','{key}'); UPDATE m10.accounts SET state='active'; INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('a',64),now()+interval '1 hour');",self.database)
+        now=int(time.time())
+        claims=dict(iss='https://auth.ourspace.test',aud='authenticated',role='authenticated',sub=account,email='synthetic@ourspace.test',is_anonymous=False,iat=now-1,exp=now+300,aal='aal1',amr=[dict(method='password',timestamp=now-1)])
+        def proof(payload,signing_key=key):
+            def encode(value): return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip('=')
+            body=encode(dict(alg='HS256',typ='JWT'))+'.'+encode(payload)
+            return body+'.'+base64.urlsafe_b64encode(hmac.new(signing_key.encode(),body.encode(),hashlib.sha256).digest()).decode().rstrip('=')
+        session_char="a"
+        def check(payload,signing_key=key):
+            return sql(f"SELECT app_internal.disconnect_actor(repeat('{session_char}',64),'{proof(payload,signing_key)}');",self.database)
+        self.assertEqual(check(claims),account)
+        for changed in [dict(amr=[]),dict(amr=None),dict(amr=[dict(method='password',timestamp=now-301)]),dict(amr=[dict(method='password',timestamp=now+300)]),dict(amr=[dict(method='token_refresh',timestamp=now-1)]),dict(sub=str(uuid.uuid4())),dict(exp=now-1)]:
+            with self.assertRaises(subprocess.CalledProcessError): check({**claims,**changed})
+        with self.assertRaises(subprocess.CalledProcessError): check(claims,secrets.token_urlsafe(48))
+        enrollment=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.mfa_enrollments(id,account_id) VALUES ('{enrollment}','{account}'); UPDATE m10.mfa_enrollments SET state='verified',provider_factor_id='{uuid.uuid4()}',verified_at=clock_timestamp();",self.database)
+        # MFA verification intentionally revokes old sessions; use a new AAL2 session fixture.
+        session_char="b"
+        sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('b',64),now()+interval '1 hour');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): check(claims)
+        for amr in [claims['amr'],claims['amr']+[dict(method='totp',timestamp=now-301)]]:
+            with self.assertRaises(subprocess.CalledProcessError): check({**claims,'aal':'aal2','amr':amr})
+        self.assertEqual(check({**claims,'aal':'aal2','amr':claims['amr']+[dict(method='totp',timestamp=now-1)]}),account)
+        sql("UPDATE m10.sessions SET revoked_at=now();",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): check(claims)
+
     def test_disconnect_origin_is_member_bound_immutable_and_thirty_days(self):
         migrate(database=self.database)
         seed(self.database)

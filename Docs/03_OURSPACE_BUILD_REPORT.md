@@ -814,3 +814,13 @@ Acceptance: M10 D33/D34 foundation records the initiating member and authoritati
 - Initial generated expression using timestamptz arithmetic was rejected by PostgreSQL immutability requirements; corrected to explicit UTC conversion before interval addition. Final lint/typecheck/diff checks PASS.
 - Not a completed disconnect workflow: next tasks must add step-up proof, atomic command/audit/outbox/invite invalidation, read scopes and API/UI; D35 scheduler enforcement requires domain implementation later. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 410 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 378c9059c6953ee44b4e8dacdfd8988d203c7a19 PUSHED; remote master matches HEAD. Next: step-up-authorized atomic disconnect command and shared-write security boundary.
+
+## Task 02.9b - Internal disconnect reauthentication guard
+
+Acceptance: disconnect authority must bind a live app session to independently signature-verified provider identity and fresh password evidence, plus fresh MFA when enrollment requires it; refreshed token iat alone cannot prove reauthentication.
+
+- Added internal, ungranted disconnect_actor helper. Locks active actor and live session through caller transaction, checks signed password AMR timestamp, checks AAL2 and fresh MFA AMR for verified nonterminal enrollments. Five-minute freshness is a local security profile requiring production review. No provider token storage. This is not an exposed disconnect command.
+- Real PostgreSQL signed synthetic-proof matrix PASS (6.173 seconds): fresh password accepted; missing/old/future/refresh-only AMR, wrong identity/signature, expired proof, missing/stale MFA and revoked session denied; fresh signed TOTP AAL2 accepted. MFA fixture initially reused the session correctly revoked by enrollment verification; fixed fixture to create a fresh session without weakening revocation.
+- Lint/typecheck and diff check PASS. Next: verify actual GoTrue AMR including recovery method, integrate atomic unilateral disconnect command/audit/outbox/invite invalidation, then service/API/UI. Synthetic proofs validate database enforcement only, not real provider interoperability. No P0 completion claim; Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 413 blobs, no findings; authorized historical binary caveat unchanged.
