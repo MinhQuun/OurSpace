@@ -865,3 +865,13 @@ Acceptance: an Active member's shared mutation can retain lifecycle authorizatio
 - Real Auth/PostgreSQL integration PASS (3.06 seconds, 16 unrelated skipped): owner-side lifecycle probe transaction acquires gate, restricted runtime disconnect is observed actually blocked through pg_blocking_pids, probe commit releases it, disconnect completes and subsequent gate call is denied. Nonexistent Space and direct runtime helper call denied; concurrent disconnect retry/atomic assertions still pass.
 - This is a lifecycle-lock POC, not proof that any unimplemented M01-M09 mutation is protected. Object permission, scheduled reveal and actual shared-domain writes still require integration and tests. Next: scoped Space read/service/API/UI and object ACL POC. Stage 02 incomplete.
 - Lint/typecheck/diff check PASS; local migration/checksums PASS. History/worktree heuristic audit PASS: 425 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit f86382407ed123322d9152b80f5497c389495e08 PUSHED; remote master matches HEAD. Next: scoped Space read/service/API/UI and object ACL POC.
+
+## Task 02.9g - Membership-scoped Space status reads
+
+Acceptance: current members can inspect Active/Frozen lifecycle metadata and processing deadline without table grants or disclosure of private content; revoked/invalid sessions see no rows.
+
+- Migration 0039 exposes explicit list_my_spaces output fields only: Space ID/state/version/created time, partner ID/display name and disconnect/deadline times. Membership and live session determine scope; inactive partner display name redacted. No email, disconnect initiator/reason, content, capability or grant details. Runtime receives only function EXECUTE.
+- Real Auth/runtime integration PASS (3.27 seconds, 16 unrelated skipped): each member sees its counterpart and exact field allowlist, Active has null disconnect dates, Frozen has a 30-day window, revoked/invalid sessions return empty, fresh partner login retains Frozen metadata. Existing concurrent disconnect/lock/negative assertions remain passing. Local migration and provisioning applied successfully.
+- List is bounded to 100 most recent Spaces; pagination remains future work. Status metadata confers no object read/export permission. Next: Space service and protected API/UI; Stage 02/object ACL POC remain incomplete.
+- Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 428 blobs, no findings; authorized historical binary caveat unchanged.
