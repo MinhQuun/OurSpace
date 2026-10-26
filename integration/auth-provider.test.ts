@@ -1455,3 +1455,41 @@ test("pairing service joins two real verified sessions only after both consent",
   await sessions.revoke(a.token,a.id);
   await expect(pairing.inspect(a.token,invitation.id)).rejects.toMatchObject({kind:"denied"});
 },30_000);
+
+
+test("disconnect guard accepts real password TOTP and recovery proofs", async () => {
+  const owner = new Pool({ host: "127.0.0.1", port: 55432, database: "ourspace",
+    user: "ourspace_owner", password: readFileSync(".local/db-password", "utf8").trim(), max: 1 });
+  const credentials = { email: `disconnect-${randomUUID()}@ourspace.test`, password: randomUUID()+"!Aa9" };
+  try {
+    await auth.signUp(credentials.email, credentials.password);
+    expect((await fetch(await confirmationLink(credentials.email), { redirect: "manual" })).status).toBe(303);
+    const app = await sessions.login(credentials.email, credentials.password, "Synthetic disconnect");
+    const identity = await sessions.actor(app.token);
+    const check = async (session: string, proof: string) => {
+      const result = await owner.query("SELECT app_internal.disconnect_actor($1,$2) AS actor", [createHash("sha256").update(session).digest("hex"), proof]);
+      return result.rows[0].actor;
+    };
+    const password = await auth.signIn(credentials.email, credentials.password);
+    expect(await check(app.token, password.accessToken)).toBe(identity);
+    const service = new MfaService(db, auth);
+    const setup = await service.start(app.token, credentials, randomUUID());
+    const verified = await service.verify(app.token, credentials, setup.enrollmentId, setup.version, localTotp(setup.secret));
+    const login = await auth.signIn(credentials.email, credentials.password);
+    await expect(check(verified.session.token, login.accessToken)).rejects.toMatchObject({ code: "42501" });
+    const challenge = await auth.challengeTotp(login.accessToken, (await auth.identity(login.accessToken)).totpFactorIds[0]);
+    const factor = (await auth.identity(login.accessToken)).totpFactorIds[0];
+    const totp = await auth.verifyTotp(login.accessToken, factor, challenge, localTotp(setup.secret));
+    expect(await check(verified.session.token, totp.accessToken)).toBe(identity);
+    const codes = await auth.generateRecoveryCodes(totp.accessToken);
+    const recoveryLogin = await auth.signIn(credentials.email, credentials.password);
+    const recovery = await auth.verifyRecoveryCode(recoveryLogin.accessToken, codes[0]);
+    // Only method names are asserted; bearer proof and one-time codes never logged.
+    const methods = JSON.parse(Buffer.from(recovery.accessToken.split(".")[1], "base64url").toString()).amr.map((entry: { method: string }) => entry.method);
+    expect(methods).toContain("password");
+    expect(methods).toContain("mfa/recovery_code");
+    expect(await check(verified.session.token, recovery.accessToken)).toBe(identity);
+    await sessions.revoke(verified.session.token, verified.session.id);
+    await expect(check(verified.session.token, recovery.accessToken)).rejects.toMatchObject({ code: "42501" });
+  } finally { await owner.end(); }
+}, 30_000);

@@ -824,3 +824,14 @@ Acceptance: disconnect authority must bind a live app session to independently s
 - Real PostgreSQL signed synthetic-proof matrix PASS (6.173 seconds): fresh password accepted; missing/old/future/refresh-only AMR, wrong identity/signature, expired proof, missing/stale MFA and revoked session denied; fresh signed TOTP AAL2 accepted. MFA fixture initially reused the session correctly revoked by enrollment verification; fixed fixture to create a fresh session without weakening revocation.
 - Lint/typecheck and diff check PASS. Next: verify actual GoTrue AMR including recovery method, integrate atomic unilateral disconnect command/audit/outbox/invite invalidation, then service/API/UI. Synthetic proofs validate database enforcement only, not real provider interoperability. No P0 completion claim; Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 413 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit b83b102ce6c4ad27b814cdcdfbc5bc237eff44aa PUSHED; remote master matches HEAD. Next: real provider AMR verification before exposing disconnect command.
+
+## Task 02.9c - Real provider disconnect proof compatibility
+
+Acceptance: real local GoTrue password, TOTP and recovery-code proofs pass the internal disconnect guard; password-only proof with verified MFA and revoked app sessions fail.
+
+- Added real provider integration using synthetic verified account and actual MFA enrollment, password login, TOTP challenge and one-time recovery code. Internal helper tested with owner connection without granting it to runtime; no provider proof or code is logged/stored in repository.
+- Initial provider test found actual recovery AMR is mfa/recovery_code, not recovery_code. Added migration 0036 replacing helper allowlist using observed provider contract; preserved applied migration 0035. Applied locally and checksum verification passed.
+- PASS real provider test (2.58 seconds; 16 unrelated skipped): password before MFA accepted, password-only after verification denied, fresh TOTP and recovery proofs accepted, revoked app session denied. Synthetic signed negative-case regression PASS (6.216 seconds); lint/typecheck/diff check PASS.
+- Next: atomic disconnect command with unilateral consent, record/Space transition, invite invalidation, audit/outbox and concurrency tests, then service/API/UI. Stage 02 remains incomplete; no disconnect workflow completion claim.
+- History/worktree heuristic audit PASS: 416 blobs, no findings; authorized historical binary caveat unchanged.
