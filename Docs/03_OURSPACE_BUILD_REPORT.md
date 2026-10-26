@@ -671,3 +671,13 @@ Acceptance: completing password reset invalidates earlier provider refresh-token
 - Targeted integration PASS (1 selected, 13 unrelated skipped; 1.97 seconds). Lint/typecheck/diff check PASS. No application code change or production action. No tokens logged/persisted. Existing DB issuance cutoff and per-request application-session revocation remain separate enforcement boundaries; this test proves refresh denial, not immediate cryptographic invalidation of already-issued JWTs.
 - Remaining: provider email proof expiry acceptance, abuse controls and other Stage 02 gates. Stage 02 remains in progress.
 - History/worktree heuristic audit PASS: 357 blobs, no findings; historical binary caveat unchanged.
+- Commit 7b8d3d33f7a6552cf2017af2a6e6e683152570bc PUSHED; remote master matches HEAD. Next: provider email-proof expiry acceptance.
+
+## Task 02.7n - Expired provider recovery proof acceptance
+
+Acceptance: a genuinely expired provider email proof cannot prepare/reset credentials; old credentials remain valid, and a newly issued email proof can complete reset.
+
+- Added real provider integration with a tightly scoped fixture update (matching the fresh synthetic account UUID and email) to age recovery_sent_at by two days in local Auth DB. No clock changes, provider response mocks or runtime privileges added. Test-only connection reads the existing ignored local Auth owner credential and closes in finally.
+- Targeted integration PASS (1 selected, 14 unrelated skipped; 2.22 seconds): expired proof denied, old password retained, proposed password denied, distinct fresh email proof succeeds, old password denied after completion. This verifies provider expiry evaluation using an aged persisted timestamp; it does not claim a wall-clock two-day wait or production policy approval.
+- Stage 02 remains in progress: abuse controls, invitation/pairing, disconnected/frozen states and two-account object ACL/security POC remain required before Stage 03.
+- Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 359 blobs, no findings; historical binary caveat unchanged.

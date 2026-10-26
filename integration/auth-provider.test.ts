@@ -1,5 +1,6 @@
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { Pool } from "pg";
 import { afterAll, expect, test } from "vitest";
 import { AuthProvider } from "../src/modules/m10/auth/provider.server";
 import { createDatabase } from "../src/server/database.server";
@@ -1376,4 +1377,38 @@ test("password reset revokes prior provider refresh sessions without affecting a
   expect((await refresh(other.refreshToken)).status).toBe(200);
   const fresh = await auth.signIn(email, next);
   expect((await refresh(fresh.refreshToken)).status).toBe(200);
+}, 30_000);
+
+
+test("expired provider email proof is denied without changing credentials and a new email recovers", async () => {
+  const email = `expired-reset-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  await auth.signUp(email, password);
+  await fetch(await confirmationLink(email), { redirect: "manual" });
+  const identity = await auth.identity((await auth.signIn(email, password)).accessToken);
+  await auth.requestPasswordRecovery(email);
+  const expiredLink = new URL(await confirmationLink(email));
+  // Test fixture only: age this synthetic user's actual provider timestamp.
+  // No system clock/config changes and no mocked provider responses.
+  const fixture = new Pool({ host: "127.0.0.1", port: 55432, database: "ourspace_auth",
+    user: "ourspace_auth_owner", password: readFileSync(".local/auth-db-password", "utf8").trim(), max: 1 });
+  try {
+    const aged = await fixture.query(
+      "UPDATE auth.users SET recovery_sent_at = now() - interval '2 days' WHERE id = $1 AND email = $2 RETURNING id",
+      [identity.id, email],
+    );
+    expect(aged.rowCount).toBe(1);
+  } finally { await fixture.end(); }
+  const service = new RecoveryService(db, auth);
+  await expect(service.prepare(expiredLink.searchParams.get("token")!)).rejects.toMatchObject({ kind: "denied" });
+  await auth.signIn(email, password);
+  await expect(auth.signIn(email, next)).rejects.toMatchObject({ kind: "denied" });
+  await auth.requestPasswordRecovery(email);
+  const freshLink = new URL(await confirmationLink(email));
+  expect(freshLink.searchParams.get("token") !== expiredLink.searchParams.get("token")).toBe(true);
+  const prepared = await service.prepare(freshLink.searchParams.get("token")!);
+  await service.complete(prepared.accessToken, prepared.id, prepared.receipt, next);
+  await auth.signIn(email, next);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
 }, 30_000);
