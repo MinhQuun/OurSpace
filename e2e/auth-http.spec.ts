@@ -626,6 +626,33 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
     expect(await (await c.get("/api/pairing/list")).json()).toEqual({
       invitations: [],
     });
+    // c already spent one inspect attempt; denied attempts must consume budget too.
+    for (let index = 0; index < 29; index++) {
+      expect(
+        (
+          await c.post("/api/pairing/inspect", {
+            headers,
+            data: { id: invite.id },
+          })
+        ).status(),
+      ).toBe(403);
+    }
+    const limited = await c.post("/api/pairing/inspect", {
+      headers,
+      data: { id: invite.id },
+    });
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    expect(limited.headers()["cache-control"]).toBe("no-store");
+    expect((await c.get("/api/pairing/list")).status()).toBe(200);
+    expect(
+      (
+        await a.post("/api/pairing/inspect", {
+          headers,
+          data: { id: invite.id },
+        })
+      ).status(),
+    ).toBe(200);
     expect((await a.post("/api/auth/logout", { headers })).status()).toBe(200);
     expect((await a.get("/api/pairing/list")).status()).toBe(401);
   } finally {

@@ -47,7 +47,14 @@ app_internal.decide_pairing_invitation(text,uuid,uuid,text,text),
 app_internal.confirm_pairing(text,uuid,uuid,uuid,bigint,boolean),
 app_internal.inspect_pairing_invitation(text,uuid,text),
 app_internal.list_pairing_invitations(text),
+app_internal.consume_pairing_request(text,text),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
+    # Local evaluation defaults only; production thresholds require separate review.
+    # Independent action windows keep inspection spam from exhausting revocation.
+    sql("""INSERT INTO app_internal.pairing_request_policies(action,max_requests,window_seconds)
+VALUES ('create',10,60),('inspect',30,60),('list',60,60),
+('accept',10,60),('reject',10,60),('revoke',20,60),('confirm',10,60)
+ON CONFLICT(action) DO NOTHING;""")
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 
 

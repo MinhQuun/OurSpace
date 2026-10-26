@@ -782,3 +782,14 @@ Acceptance: concurrent requests share an account/action budget across sessions a
 - Real PostgreSQL targeted test PASS (8.167 seconds): eight concurrent calls across two sessions share exactly three allowed requests, separate actor/action remains available, denied retry interval bounded, elapsed window resets, missing policy/invalid/revoked session denied, runtime role cannot read budget table. Expiry uses synthetic aged DB state.
 - Integration boundary: HTTP is not wired yet; caller must commit budget consumption before running protected commands so failed business operations still consume budget. Next task: local reviewed policy configuration, runtime grant/service and HTTP 429/Retry-After handling with regression tests. No production abuse protection claim. Stage 02 incomplete.
 - Lint/typecheck/diff check PASS. History/worktree heuristic scan PASS: 399 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 02959b206ec6bf5ef76cac2b72fa49cecafd21fc PUSHED; remote master matches HEAD. Next: wire committed request budgets into pairing HTTP with explicit local policy and 429 tests.
+
+## Task 02.8k - Enforce pairing HTTP request budgets
+
+Acceptance: all authenticated pairing actions consume a committed account/action budget before body validation or domain execution; exhausted budget returns no-store 429 with Retry-After, without starving unrelated actions/accounts.
+
+- Added service consumption and route guard for GET list and all six POST actions. Consumption commits separately, so forbidden capability attempts and invalid bodies cannot refund budget. Existing origin/session checks precede budget; business authorization still rechecks session in its own transaction. Missing policy or database failure returns sanitized 503, never bypasses guard.
+- Local provisioning grants only the narrow function and inserts evaluation policies if absent: per 60-second window create/accept/reject/confirm 10, inspect 30, list 60, revoke 20. These are local engineering trial values, not approved production thresholds; existing configured policies are preserved. Independent revocation budget avoids inspection exhaustion blocking revocation.
+- Applied migration/runtime grants locally. PASS lint, typecheck, production build, diff check and real pairing HTTP + desktop/mobile regression 3/3 (9.9 seconds). HTTP exercises 30 denied inspect attempts followed by 429/positive Retry-After/no-store; same actor list and another actor inspection remain available. Existing consent, CSRF, body limits and logout checks pass.
+- Remaining: UI-specific rate-limit messaging, anonymous/edge abuse protection and production threshold review; current account budget does not claim volumetric DDoS protection. Stage 02 disconnect/frozen/object ACL POC and later stages still pending.
+- History/worktree heuristic audit PASS: 402 blobs, no findings; authorized historical binary caveat unchanged.

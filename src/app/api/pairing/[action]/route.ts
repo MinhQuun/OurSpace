@@ -40,6 +40,22 @@ async function actor(request: NextRequest) {
   if (!match || !(await auth.sessions.actor(match[2]))) return null;
   return { auth, token: match[2] };
 }
+async function budget(
+  session: NonNullable<Awaited<ReturnType<typeof actor>>>,
+  action: string,
+) {
+  const result = await session.auth.pairing.consumeRequest(
+    session.token,
+    action,
+  );
+  if (result.allowed) return null;
+  const response = json(
+    { error: "rate_limited", retryAfter: result.retry_after },
+    429,
+  );
+  response.headers.set("Retry-After", String(result.retry_after));
+  return response;
+}
 async function body(request: NextRequest): Promise<Record<string, unknown>> {
   if (
     request.headers.get("content-type")?.split(";")[0].trim() !==
@@ -81,6 +97,8 @@ export async function GET(request: NextRequest, context: Context) {
   try {
     const session = await actor(request);
     if (!session) return json({ error: "unauthenticated" }, 401);
+    const limited = await budget(session, "list");
+    if (limited) return limited;
     return json({
       invitations: await session.auth.pairing.list(session.token),
     });
@@ -105,6 +123,8 @@ export async function POST(request: NextRequest, context: Context) {
       return json({ error: "forbidden" }, 403);
     const session = await actor(request);
     if (!session) return json({ error: "unauthenticated" }, 401);
+    const limited = await budget(session, action);
+    if (limited) return limited;
     const input = await body(request);
     const pairing = auth.pairing;
     if (action === "create") {
