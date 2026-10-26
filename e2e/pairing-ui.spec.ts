@@ -41,9 +41,10 @@ test("two browsers pair only after identity checks and both consents", async ({
         })
       ).status(),
     ).toBe(200);
+    return {email,password};
   }
   try {
-    await account(page.request, "Synthetic Partner A");
+    const credentials = await account(page.request, "Synthetic Partner A");
     await account(partner.request, "Synthetic Partner B");
     await page.goto("/account/pairing");
     const create = page
@@ -138,6 +139,23 @@ test("two browsers pair only after identity checks and both consents", async ({
       path: `.local/pairing-${testInfo.project.name}.png`,
       fullPage: true,
     });
+    await page.goto("/account/spaces");
+    await expect(page.getByRole("heading",{name:"Đang liên kết",exact:true})).toBeVisible();
+    await page.getByLabel("Email của bạn").fill(credentials.email);
+    await page.getByLabel("Mật khẩu hiện tại").fill(credentials.password);
+    await page.getByRole("button",{name:"Ngừng liên kết",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Đang liên kết",exact:true})).toBeVisible();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button",{name:"Ngừng liên kết",exact:true}).click();
+    await expect(page.getByRole("heading",{name:"Đã ngừng liên kết",exact:true})).toBeVisible();
+    await expect(page.getByLabel("Mật khẩu hiện tại")).toHaveCount(0);
+    await partner.goto("http://127.0.0.1:3102/account/spaces");
+    await expect(partner.getByRole("heading",{name:"Đã ngừng liên kết",exact:true})).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("Thời hạn xử lý:",{exact:false})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    await page.screenshot({path:`.local/spaces-${testInfo.project.name}.png`,fullPage:true});
   } finally {
     await other.close();
   }

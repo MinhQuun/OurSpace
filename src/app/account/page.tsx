@@ -8,6 +8,7 @@ export default function AccountPage() {
         OUR SPACE
       </Link>
       <AccountForm />
+      <Link href="/account/spaces">Space và ngừng liên kết</Link>
       <Link href="/account/pairing">Ghép đôi</Link>
       <Link href="/account/reset">Quên mật khẩu?</Link>
       <Link href="/account/security">Cài đặt xác thực hai bước</Link>
