@@ -772,3 +772,13 @@ Acceptance: authenticated users create/revoke invitations, recipients inspect in
 - PASS lint, production build, typecheck and diff check. Initial React lint findings (effect invocation and render-time ref access) corrected without suppressions. Real Auth/PostgreSQL browser tests PASS desktop/mobile 2/2 (6.6 seconds): independent sessions, consent gates, B acceptance alone does not create Space, A sees B identity and confirms, both see persisted paired state, fragment cleared, no browser storage and no horizontal overflow. Desktop/mobile screenshots inspected locally.
 - Remaining: abuse controls, invitation history pagination, fuller negative-path browser coverage, disconnect/frozen workflow and object ACL security POC. UI requires explicit refresh; no realtime pairing claim. Stage 02 and overall P0 remain incomplete.
 - History/worktree heuristic audit PASS: 392 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit b3dced72f7d42b4e1e745f401fedc36df2bee462 PUSHED; remote master matches HEAD. Next: pairing abuse controls and remaining Stage 02 disconnect/object ACL security POC.
+
+## Task 02.8j - Atomic database pairing request budget
+
+Acceptance: concurrent requests share an account/action budget across sessions and server processes; valid sessions only, bounded private storage, independent revocation budget and deterministic retry interval. Thresholds are deployment security configuration, not new BRD decisions (M10 section 1 / OPEN-M10 security parameters).
+
+- Added migration 0033: private policy and budget tables, forced RLS, execute-only security-definer function with fixed search path. Account comes from session_actor, never caller-supplied identity. One row per account/action; denied requests do not grow rows/counters indefinitely. Missing policy fails closed. No thresholds seeded by migration.
+- Real PostgreSQL targeted test PASS (8.167 seconds): eight concurrent calls across two sessions share exactly three allowed requests, separate actor/action remains available, denied retry interval bounded, elapsed window resets, missing policy/invalid/revoked session denied, runtime role cannot read budget table. Expiry uses synthetic aged DB state.
+- Integration boundary: HTTP is not wired yet; caller must commit budget consumption before running protected commands so failed business operations still consume budget. Next task: local reviewed policy configuration, runtime grant/service and HTTP 429/Retry-After handling with regression tests. No production abuse protection claim. Stage 02 incomplete.
+- Lint/typecheck/diff check PASS. History/worktree heuristic scan PASS: 399 blobs, no findings; authorized historical binary caveat unchanged.

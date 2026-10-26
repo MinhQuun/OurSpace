@@ -18,6 +18,38 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_pairing_request_budget_concurrency_identity_and_expiry(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        role = 'budget_test_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.consume_pairing_request(text,text) TO {role}; UPDATE m10.accounts SET state='active';",self.database)
+        try:
+            for account,token in [(a,'a'),(a,'b'),(b,'c')]:
+                sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{account}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+            def consume(token='a',action='inspect'):
+                return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT allowed::text || ':' || retry_after::text FROM app_internal.consume_pairing_request(repeat('{token}',64),'{action}'); COMMIT;",self.database)
+            with self.assertRaises(subprocess.CalledProcessError): consume()
+            sql("INSERT INTO app_internal.pairing_request_policies VALUES ('inspect',3,60),('revoke',2,60);",self.database)
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results=list(pool.map(lambda i: consume('a' if i%2 else 'b'),range(8)))
+            self.assertEqual(results.count('true:0'),3)
+            self.assertEqual(sum(value.startswith('false:') for value in results),5)
+            self.assertTrue(all(1 <= int(v.split(':')[1]) <= 60 for v in results if v.startswith('false:')))
+            self.assertEqual(consume('c'),'true:0')
+            self.assertEqual(consume('a','revoke'),'true:0')
+            self.assertEqual(sql(f"SELECT requests FROM app_internal.pairing_request_budgets WHERE account_id='{a}' AND action='inspect';",self.database),'3')
+            sql(f"UPDATE app_internal.pairing_request_budgets SET window_started_at=now()-interval '61 seconds' WHERE account_id='{a}';",self.database)
+            self.assertEqual(consume(),'true:0')
+            with self.assertRaises(subprocess.CalledProcessError): consume('d')
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT * FROM app_internal.pairing_request_budgets; COMMIT;',self.database)
+            sql("UPDATE m10.sessions SET revoked_at=now() WHERE token_hash=repeat('a',64);",self.database)
+            with self.assertRaises(subprocess.CalledProcessError): consume()
+        finally:
+            sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_pairing_identity_inspection_is_capability_and_participant_scoped(self):
         migrate(database=self.database)
         seed(self.database)
