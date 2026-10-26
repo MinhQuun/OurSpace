@@ -661,3 +661,13 @@ Acceptance: actual enabled MFA can reset using TOTP or a one-time recovery code 
 - PASS 6/6 desktop/mobile cases (38.4 seconds): TOTP reset, recovery-code reset, missing-factor denial; consumed emailed proof rejected on retry; unchanged old password still works with MFA after denied prepare; completed reset requires new password plus MFA, rejects used recovery code and retains enabled enrollment.
 - Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 355 blobs, no findings; historical binary caveat unchanged. Preserved editor formatting in the test file. Application code/build unchanged in this test-only task.
 - Remaining Stage 02 gates include actual provider expiry/refresh revocation and abuse controls. Missing-factor prepare currently consumes the email proof and requires a fresh email, as documented by the UI and tested here. Full Stage 02/P0 is not yet complete.
+- Commit 4c6c6ba5fd197f4a990ab3611e35154f6bcdccfb PUSHED; remote master matches HEAD. Next: verify provider refresh revocation and real expiry, then remaining Stage 02 gates.
+
+## Task 02.7m - Provider refresh-session revocation acceptance
+
+Acceptance: completing password reset invalidates earlier provider refresh-token families, including a rotated family, while preserving another account and allowing a fresh login with the new password.
+
+- Added a real Auth/RecoveryService integration case: two independent pre-reset logins, one rotation before reset, actual email proof/prepare/complete, then refresh attempts using original, rotated and second-session tokens. All three return 400; another account and a fresh new-password session still refresh successfully.
+- Targeted integration PASS (1 selected, 13 unrelated skipped; 1.97 seconds). Lint/typecheck/diff check PASS. No application code change or production action. No tokens logged/persisted. Existing DB issuance cutoff and per-request application-session revocation remain separate enforcement boundaries; this test proves refresh denial, not immediate cryptographic invalidation of already-issued JWTs.
+- Remaining: provider email proof expiry acceptance, abuse controls and other Stage 02 gates. Stage 02 remains in progress.
+- History/worktree heuristic audit PASS: 357 blobs, no findings; historical binary caveat unchanged.

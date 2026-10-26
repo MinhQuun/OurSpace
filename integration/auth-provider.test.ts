@@ -1189,7 +1189,6 @@ test("credential change gate blocks fresh sessions until same-account receipt co
   });
 }, 30_000);
 
-
 test("recovery service prepares before mutation and completes or reconciles provider update", async () => {
   for (const mode of ["normal", "interrupted", "mfa"]) {
     const email = `reset-service-${randomUUID()}@ourspace.test`;
@@ -1197,33 +1196,77 @@ test("recovery service prepares before mutation and completes or reconciles prov
     const next = randomUUID() + "!Bb8";
     await auth.signUp(email, password);
     await fetch(await confirmationLink(email), { redirect: "manual" });
-    const old = await sessions.login(email, password, "Synthetic reset service");
+    const old = await sessions.login(
+      email,
+      password,
+      "Synthetic reset service",
+    );
     let secret = "";
     if (mode === "mfa") {
       const login = await auth.signIn(email, password);
       const factor = await auth.enrollTotp(login.accessToken);
       secret = factor.secret;
-      await auth.verifyTotp(login.accessToken, factor.id,
-        await auth.challengeTotp(login.accessToken, factor.id), localTotp(secret));
+      await auth.verifyTotp(
+        login.accessToken,
+        factor.id,
+        await auth.challengeTotp(login.accessToken, factor.id),
+        localTotp(secret),
+      );
     }
     await auth.requestPasswordRecovery(email);
     const link = new URL(await confirmationLink(email));
     const service = new RecoveryService(db, auth);
-    const prepared = await service.prepare(link.searchParams.get("token")!, secret ? { method: "totp", code: localTotp(secret) } : undefined);
+    const prepared = await service.prepare(
+      link.searchParams.get("token")!,
+      secret ? { method: "totp", code: localTotp(secret) } : undefined,
+    );
     expect(await sessions.actor(old.token)).toBeNull();
     await auth.signIn(email, password); // prepare has not changed provider password
-    await expect(service.complete(prepared.accessToken, prepared.id,
-      randomBytes(32).toString("base64url"), next)).rejects.toThrow();
+    await expect(
+      service.complete(
+        prepared.accessToken,
+        prepared.id,
+        randomBytes(32).toString("base64url"),
+        next,
+      ),
+    ).rejects.toThrow();
     await auth.signIn(email, password); // wrong receipt has no credential side effect
-    if (mode === "interrupted") await auth.updatePassword(prepared.accessToken, next);
-    await service.complete(prepared.accessToken, prepared.id, prepared.receipt, next);
-    await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
-    await expect(service.complete(prepared.accessToken, prepared.id, prepared.receipt, randomUUID()+"!Cc7")).rejects.toThrow();
+    if (mode === "interrupted")
+      await auth.updatePassword(prepared.accessToken, next);
+    await service.complete(
+      prepared.accessToken,
+      prepared.id,
+      prepared.receipt,
+      next,
+    );
+    await expect(auth.signIn(email, password)).rejects.toMatchObject({
+      kind: "denied",
+    });
+    await expect(
+      service.complete(
+        prepared.accessToken,
+        prepared.id,
+        prepared.receipt,
+        randomUUID() + "!Cc7",
+      ),
+    ).rejects.toThrow();
     await new Promise((resolve) => setTimeout(resolve, 1100));
-    expect(Boolean(await sessions.actor((await sessions.login(email, next, undefined, secret ? { method: "totp", code: localTotp(secret) } : undefined)).token))).toBe(true);
+    expect(
+      Boolean(
+        await sessions.actor(
+          (
+            await sessions.login(
+              email,
+              next,
+              undefined,
+              secret ? { method: "totp", code: localTotp(secret) } : undefined,
+            )
+          ).token,
+        ),
+      ),
+    ).toBe(true);
   }
 }, 30_000);
-
 
 test("fresh recovery email renews lost prepare receipt while keeping the login gate closed", async () => {
   const email = `renew-reset-${randomUUID()}@ourspace.test`;
@@ -1240,18 +1283,28 @@ test("fresh recovery email renews lost prepare receipt while keeping the login g
   await new Promise((resolve) => setTimeout(resolve, 61_000));
   await auth.requestPasswordRecovery(email);
   const nextLink = new URL(await confirmationLink(email));
-  expect(nextLink.searchParams.get("token") === firstLink.searchParams.get("token")).toBe(false);
+  expect(
+    nextLink.searchParams.get("token") === firstLink.searchParams.get("token"),
+  ).toBe(false);
   const renewed = await service.prepare(nextLink.searchParams.get("token")!);
   expect(renewed.id === first.id).toBe(true);
   expect(renewed.receipt === first.receipt).toBe(false);
-  await expect(service.complete(first.accessToken, first.id, first.receipt, next)).rejects.toThrow();
+  await expect(
+    service.complete(first.accessToken, first.id, first.receipt, next),
+  ).rejects.toThrow();
   await expect(sessions.login(email, password)).rejects.toThrow();
   await auth.signIn(email, password);
-  await service.complete(renewed.accessToken, renewed.id, renewed.receipt, next);
+  await service.complete(
+    renewed.accessToken,
+    renewed.id,
+    renewed.receipt,
+    next,
+  );
   await new Promise((resolve) => setTimeout(resolve, 1100));
-  expect(Boolean(await sessions.actor((await sessions.login(email, next)).token))).toBe(true);
+  expect(
+    Boolean(await sessions.actor((await sessions.login(email, next)).token)),
+  ).toBe(true);
 }, 90_000);
-
 
 test("verified account can reset before its first application login", async () => {
   const email = `first-reset-${randomUUID()}@ourspace.test`;
@@ -1263,8 +1316,64 @@ test("verified account can reset before its first application login", async () =
   const link = new URL(await confirmationLink(email));
   const service = new RecoveryService(db, auth);
   const prepared = await service.prepare(link.searchParams.get("token")!);
-  await service.complete(prepared.accessToken, prepared.id, prepared.receipt, next);
+  await service.complete(
+    prepared.accessToken,
+    prepared.id,
+    prepared.receipt,
+    next,
+  );
   await new Promise((resolve) => setTimeout(resolve, 1100));
-  expect(Boolean(await sessions.actor((await sessions.login(email, next)).token))).toBe(true);
-  await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
+  expect(
+    Boolean(await sessions.actor((await sessions.login(email, next)).token)),
+  ).toBe(true);
+  await expect(auth.signIn(email, password)).rejects.toMatchObject({
+    kind: "denied",
+  });
+}, 30_000);
+
+test("password reset revokes prior provider refresh sessions without affecting another identity", async () => {
+  const email = `refresh-reset-${randomUUID()}@ourspace.test`;
+  const otherEmail = `refresh-other-${randomUUID()}@ourspace.test`;
+  const password = randomUUID() + "!Aa9";
+  const next = randomUUID() + "!Bb8";
+  for (const address of [email, otherEmail]) {
+    await auth.signUp(address, password);
+    expect(
+      (await fetch(await confirmationLink(address), { redirect: "manual" }))
+        .status,
+    ).toBe(303);
+  }
+  const first = await auth.signIn(email, password);
+  const second = await auth.signIn(email, password);
+  const other = await auth.signIn(otherEmail, password);
+  const refresh = (refreshToken: string) =>
+    fetch("http://127.0.0.1:55433/token?grant_type=refresh_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  // Rotate one old session before reset to cover a live token family as well.
+  const rotatedResponse = await refresh(first.refreshToken);
+  expect(rotatedResponse.status).toBe(200);
+  const rotated = await rotatedResponse.json();
+  await auth.requestPasswordRecovery(email);
+  const link = new URL(await confirmationLink(email));
+  const service = new RecoveryService(db, auth);
+  const prepared = await service.prepare(link.searchParams.get("token")!);
+  await service.complete(
+    prepared.accessToken,
+    prepared.id,
+    prepared.receipt,
+    next,
+  );
+  for (const token of [
+    first.refreshToken,
+    rotated.refresh_token,
+    second.refreshToken,
+  ]) {
+    expect((await refresh(token)).status).toBe(400);
+  }
+  expect((await refresh(other.refreshToken)).status).toBe(200);
+  const fresh = await auth.signIn(email, next);
+  expect((await refresh(fresh.refreshToken)).status).toBe(200);
 }, 30_000);
