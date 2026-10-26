@@ -803,3 +803,14 @@ Acceptance: HTTP 429 shows a safe Vietnamese retry instruction instead of implyi
 - Real desktop/mobile browser tests exhaust create budget using nine invalid requests after initial create, submit through UI, assert wait message and retained paired state, then refresh independently and clear message. PASS 2/2 (7.7 seconds). Initial test locator matched Next route announcer as well; corrected to scope pairing panel, no application suppression.
 - PASS final lint/typecheck, production build and diff review. History/worktree heuristic audit: 407 blobs, no findings; authorized historical binary caveat unchanged.
 - Stage 02 remains incomplete. Next: disconnect/frozen lifecycle and object ACL security POC; production abuse controls/threshold review remain open.
+- Commit 098d79bb6a4259a2e370db228b5c0ba60e2d93fe PUSHED; remote master matches HEAD. Next: M10 disconnect/frozen lifecycle and object ACL foundation.
+
+## Task 02.9a - Immutable disconnect origin and processing window
+
+Acceptance: M10 D33/D34 foundation records the initiating member and authoritative time once, derives the 30-day processing deadline and cannot commit a disconnect record while Space remains Active. No deletion of partner data.
+
+- Migration 0034 adds private forced-RLS space_disconnects with member/Space restrictive FKs, immutable origin trigger, UTC-derived generated deadline and deferred inactive-Space check. Existing lifecycle guard prevents blind reactivation; membership state cascades consistently. No runtime write grant or public endpoint introduced.
+- Real PostgreSQL target PASS (4.967 seconds): active-Space insertion denied/rolled back, unrelated initiator denied with transition rollback, atomic record plus Disconnecting/Frozen succeeds, two memberships remain frozen, deadline exactly 30 days under non-UTC session, duplicate/update/delete/reactivation denied, RLS hides records from probe role.
+- Initial generated expression using timestamptz arithmetic was rejected by PostgreSQL immutability requirements; corrected to explicit UTC conversion before interval addition. Final lint/typecheck/diff checks PASS.
+- Not a completed disconnect workflow: next tasks must add step-up proof, atomic command/audit/outbox/invite invalidation, read scopes and API/UI; D35 scheduler enforcement requires domain implementation later. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 410 blobs, no findings; authorized historical binary caveat unchanged.

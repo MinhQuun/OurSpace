@@ -18,6 +18,37 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_disconnect_origin_is_member_bound_immutable_and_thirty_days(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a = '10000000-0000-4000-8000-000000000001'
+        b = '10000000-0000-4000-8000-000000000002'
+        key, space = str(uuid.uuid4()), str(uuid.uuid4())
+        sql(f"""BEGIN;
+UPDATE m10.accounts SET state='active';
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{key}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{key}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{key}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{key}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        insert=f"INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}');"
+        with self.assertRaises(subprocess.CalledProcessError): sql(insert,self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.space_disconnects;',self.database),'0')
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"BEGIN; UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; {insert.replace(a,str(uuid.uuid4()))} COMMIT;",self.database)
+        self.assertEqual(sql(f"SELECT state FROM m10.couple_spaces WHERE id='{space}';",self.database),'active')
+        sql(f"BEGIN; {insert} UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
+        self.assertEqual(sql("SET timezone='America/New_York'; SELECT extract(epoch FROM processing_until-initiated_at)::bigint FROM m10.space_disconnects;",self.database),str(30*86400))
+        self.assertEqual(sql("SELECT count(*) FROM m10.couple_memberships WHERE space_state='frozen';",self.database),'2')
+        for statement in [insert,'DELETE FROM m10.space_disconnects;',"UPDATE m10.space_disconnects SET initiated_at=now();",f"UPDATE m10.couple_spaces SET state='active' WHERE id='{space}';"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        role='disconnect_test_'+uuid.uuid4().hex
+        try:
+            sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.space_disconnects TO {role};',self.database)
+            self.assertEqual(sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM m10.space_disconnects; COMMIT;',self.database),'0')
+        finally: sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_pairing_request_budget_concurrency_identity_and_expiry(self):
         migrate(database=self.database)
         seed(self.database)
