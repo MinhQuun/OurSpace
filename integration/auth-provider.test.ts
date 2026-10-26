@@ -7,6 +7,7 @@ import { createDatabase } from "../src/server/database.server";
 import { SessionService } from "../src/modules/m10/auth/session.server";
 import { localTotp } from "./local-totp";
 import { RecoveryService } from "../src/modules/m10/auth/recovery.server";
+import { PairingService } from "../src/modules/m10/pairing/service.server";
 import { MfaService } from "../src/modules/m10/auth/mfa.server";
 
 const auth = new AuthProvider("http://127.0.0.1:55433");
@@ -1412,3 +1413,45 @@ test("expired provider email proof is denied without changing credentials and a 
   await auth.signIn(email, next);
   await expect(auth.signIn(email, password)).rejects.toMatchObject({ kind: "denied" });
 }, 30_000);
+
+
+test("pairing service joins two real verified sessions only after both consent", async () => {
+  const users = [];
+  for (const label of ["A","B","C"]) {
+    const email = `pair-${randomUUID()}@ourspace.test`;
+    const password = randomUUID()+"!Aa9";
+    await auth.signUp(email,password,`Synthetic partner ${label}`);
+    await fetch(await confirmationLink(email),{ redirect:"manual" });
+    users.push(await sessions.login(email,password));
+  }
+  const [a,b,c] = users;
+  const pairing = new PairingService(db);
+  const proposal = pairing.proposal();
+  const invitation = await pairing.create(a.token,proposal);
+  const retry = await pairing.create(a.token,proposal);
+  expect(invitation.id === retry.id && invitation.token === retry.token).toBe(true);
+  expect((await pairing.list(a.token)).length).toBe(1);
+  expect((await pairing.list(b.token)).length).toBe(0);
+  await expect(pairing.inspect(b.token,invitation.id)).rejects.toMatchObject({kind:"denied"});
+  const preview = await pairing.inspect(b.token,invitation.id,invitation.token);
+  expect(preview.creator_name).toBe("Synthetic partner A");
+  expect(preview.recipient_id).toBeNull();
+  expect(JSON.stringify(preview).includes(invitation.token)).toBe(false);
+  await expect(pairing.decide(b.token,randomUUID(),invitation.id,"accept",false,invitation.token)).rejects.toMatchObject({kind:"invalid_input"});
+  const acceptCommand = randomUUID();
+  const accepted = await pairing.decide(b.token,acceptCommand,invitation.id,"accept",true,invitation.token);
+  expect(accepted.state).toBe("awaiting_confirmation");
+  expect((await pairing.decide(b.token,acceptCommand,invitation.id,"accept",true,invitation.token)).version).toBe(accepted.version);
+  await expect(pairing.inspect(c.token,invitation.id,invitation.token)).rejects.toMatchObject({kind:"denied"});
+  const pending = await pairing.inspect(a.token,invitation.id);
+  expect(pending.recipient_name).toBe("Synthetic partner B");
+  expect(pending.space_id).toBeNull();
+  const confirmCommand = randomUUID();
+  const paired = await pairing.confirm(a.token,confirmCommand,invitation.id,pending.recipient_id!,Number(pending.version),true);
+  expect(await pairing.confirm(a.token,confirmCommand,invitation.id,pending.recipient_id!,Number(pending.version),true)).toEqual(paired);
+  expect((await pairing.inspect(b.token,invitation.id)).space_id).toBe(paired.spaceId);
+  await expect(pairing.create(b.token)).rejects.toThrow();
+  expect((await pairing.list(c.token)).length).toBe(0);
+  await sessions.revoke(a.token,a.id);
+  await expect(pairing.inspect(a.token,invitation.id)).rejects.toMatchObject({kind:"denied"});
+},30_000);
