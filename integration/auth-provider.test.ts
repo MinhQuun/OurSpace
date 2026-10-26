@@ -1,3 +1,4 @@
+import { SpaceService } from "../src/modules/m10/spaces/service.server";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
@@ -1499,13 +1500,14 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
     const accepted = await pairing.decide(partner.token, randomUUID(), invitation.id, "accept", true, invitation.token);
     const partnerId = (await sessions.actor(partner.token))!;
     const space = await pairing.confirm(verified.session.token, randomUUID(), invitation.id, partnerId, Number(accepted.version), true);
-    const status = async (token: string) => (await db.query("SELECT * FROM app_internal.list_my_spaces($1)", [createHash("sha256").update(token).digest("hex")])).rows;
+    const spaces = new SpaceService(db, auth);
+    const status = (token: string) => spaces.list(token);
     const activeSpaces = await status(verified.session.token);
     expect(activeSpaces).toHaveLength(1);
     expect(Object.keys(activeSpaces[0]).sort()).toEqual(["id","state","version","created_at","partner_id","partner_name","disconnected_at","processing_until"].sort());
     expect(activeSpaces[0]).toMatchObject({ id: space.spaceId, state: "active", partner_id: partnerId, disconnected_at: null, processing_until: null });
     expect((await status(partner.token))[0].partner_id).toBe(identity);
-    expect(await status(randomBytes(32).toString("base64url"))).toEqual([]);
+    await expect(status(randomBytes(32).toString("base64url"))).rejects.toMatchObject({ kind: "denied" });
     // Partner need not remain online or consent to disconnect.
     await sessions.revoke(partner.token, partner.id);
     const command = randomUUID();
@@ -1521,6 +1523,9 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
       await expect(db.query(`SELECT * FROM ${table}`)).rejects.toMatchObject({ reason: "denied" });
     }
     await expect(db.query("SELECT app_internal.disconnect_actor($1,$2)",params.slice(0,2))).rejects.toMatchObject({ reason: "denied" });
+    await expect(spaces.disconnect(verified.session.token, credentials,command,space.spaceId,1,false)).rejects.toMatchObject({ kind: "invalid_input" });
+    await expect(spaces.disconnect(verified.session.token, partnerCredentials,command,space.spaceId,1,true)).rejects.toMatchObject({ kind: "denied" });
+    await expect(spaces.disconnect(verified.session.token, credentials,command,space.spaceId,1,true)).rejects.toMatchObject({ kind: "mfa_required" });
     const transaction = await owner.connect();
     try {
       await transaction.query("BEGIN");
@@ -1551,6 +1556,8 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
       if (pending) await pending.catch(() => undefined);
     }
     await expect(owner.query(gate, [params[0],space.spaceId])).rejects.toMatchObject({ code: "42501" });
+    expect(await spaces.disconnect(verified.session.token, credentials,command,space.spaceId,1,true,{method:"totp",code:localTotp(setup.secret)})).toEqual({spaceId:space.spaceId});
+    expect(await spaces.disconnect(verified.session.token, credentials,command,space.spaceId,1,true,{method:"recovery",code:codes[1]})).toEqual({spaceId:space.spaceId});
     const concurrent = await Promise.all([db.query(statement, params), db.query(statement, params)]);
     expect(concurrent.map(result => result.rows[0].id)).toEqual([space.spaceId, space.spaceId]);
     await expect(db.query(statement, [params[0],params[1],randomUUID(),space.spaceId,1,true])).rejects.toMatchObject({ reason: "conflict" });
@@ -1560,14 +1567,14 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
     expect((await owner.query("SELECT count(*)::int AS n FROM app_internal.outbox WHERE command_id=$1", [command])).rows[0].n).toBe(1);
     const frozenSpaces = await status(verified.session.token);
     expect(frozenSpaces[0].state).toBe("frozen");
-    expect(frozenSpaces[0].processing_until.getTime()-frozenSpaces[0].disconnected_at.getTime()).toBe(30*86400*1000);
-    expect(await status(partner.token)).toEqual([]);
+    expect(frozenSpaces[0].processing_until!.getTime()-frozenSpaces[0].disconnected_at!.getTime()).toBe(30*86400*1000);
+    await expect(status(partner.token)).rejects.toMatchObject({ kind: "denied" });
     const partnerAgain = await sessions.login(partnerCredentials.email, partnerCredentials.password);
     expect((await status(partnerAgain.token))[0]).toMatchObject({ id: space.spaceId, state: "frozen", partner_id: identity });
     await expect(db.query(statement, [params[0],params[1],command,space.spaceId,2,true])).rejects.toMatchObject({ reason: "invalid_input" });
     await sessions.revoke(verified.session.token, verified.session.id);
     await expect(db.query(statement, params)).rejects.toMatchObject({ reason: "denied" });
-    expect(await status(verified.session.token)).toEqual([]);
+    await expect(status(verified.session.token)).rejects.toMatchObject({ kind: "denied" });
     await expect(check(verified.session.token, recovery.accessToken)).rejects.toMatchObject({ code: "42501" });
   } finally { await owner.end(); }
 }, 30_000);

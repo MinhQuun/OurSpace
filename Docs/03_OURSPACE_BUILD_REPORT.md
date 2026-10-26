@@ -875,3 +875,13 @@ Acceptance: current members can inspect Active/Frozen lifecycle metadata and pro
 - Real Auth/runtime integration PASS (3.27 seconds, 16 unrelated skipped): each member sees its counterpart and exact field allowlist, Active has null disconnect dates, Frozen has a 30-day window, revoked/invalid sessions return empty, fresh partner login retains Frozen metadata. Existing concurrent disconnect/lock/negative assertions remain passing. Local migration and provisioning applied successfully.
 - List is bounded to 100 most recent Spaces; pagination remains future work. Status metadata confers no object read/export permission. Next: Space service and protected API/UI; Stage 02/object ACL POC remain incomplete.
 - Lint/typecheck/diff check PASS. History/worktree heuristic audit PASS: 428 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit d30f600d7229a2be264a4beed787bde3f90bfecc PUSHED; remote master matches HEAD. Next: scoped Space service with credential/MFA reauthentication, then protected API/UI.
+
+## Task 02.9h - Space service with request-scoped reauthentication
+
+Acceptance: server service lists scoped status and invokes disconnect only after valid identifiers/version/consent, live app session, same-account password and required TOTP/recovery verification; provider proof is never returned.
+
+- Added server-only SpaceService. Uses existing AuthProvider and SessionService, canonical session digest, current provider identity and owned factor validation. Database still independently checks signed freshness, membership and session at commit. Returns only spaceId; list uses explicit typed metadata. No runtime/API wiring yet.
+- Real Auth/PostgreSQL integration PASS (4.48 seconds; 16 unrelated skipped): scoped list/revoked-session denial now exercises service, false consent/wrong-account/missing MFA denied, TOTP and fresh recovery-code service retries return exact committed Space ID. Existing atomic initial disconnect and lock-concurrency assertions continue to use runtime DB directly; initial service mutation/browser completion not claimed.
+- Lint/typecheck PASS after correcting nullable timestamp test access; diff review PASS. Next: protected HTTP orchestration and direct first-mutation service coverage, then desktop/mobile disconnect UI. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 432 blobs, no findings; authorized historical binary caveat unchanged.
