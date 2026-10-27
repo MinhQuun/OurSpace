@@ -109,6 +109,18 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
         edit_role='edit_probe_'+uuid.uuid4().hex
         sql(f"CREATE ROLE {edit_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {edit_role}; GRANT EXECUTE ON FUNCTION app_internal.lock_shared_resource_edit(text,uuid,uuid) TO {edit_role};",self.database)
         self.addCleanup(lambda: sql(f'DROP ROLE {edit_role};'))
+        sql(f"""CREATE FUNCTION payload_poc.edit_document(token text, space_id uuid, target uuid, content text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $fn$
+BEGIN
+ PERFORM app_internal.lock_shared_resource_edit(token,space_id,target);
+ UPDATE payload_poc.documents SET body=content WHERE resource_id=target;
+END;
+$fn$;
+REVOKE ALL ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) FROM PUBLIC;
+GRANT USAGE ON SCHEMA payload_poc TO {edit_role};
+GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edit_role};""",self.database)
+        def write_statement(content):
+            return f"SELECT payload_poc.edit_document(repeat('b',64),'{space}','{resource}','{content}');"
         def edit(token,key=resource,space_id=space):
             return sql(f"BEGIN; SET LOCAL ROLE {edit_role}; SELECT app_internal.lock_shared_resource_edit(repeat('{token}',64),'{space_id}','{key}'); COMMIT;",self.database)
         self.assertEqual(edit('a'),a)
@@ -158,8 +170,41 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
                 with self.assertRaises(subprocess.CalledProcessError): revoke(token,version,confirmed)
             revoke(ending='ROLLBACK')
             self.assertEqual(read('b'),'t')
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                self.assertEqual(list(pool.map(lambda _: revoke(),range(2))),[live_grant,live_grant])
+            # Hold a real authorized payload write open; observe revoke waiting
+            # on this exact PostgreSQL backend before releasing the transaction.
+            writer_name='acl_writer_'+uuid.uuid4().hex
+            revoker_name='acl_revoker_'+uuid.uuid4().hex
+            writer=subprocess.Popen(['docker','compose','-f',str(ROOT/'compose.yaml'),'exec','-T','db','psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-U','ourspace_owner','-d',self.database],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
+            def observed(query):
+                deadline=time.monotonic()+15
+                while time.monotonic()<deadline:
+                    if sql(query,self.database)=='t': return
+                    time.sleep(0.05)
+                self.fail('Expected PostgreSQL concurrency state was not observed')
+            try:
+                writer.stdin.write(f"SET application_name='{writer_name}'; BEGIN; SET LOCAL ROLE {edit_role}; {write_statement('committed synthetic edit')}\n")
+                writer.stdin.flush()
+                observed(f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='{writer_name}' AND state='idle in transaction');")
+                # Other connections still see the previously committed payload.
+                self.assertEqual(payload('a',resource)['rows'][0]['body'],'shared synthetic journal')
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending=pool.submit(sql,f"SET application_name='{revoker_name}'; BEGIN; SET LOCAL ROLE {revoke_role}; SELECT app_internal.revoke_resource_grant(repeat('a',64),'{command}','{resource}','{live_grant}',{revision},true); COMMIT;",self.database)
+                    try:
+                        observed(f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity r JOIN pg_stat_activity w ON w.pid=ANY(pg_blocking_pids(r.pid)) WHERE r.application_name='{revoker_name}' AND w.application_name='{writer_name}');")
+                        self.assertFalse(pending.done())
+                        output,error=writer.communicate('COMMIT;\n',timeout=15)
+                        self.assertEqual(writer.returncode,0,error)
+                    finally:
+                        if writer.poll() is None: writer.communicate('ROLLBACK;\n',timeout=15)
+                    self.assertEqual(pending.result(timeout=15),live_grant)
+                self.assertEqual(payload('a',resource)['rows'][0]['body'],'committed synthetic edit')
+                with self.assertRaises(subprocess.CalledProcessError):
+                    sql(f"BEGIN; SET LOCAL ROLE {edit_role}; {write_statement('denied late edit')} COMMIT;",self.database)
+                self.assertEqual(payload('a',resource)['rows'][0]['body'],'committed synthetic edit')
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    self.assertEqual(list(pool.map(lambda _: revoke(),range(2))),[live_grant,live_grant])
+            finally:
+                if writer.poll() is None: writer.communicate('ROLLBACK;\n',timeout=15)
             self.assertEqual(read('b'),'f')
             self.assertEqual(inspect('b'),[])
             self.assertEqual(payload('b'),empty)

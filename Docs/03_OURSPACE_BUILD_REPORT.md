@@ -998,3 +998,13 @@ Acceptance: shared edits require a live session, Active exact Space, nondeleted 
 - PostgreSQL integration PASS (39.249 seconds): execute-only probe allows owner/editor; rejects private child, unknown object/Space, invalid session, conditional resource even for owner, revoked editor, viewer and frozen owner/recipient. Existing payload/read/Inspector/grant/lifecycle assertions pass.
 - Lint/typecheck/diff check PASS. Next task must prove concurrent write/revoke serialization with observed blocking and actual payload mutation; this task verifies permission decisions, not the complete concurrency acceptance criterion. Runtime/API/Inspector UI and storage/realtime POC remain pending. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 468 blobs, no findings; approved historical binary caveat unchanged.
+- Commit f362b09d35982c25d04ac56b9d60bf1b66ce4944 PUSHED; remote master matches HEAD. Next: observed concurrent payload write/revoke test, then runtime/API and Inspector UI.
+
+## Task 02.10i - Observed payload write/revoke concurrency
+
+Acceptance: an authorized write and grant revocation serialize through transaction end; a request after committed revocation cannot mutate payload; duplicate revocation remains idempotent.
+
+- Extended the disposable PostgreSQL payload fixture with an execute-only edit function calling the production shared edit guard before updating stored content. A persistent psql transaction holds an actual recipient edit open while a second connection runs owner revocation.
+- PostgreSQL integration PASS (39.858 seconds): pg_stat_activity confirms the writer is idle inside its transaction; another connection still sees old content; pg_blocking_pids confirms the revoker waits on that exact writer backend. Writer commit persists the edit, revocation then commits, and a subsequent edit fails without changing content. Concurrent replay still returns the original result with one receipt/audit/outbox.
+- Lint/typecheck/diff check PASS. Fixture remains a security POC, not a completed M01 editor or production version-history implementation. Next: runtime ACL service/API and Inspector UI, followed by storage/realtime security POC. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 471 blobs, no findings; approved historical binary caveat unchanged.
