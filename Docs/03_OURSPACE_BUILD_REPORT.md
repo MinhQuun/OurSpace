@@ -926,3 +926,14 @@ Acceptance: M10 D13-D18 / BR-M10-34-48 foundation represents object ownership se
 - Real PostgreSQL test PASS (6.110 seconds): default zero grants, immutable owner/module/kind, invalid issuer/Space denial, metadata version increment, actual paired-member grant, role/delete/duplicate denial, no revoked-grant resurrection, explicit replacement retains both records, RLS-hidden resource under probe role.
 - This is schema foundation only. No grant-creation command or effective-permission resolver yet; no claim of complete ACL enforcement across domains. Next: scoped read authorization and linked-private-resource POC, then permission mutations/inspector. Stage 02 incomplete.
 - Lint/typecheck/diff review PASS. History/worktree heuristic audit PASS: 448 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 49bcadf1d0ad495b22671e26d1338b3162b75c10 PUSHED; remote master matches HEAD. Next: effective read authorization, independent linked-resource checks and ACL security POC.
+
+## Task 02.10b - Current-session object read gate
+
+Acceptance: base read authorization resolves current actor and exact resource grant, denies unknown/private/conditional/deleted resources uniformly, does not inherit another resource's grant, and rechecks revoked sessions/grants.
+
+- Migration 0042 adds internal can_read_resource boolean gate with no public/runtime grant. Standard nondeleted resource owner can read; explicit viewer/commenter/editor grants apply only in their bound Active Space or existing processing-window read scope. Archived/Closed/expired processing is denied by this base gate pending domain disposition rules. Contributor whole-object access is denied until scoped domain resolver exists. No domain action/approval/reveal permission inferred.
+- Real PostgreSQL integration PASS (11.501 seconds): conditional owner/recipient denial, standard owner/grantee access, second Private resource stays denied, unknown resource/invalid session same false result, grant revocation immediate, valid Frozen processing read retained, Archived grantee denial while owner retained, deletion and session revocation deny.
+- Test uses actual registry/grants/sessions/Space rows, but not a complete linked-resource API yet. Next: authorized payload/list/linked-preview POC with execute-only runtime and count/search leakage checks; grant commands and Permission Inspector remain pending. Conditional/Contributor domain support not claimed complete. Stage 02 incomplete.
+- Lint/typecheck/diff review PASS.
+- History/worktree heuristic audit PASS: 451 blobs, no findings; authorized historical binary caveat unchanged.

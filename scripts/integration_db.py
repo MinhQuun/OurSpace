@@ -46,6 +46,32 @@ COMMIT;""",self.database)
         with self.assertRaises(subprocess.CalledProcessError): sql('UPDATE m10.resource_grants SET revoked_at=NULL;',self.database)
         sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','editor');",self.database)
         self.assertEqual(sql('SELECT count(*) FROM m10.resource_grants;',self.database),'2')
+        child=str(uuid.uuid4())
+        sql(f"UPDATE m10.accounts SET state='active'; INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{child}','M02','media','{a}');",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        def read(token,key=resource):
+            return sql(f"SELECT app_internal.can_read_resource(repeat('{token}',64),'{key}');",self.database)
+        self.assertEqual(read('a'),'f')  # conditional blocks even owner until domain rules exist
+        self.assertEqual(read('b'),'f')
+        sql("UPDATE m10.resources SET access_mode='standard';",self.database)
+        self.assertEqual(read('a'),'t')
+        self.assertEqual(read('b'),'t')
+        self.assertEqual(read('b',child),'f')  # another resource never inherits the grant
+        self.assertEqual(read('a',child),'t')
+        self.assertEqual(read('b',str(uuid.uuid4())),'f')
+        self.assertEqual(read('c'),'f')
+        sql("UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL;",self.database)
+        self.assertEqual(read('b'),'f')
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','viewer'); BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
+        self.assertEqual(read('b'),'t')  # existing read rights during processing, no write capability
+        sql(f"UPDATE m10.couple_spaces SET state='archived' WHERE id='{space}';",self.database)
+        self.assertEqual(read('b'),'f')
+        self.assertEqual(read('a'),'t')
+        sql(f"UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id='{resource}';",self.database)
+        self.assertEqual(read('a'),'f')
+        sql("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE token_hash=repeat('a',64);",self.database)
+        self.assertEqual(read('a',child),'f')
         role='resource_probe_'+uuid.uuid4().hex
         try:
             sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.resources,m10.resource_grants TO {role};',self.database)
