@@ -15,6 +15,10 @@ export type BasePermissionInspection = {
     | "denied";
 };
 
+export type SharingOption = {
+  resource_version: string; space_id: string; recipient_id: string;
+  recipient_name: string | null; role: "viewer" | "commenter" | "editor";
+};
 export type ResourceGrant = {
   grant_id: string; resource_version: string; grantee_id: string;
   space_id: string; role: string; granted_at: Date;
@@ -74,6 +78,13 @@ export class PermissionService {
       [hash(token),input.commandId,input.resourceId,input.grantId,input.version,input.confirmed]);
     if (!result.rows[0]?.id) throw new AuthProviderError("denied");
     return { grantId: result.rows[0].id };
+  }
+
+  async options(token: string, resourceId: string) {
+    ids(resourceId);
+    return (await this.db.query<SharingOption>(
+      "SELECT resource_version,space_id,recipient_id,recipient_name,role FROM app_internal.resource_sharing_options($1,$2)",
+      [hash(token),resourceId])).rows;
   }
 
 }

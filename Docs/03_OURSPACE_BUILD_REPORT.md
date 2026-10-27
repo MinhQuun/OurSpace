@@ -1081,3 +1081,12 @@ Acceptance: owner receives only an active partner and domain-supported roles for
 - Real PostgreSQL integration PASS (46.013 seconds): execute-only owner receives exact viewer choice/version after policy exists; missing policy, recipient actor, invalid session, unknown object and unrelated child return empty; conditional source and deactivated recipient denied in rolled-back transactions; choices disappear after grant issuance and remain empty after disconnect. Earlier ACL/concurrency tests pass.
 - Lint/typecheck/diff review PASS. Next: wire choices to runtime/API and implement owner grant/revoke consent UI. No production domain policy seeded. Stage 02 remains incomplete.
 - History/worktree heuristic audit PASS: 515 blobs, no findings; approved historical binary caveat unchanged. Prior commit/push attempt was not executed because automatic approval review hit a usage limit; resuming the same tested task without bypassing review.
+- Commit 4eaa521e3a83388daca41c011009d01d3c7303fe PUSHED; remote master matches HEAD. Approval-review interruption resolved on retry. Next: sharing options runtime/API and owner consent UI. Stage 02 incomplete.
+
+## Task 02.10q - Sharing choices runtime and HTTP
+
+Acceptance: authenticated owner can retrieve server-derived sharing choices via restricted runtime; nonowner/unknown targets yield empty choices; endpoint does not cache results and uses bounded account request budget.
+
+- Added typed PermissionService.options and GET /api/permissions/options?resourceId=UUID. Uses existing permission_list budget (shared with grant-list reads), current session, cross-site rejection, strict query shape and no-store response. Runtime receives only resource_sharing_options execution, no table grant.
+- Local migrations through 0051/checksums and runtime provisioning PASS. Real paired-account HTTP integration PASS (5.4 seconds): exact partner display name/ID, Space, role and version; recipient/unrelated user/unknown object empty; arbitrary subject rejected; existing grant hides choices; revoke restores choice with revision 3. Previous pairing/grant/revoke/disconnect assertions continue passing.
+- Lint/typecheck/production build/diff review PASS. Next: owner grant/revoke consent UI on desktop/mobile. No production domain policies seeded; Stage 02 incomplete.

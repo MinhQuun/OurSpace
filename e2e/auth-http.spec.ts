@@ -684,6 +684,16 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
         "INSERT INTO app_internal.resource_role_policies(module,kind,role) VALUES ('M01',$1,'viewer')",
         [kind],
       );
+      const optionsUrl=`/api/permissions/options?resourceId=${resourceId}`;
+      const available=await a.get(optionsUrl);
+      expect(available.status()).toBe(200);
+      expect(available.headers()['cache-control']).toBe('no-store');
+      const choices=(await available.json()).options;
+      expect(choices).toEqual([{resource_version:'1',space_id:current.id,recipient_id:members[1].account_id,recipient_name:'Synthetic pairing',role:'viewer'}]);
+      expect(await (await b.get(optionsUrl)).json()).toEqual({options:[]});
+      expect(await (await c.get(optionsUrl)).json()).toEqual({options:[]});
+      expect(await (await a.get(`/api/permissions/options?resourceId=${randomUUID()}`)).json()).toEqual({options:[]});
+      expect((await a.get(optionsUrl+'&subject='+members[1].account_id)).status()).toBe(400);
       const data = {
         resourceId,
         commandId: randomUUID(),
@@ -719,6 +729,7 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
       expect(issued.status()).toBe(200);
       expect(issued.headers()["cache-control"]).toBe("no-store");
       const grant = await issued.json();
+      expect(await (await a.get(optionsUrl)).json()).toEqual({options:[]});
       expect(
         await (
           await a.post("/api/permissions/grant", { headers, data })
@@ -763,6 +774,7 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
         ).status(),
       ).toBe(404);
       expect(await (await a.get(listUrl)).json()).toEqual({ grants: [] });
+      expect((await (await a.get(optionsUrl)).json()).options[0]).toMatchObject({resource_version:'3',role:'viewer'});
       await aclOwner.query(
         "UPDATE app_internal.pairing_request_budgets SET requests=20 WHERE account_id=$1 AND action='permission_grant'",
         [members[0].account_id],
