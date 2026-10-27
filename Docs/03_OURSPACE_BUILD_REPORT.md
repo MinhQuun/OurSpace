@@ -978,3 +978,13 @@ Acceptance: actor can inspect its own base resource access, owner can see source
 - Initial run passed functional assertions but failed cleanup after temporary database removal; corrected role cleanup to use maintenance connection and removed the exact leftover disposable role. Final lint/typecheck/diff check PASS.
 - Next: payload/list/count and shared-write POC, then runtime/API/Inspector UI. Stage 02 incomplete; Contributor/conditional domain adapters remain required.
 - History/worktree heuristic audit PASS: 463 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit ede03dc7cee0e2d502240d54aafacc6a32daa920 PUSHED; remote master matches HEAD. Next: payload/list/count and write security POC, runtime/API and Inspector UI.
+
+## Task 02.10g - Real payload, search and count authorization POC
+
+Acceptance: an execute-only database reader must return only authorized payload rows; private and unknown detail requests produce the same empty response; search/count cannot expose hidden payloads; new requests after revocation lose content immediately.
+
+- Added disposable PostgreSQL payload schema and restricted reader fixture to the ACL integration test. Two synthetic stored documents exercise the production can_read_resource gate before detail/search/list/aggregate responses. Direct table access is denied. This fixture is a security POC, not a production domain model or completed export feature.
+- Real PostgreSQL integration PASS (31.929 seconds): owner sees two rows, recipient only explicitly shared row; private detail/unknown/invalid session/private search return identical zero-count empty results; revoked child remains hidden; parent revocation immediately removes list, detail and search payloads. Existing grants, Inspector, lifecycle and link assertions also pass.
+- Lint/typecheck/diff check PASS. Runtime/API authorization, Inspector UI, scoped writes, storage and realtime security remain pending. Stage 02 remains incomplete; no domain P0 completion claimed.
+- History/worktree heuristic audit PASS: 466 blobs, no findings; historical binary review limitation remains covered by explicit publication authorization.

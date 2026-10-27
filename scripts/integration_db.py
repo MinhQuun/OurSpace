@@ -73,6 +73,41 @@ COMMIT;""",self.database)
         self.assertEqual(set(inspect('b')[0]),{'resource_id','resource_version','role','base_read_allowed','read_reason'})
         self.assertEqual(inspect('b',child),[])
         self.assertEqual(read('b',child),'f')  # another resource never inherits the grant
+        # Disposable domain payload POC: real rows and an execute-only reader.
+        # This is not a production domain model or a completed export feature.
+        payload_role='payload_probe_'+uuid.uuid4().hex
+        sql(f"""CREATE SCHEMA payload_poc;
+CREATE TABLE payload_poc.documents(resource_id uuid PRIMARY KEY REFERENCES m10.resources(id), body text NOT NULL);
+INSERT INTO payload_poc.documents VALUES ('{resource}','shared synthetic journal'),('{child}','private synthetic attachment');
+REVOKE ALL ON SCHEMA payload_poc FROM PUBLIC;
+REVOKE ALL ON payload_poc.documents FROM PUBLIC;
+CREATE FUNCTION payload_poc.read_documents(token text, requested uuid DEFAULT NULL, query text DEFAULT '')
+RETURNS TABLE(resource_id uuid, body text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $fn$
+ SELECT d.resource_id,d.body FROM payload_poc.documents d
+ WHERE app_internal.can_read_resource(token,d.resource_id)
+ AND (requested IS NULL OR d.resource_id=requested)
+ AND position(query in d.body)>0 ORDER BY d.resource_id
+$fn$;
+REVOKE ALL ON FUNCTION payload_poc.read_documents(text,uuid,text) FROM PUBLIC;
+CREATE ROLE {payload_role} NOLOGIN;
+GRANT USAGE ON SCHEMA payload_poc TO {payload_role};
+GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload_role};""",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {payload_role};'))
+        def payload(token,key=None,query=''):
+            requested=f"'{key}'::uuid" if key else 'NULL::uuid'
+            # All arguments here are fixed synthetic test values, never user input.
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {payload_role}; SELECT json_build_object('count',count(*),'rows',coalesce(json_agg(row_to_json(d)),'[]'::json)) FROM payload_poc.read_documents(repeat('{token}',64),{requested},'{query}') d; COMMIT;",self.database))
+        self.assertEqual(payload('a')['count'],2)
+        self.assertEqual(payload('b'),{'count':1,'rows':[{'resource_id':resource,'body':'shared synthetic journal'}]})
+        empty={'count':0,'rows':[]}
+        self.assertEqual(payload('b',child),empty)
+        self.assertEqual(payload('b',str(uuid.uuid4())),empty)
+        self.assertEqual(payload('b',query='private'),empty)
+        self.assertEqual(payload('c'),empty)
+        self.assertEqual(payload('b',query='journal')['count'],1)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f'BEGIN; SET LOCAL ROLE {payload_role}; SELECT * FROM payload_poc.documents; COMMIT;',self.database)
         sql(f"INSERT INTO m10.resource_links(source_id,target_id,relation) VALUES ('{resource}','{child}','attachment');",self.database)
         link_role='link_probe_'+uuid.uuid4().hex
         sql(f'CREATE ROLE {link_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {link_role}; GRANT EXECUTE ON FUNCTION app_internal.visible_resource_links(text,uuid) TO {link_role};',self.database)
@@ -95,6 +130,7 @@ COMMIT;""",self.database)
         finally: sql(f'DROP OWNED BY {link_role}; DROP ROLE {link_role};',self.database)
 
         self.assertEqual(read('a',child),'t')
+        self.assertEqual(payload('b',child),empty)
         self.assertEqual(read('b',str(uuid.uuid4())),'f')
         self.assertEqual(read('c'),'f')
         revoke_role='revoke_probe_'+uuid.uuid4().hex
@@ -113,6 +149,9 @@ COMMIT;""",self.database)
                 self.assertEqual(list(pool.map(lambda _: revoke(),range(2))),[live_grant,live_grant])
             self.assertEqual(read('b'),'f')
             self.assertEqual(inspect('b'),[])
+            self.assertEqual(payload('b'),empty)
+            self.assertEqual(payload('b',resource),empty)
+            self.assertEqual(payload('b',query='journal'),empty)
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
             with self.assertRaises(subprocess.CalledProcessError): revoke(version=revision+1)
