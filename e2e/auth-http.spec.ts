@@ -659,6 +659,130 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
     ).toBe(200);
     const current = (await (await a.get("/api/spaces/list")).json()).spaces[0];
     expect(current.state).toBe("active");
+    const aclOwner = new Pool({
+      host: "127.0.0.1",
+      port: 55432,
+      database: "ourspace",
+      user: "ourspace_owner",
+      password: readFileSync(".local/db-password", "utf8").trim(),
+      max: 1,
+    });
+    const resourceId = randomUUID(),
+      kind = "http_" + randomUUID().replaceAll("-", "");
+    try {
+      const members = (
+        await aclOwner.query(
+          "SELECT account_id FROM m10.couple_memberships WHERE space_id=$1 ORDER BY slot",
+          [current.id],
+        )
+      ).rows;
+      await aclOwner.query(
+        "INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ($1,'M01',$2,$3)",
+        [resourceId, kind, members[0].account_id],
+      );
+      await aclOwner.query(
+        "INSERT INTO app_internal.resource_role_policies(module,kind,role) VALUES ('M01',$1,'viewer')",
+        [kind],
+      );
+      const data = {
+        resourceId,
+        commandId: randomUUID(),
+        spaceId: current.id,
+        recipientId: members[1].account_id,
+        role: "viewer",
+        version: 1,
+        confirmed: true,
+      };
+      expect((await a.post("/api/permissions/grant", { data })).status()).toBe(
+        403,
+      );
+      expect(
+        (
+          await a.post("/api/permissions/grant", {
+            headers,
+            data: { ...data, confirmed: false },
+          })
+        ).status(),
+      ).toBe(400);
+      expect(
+        (
+          await a.post("/api/permissions/grant", {
+            headers,
+            data: { ...data, padding: "x".repeat(4097) },
+          })
+        ).status(),
+      ).toBe(400);
+      expect(
+        (await b.post("/api/permissions/grant", { headers, data })).status(),
+      ).toBe(403);
+      const issued = await a.post("/api/permissions/grant", { headers, data });
+      expect(issued.status()).toBe(200);
+      expect(issued.headers()["cache-control"]).toBe("no-store");
+      const grant = await issued.json();
+      expect(
+        await (
+          await a.post("/api/permissions/grant", { headers, data })
+        ).json(),
+      ).toEqual(grant);
+      const listUrl = `/api/permissions/grants?resourceId=${resourceId}`;
+      expect((await (await a.get(listUrl)).json()).grants).toHaveLength(1);
+      expect(await (await b.get(listUrl)).json()).toEqual({ grants: [] });
+      expect(
+        (
+          await b.get(`/api/permissions/inspect?resourceId=${resourceId}`)
+        ).status(),
+      ).toBe(200);
+      const revoke = {
+        resourceId,
+        commandId: randomUUID(),
+        grantId: grant.grantId,
+        version: 2,
+        confirmed: true,
+      };
+      expect(
+        (
+          await b.post("/api/permissions/revoke", { headers, data: revoke })
+        ).status(),
+      ).toBe(403);
+      expect(
+        (
+          await a.post("/api/permissions/revoke", {
+            headers,
+            data: { ...revoke, version: 1 },
+          })
+        ).status(),
+      ).toBe(409);
+      expect(
+        await (
+          await a.post("/api/permissions/revoke", { headers, data: revoke })
+        ).json(),
+      ).toEqual(grant);
+      expect(
+        (
+          await b.get(`/api/permissions/inspect?resourceId=${resourceId}`)
+        ).status(),
+      ).toBe(404);
+      expect(await (await a.get(listUrl)).json()).toEqual({ grants: [] });
+      await aclOwner.query(
+        "UPDATE app_internal.pairing_request_budgets SET requests=20 WHERE account_id=$1 AND action='permission_grant'",
+        [members[0].account_id],
+      );
+      const limited = await a.post("/api/permissions/grant", { headers, data });
+      expect(limited.status()).toBe(429);
+      expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+      expect(
+        (
+          await a.post("/api/permissions/revoke", { headers, data: revoke })
+        ).status(),
+      ).toBe(200);
+    } finally {
+      await aclOwner.query(
+        "DELETE FROM app_internal.resource_role_policies WHERE module='M01' AND kind=$1",
+        [kind],
+      );
+      await aclOwner.end();
+    }
+
     expect((await (await c.get("/api/spaces/list")).json()).spaces).toEqual([]);
     const disconnect = {
       ...credentials[0],

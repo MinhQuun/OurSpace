@@ -1060,3 +1060,14 @@ Acceptance: server validates explicit consent/version/IDs/role and invokes atomi
 - Local migrations through 0049/checksums and runtime provisioning PASS. Real Auth/runtime integration PASS within disconnect test (final 5.82s run): missing domain policy denied; temporary synthetic policy permits viewer; recipient cannot grant/revoke; false consent rejected; grant retry returns same ID; recipient reads; owner list exact grant/version while recipient list empty; stale revoke conflicts; revoke retry idempotent; recipient read and owner list empty after revoke. Temporary policy removed in finally; immutable synthetic audit/grant history retained locally as existing Auth fixtures.
 - Runtime database suite 6/6 PASS after shared validation refactor. Lint/typecheck/diff review PASS. Next: authenticated management HTTP routes with independent rate budgets/CSRF checks, then consent UI. Stage 02 incomplete; domain policies not seeded as production decisions.
 - History/worktree heuristic audit PASS: 506 blobs, no findings; approved historical binary caveat unchanged.
+- Commit 39c745acce83683405984120d30c01465ec4c74c PUSHED; remote master matches HEAD. Next: grant management HTTP and consent UI. Stage 02 incomplete.
+
+## Task 02.10o - Authenticated grant management HTTP
+
+Acceptance: current sessions and same-origin mutation requests required; consent, IDs, role and version validated; owner-only commands; bounded JSON; independent budgets; no-cache safe responses.
+
+- Added /api/permissions/grants GET and grant/revoke POST using restricted runtime service. GET exposes only owner-scoped list; POST enforces Origin/Sec-Fetch-Site, JSON body <=4096 bytes, role allowlist, explicit confirmed boolean and version. Database error categories mapped to safe HTTP responses; no raw SQL/credentials returned.
+- Migration 0050 adds permission_list/grant/revoke action budgets; local evaluation defaults 60/20/20 per minute, independent from Inspector and each other. Local migration checksum validation/provisioning PASS; production thresholds still require review.
+- Extended real paired-account HTTP integration PASS (final 1 test, 5.9 seconds): missing origin 403, false consent/oversized JSON 400, recipient management 403, owner grant/replay, owner-only listing, recipient read, stale revoke 409, revoke removes read/list, rate limit 429 with Retry-After, grant exhaustion does not block revoke replay. Existing pairing/disconnect lifecycle checks still pass. Temporary test domain policy removed; synthetic immutable fixture history retained locally.
+- Lint/typecheck/production build/diff review PASS. Next: owner consent UI with server-derived sharing choices; domain source integration and storage/realtime security POC remain pending. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 510 blobs, no findings; approved historical binary caveat unchanged.
