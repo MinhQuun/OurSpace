@@ -57,6 +57,19 @@ COMMIT;""",self.database)
         def inspect(token,key=resource):
             return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.inspect_resource_access(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
         self.addCleanup(lambda: sql(f'DROP ROLE {inspector_role};'))
+        sql(f'GRANT EXECUTE ON FUNCTION app_internal.list_owned_resource_grants(text,uuid) TO {inspector_role};',self.database)
+        def grants(token,key=resource):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.list_owned_resource_grants(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
+        owned_grants=grants('a')
+        self.assertEqual(len(owned_grants),1)  # excludes the previously revoked viewer
+        self.assertEqual(owned_grants[0]['role'],'editor')
+        self.assertEqual(owned_grants[0]['grantee_id'],b)
+        self.assertEqual(owned_grants[0]['space_id'],space)
+        self.assertEqual(set(owned_grants[0]),{'grant_id','resource_version','grantee_id','space_id','role','granted_at'})
+        self.assertEqual(grants('b'),[])
+        self.assertEqual(grants('c'),[])
+        self.assertEqual(grants('a',str(uuid.uuid4())),[])
+        self.assertEqual(grants('a',child),[])
         self.assertEqual(inspect('a')[0]['read_reason'],'domain_conditions_required')
         self.assertEqual(inspect('a')[0]['base_read_allowed'],False)
         self.assertEqual(inspect('a')[0]['role'],'owner')
@@ -207,6 +220,7 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
                 if writer.poll() is None: writer.communicate('ROLLBACK;\n',timeout=15)
             self.assertEqual(read('b'),'f')
             self.assertEqual(inspect('b'),[])
+            self.assertEqual(grants('a'),[])
             self.assertEqual(payload('b'),empty)
             self.assertEqual(payload('b',resource),empty)
             self.assertEqual(payload('b',query='journal'),empty)
@@ -240,6 +254,8 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
         with self.assertRaises(subprocess.CalledProcessError): edit('b')  # viewer cannot edit
         sql(f"BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
         self.assertEqual(read('b'),'t')  # existing read rights during processing, no write capability
+        self.assertEqual(len(grants('a')),1)  # owner can still identify a grant to revoke
+        self.assertEqual(grants('b'),[])
         for token in ['a','b']:
             with self.assertRaises(subprocess.CalledProcessError): edit(token)
         sql(f"UPDATE m10.couple_spaces SET state='archived' WHERE id='{space}';",self.database)

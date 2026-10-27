@@ -1040,3 +1040,13 @@ Acceptance: object-scoped UI loads current own role, distinguishes conditional/d
 - Production build, lint/typecheck PASS. Real desktop/mobile browser tests 2/2 PASS (4.1 seconds): owner read metadata, transition to conditional state, refresh removes previous allowed result, private/unknown identical message, revoked session shows login and clears role, no horizontal overflow or local/session storage. Synthetic DB fixture cleaned up.
 - Final desktop/mobile screenshots inspected in ignored .local/permissions-*.png. Base-role display does not claim complete domain effective authorization or completion of M10 D16; source-screen integration and detailed domain actions remain pending.
 - Diff review PASS; heuristic history/worktree audit 498 blobs, no findings; approved historical binary caveat unchanged. Next: grant management runtime/API and security POC storage/realtime. Stage 02 incomplete.
+- Commit f95cba0debb97821685afc20994194dde0621398 PUSHED; remote master matches HEAD. Next: permission grant management runtime/API and remaining security POC gates. Stage 02 incomplete.
+
+## Task 02.10m - Owner-only grant management listing
+
+Acceptance: only current authenticated owner can list unrevoked grants for an exact object; recipient/editor cannot enumerate management metadata; revoked history is omitted; owner can identify grants after disconnect for revocation.
+
+- Migration 0049 adds internal list_owned_resource_grants, fixed search path and no public/runtime execution. Explicit fields: grant ID, current resource version, recipient ID, exact Space ID, role and granted time. These are grant declarations, not a claim of current effective domain access. No private content/profile data or revoked history returned.
+- Real PostgreSQL integration PASS (45.650 seconds): execute-only owner sees exactly the current editor grant and field allowlist; revoked viewer excluded; editor/invalid session/unknown object/private child yield empty lists; committed revocation removes management row; Frozen owner can still list remaining grant while recipient cannot. Prior ACL/payload/concurrency tests remain passing.
+- Lint/typecheck/diff review PASS. Next: wire owner listing and issue/revoke commands to restricted runtime service, then authenticated management API/UI. No delegated editor privilege inferred. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 503 blobs, no findings; approved historical binary caveat unchanged.
