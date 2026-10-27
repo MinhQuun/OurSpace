@@ -1050,3 +1050,13 @@ Acceptance: only current authenticated owner can list unrevoked grants for an ex
 - Real PostgreSQL integration PASS (45.650 seconds): execute-only owner sees exactly the current editor grant and field allowlist; revoked viewer excluded; editor/invalid session/unknown object/private child yield empty lists; committed revocation removes management row; Frozen owner can still list remaining grant while recipient cannot. Prior ACL/payload/concurrency tests remain passing.
 - Lint/typecheck/diff review PASS. Next: wire owner listing and issue/revoke commands to restricted runtime service, then authenticated management API/UI. No delegated editor privilege inferred. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 503 blobs, no findings; approved historical binary caveat unchanged.
+- Commit 7814f49f177a5ec3bec0084430af9d5a1d8cded9 PUSHED; remote master matches HEAD. Next: grant management runtime service/API. Stage 02 incomplete.
+
+## Task 02.10n - Restricted runtime grant management service
+
+Acceptance: server validates explicit consent/version/IDs/role and invokes atomic owner-only database commands; runtime has execution privileges only; no fallback policy or direct ACL table access.
+
+- Extended PermissionService with grants/grant/revoke, canonical token hashing and shared ID/mutation validation. Parameterized functions enforce exact ownership, domain role policy, current session/Space and version. Runtime provisioning grants only owner listing and atomic issue/revoke commands; no ACL table/internal write-gate grants.
+- Local migrations through 0049/checksums and runtime provisioning PASS. Real Auth/runtime integration PASS within disconnect test (final 5.82s run): missing domain policy denied; temporary synthetic policy permits viewer; recipient cannot grant/revoke; false consent rejected; grant retry returns same ID; recipient reads; owner list exact grant/version while recipient list empty; stale revoke conflicts; revoke retry idempotent; recipient read and owner list empty after revoke. Temporary policy removed in finally; immutable synthetic audit/grant history retained locally as existing Auth fixtures.
+- Runtime database suite 6/6 PASS after shared validation refactor. Lint/typecheck/diff review PASS. Next: authenticated management HTTP routes with independent rate budgets/CSRF checks, then consent UI. Stage 02 incomplete; domain policies not seeded as production decisions.
+- History/worktree heuristic audit PASS: 506 blobs, no findings; approved historical binary caveat unchanged.
