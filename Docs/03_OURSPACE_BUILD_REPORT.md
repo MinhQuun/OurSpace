@@ -1111,3 +1111,14 @@ Acceptance: binary identity binds immutably to its own source object; original/p
 - Storage design verification: Supabase docs https://supabase.com/docs/guides/storage/serving/downloads describe signed URL revocation via support; direct signed URL delivery cannot serve as our immediate ACL-revocation gate. Retain private Supabase Storage behind an authenticated download proxy that rechecks access per request; never expose backend credentials or signed backend URLs to browsers.
 - Lint/typecheck/diff review PASS. This task validates metadata authorization only: no actual byte upload/download or Supabase Storage deployment tested yet. Next: local private Storage adapter and real byte download/revocation POC, then realtime active-channel POC. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 528 blobs, no findings; approved historical binary caveat unchanged.
+- Commit 17ac66d4ee8b114698f1a5162dc2420f54060583 PUSHED; remote master matches HEAD. Next: real private Storage bytes and authenticated download proxy POC. Stage 02 incomplete.
+
+## Task 02.11b - Local private Supabase Storage and real bytes
+
+Acceptance: isolated local vendor Storage database, generated ignored credentials, pinned image, persistent bytes, successful server upload/download, denial of public and unprivileged direct access.
+
+- Added compose.storage.yaml with Supabase Storage v1.81.0 pinned to verified digest, separate PostgreSQL/container/network and metadata/byte volumes, loopback-only API 55435. No app DB credentials or exposed database port. Local lifecycle script generates ignored secrets; no cloud services or real data used.
+- Real Storage integration PASS (0.231 seconds final): random private bucket; exact binary bytes round trip with short-lived service token; anonymous, anon-role and authenticated-role requests denied direct/public read, signing and upload; listing denied or empty. Test cleans only its own bucket and synthetic bytes.
+- First healthcheck resolved localhost to IPv6 while server listened IPv4; fixed to 127.0.0.1. Original waiting compose process ended when replaced; final pinned-image start returned healthy for both services and final integration passed.
+- Lint/typecheck/Python compile/diff review PASS. Git history heuristic audit 531 blobs, no findings; new-file heuristic scan no findings; generated secret paths verified ignored. Historical binary approval/caveat unchanged.
+- Added local operation instructions. This does not complete domain uploads or ACL-revocable downloads. Next: authenticated download proxy and real-byte revoke POC, then realtime active-channel POC. Stage 02 remains incomplete.

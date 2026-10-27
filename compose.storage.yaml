@@ -1,0 +1,48 @@
+name: ourspace-storage-local
+
+# Isolated vendor database: Storage migrations never receive app DB credentials.
+services:
+  storage-db:
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+    environment:
+      POSTGRES_DB: storage
+      POSTGRES_PASSWORD_FILE: /run/secrets/storage_db_password
+    secrets: [storage_db_password]
+    volumes: [storage_database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d storage]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  storage:
+    image: supabase/storage-api:v1.81.0@sha256:98ffec5d0678803783c30e404c27f4ec65e97efbe014088f2a86b4b8b54b9f54
+    env_file: ./.local/storage.env
+    environment:
+      DB_INSTALL_ROLES: "true"
+      STORAGE_BACKEND: file
+      STORAGE_FILE_BACKEND_PATH: /var/lib/storage
+      STORAGE_S3_BUCKET: ourspace-local
+      TENANT_ID: ourspace-local
+      REGION: local
+      UPLOAD_FILE_SIZE_LIMIT: 52428800
+      IMAGE_TRANSFORMATION_ENABLED: "false"
+      S3_PROTOCOL_ENABLED: "false"
+      EXPOSE_DOCS: "false"
+      LOG_LEVEL: error
+    ports: ["127.0.0.1:55435:5000"]
+    volumes: [storage_bytes:/var/lib/storage]
+    depends_on:
+      storage-db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, "http://127.0.0.1:5000/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+secrets:
+  storage_db_password:
+    file: ./.local/storage-db-password
+volumes:
+  storage_database:
+  storage_bytes:
