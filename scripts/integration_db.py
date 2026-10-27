@@ -52,11 +52,26 @@ COMMIT;""",self.database)
             sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
         def read(token,key=resource):
             return sql(f"SELECT app_internal.can_read_resource(repeat('{token}',64),'{key}');",self.database)
+        inspector_role='inspector_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {inspector_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {inspector_role}; GRANT EXECUTE ON FUNCTION app_internal.inspect_resource_access(text,uuid) TO {inspector_role};',self.database)
+        def inspect(token,key=resource):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.inspect_resource_access(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
+        self.addCleanup(lambda: sql(f'DROP ROLE {inspector_role};'))
+        self.assertEqual(inspect('a')[0]['read_reason'],'domain_conditions_required')
+        self.assertEqual(inspect('a')[0]['base_read_allowed'],False)
+        self.assertEqual(inspect('a')[0]['role'],'owner')
+        self.assertEqual(inspect('b'),[])
+        self.assertEqual(inspect('c'),[])
+        self.assertEqual(inspect('b',str(uuid.uuid4())),[])
         self.assertEqual(read('a'),'f')  # conditional blocks even owner until domain rules exist
         self.assertEqual(read('b'),'f')
         sql("UPDATE m10.resources SET access_mode='standard';",self.database)
         self.assertEqual(read('a'),'t')
         self.assertEqual(read('b'),'t')
+        self.assertEqual(inspect('b')[0]['role'],'editor')
+        self.assertEqual(inspect('b')[0]['base_read_allowed'],True)
+        self.assertEqual(set(inspect('b')[0]),{'resource_id','resource_version','role','base_read_allowed','read_reason'})
+        self.assertEqual(inspect('b',child),[])
         self.assertEqual(read('b',child),'f')  # another resource never inherits the grant
         sql(f"INSERT INTO m10.resource_links(source_id,target_id,relation) VALUES ('{resource}','{child}','attachment');",self.database)
         link_role='link_probe_'+uuid.uuid4().hex
@@ -97,6 +112,7 @@ COMMIT;""",self.database)
             with ThreadPoolExecutor(max_workers=2) as pool:
                 self.assertEqual(list(pool.map(lambda _: revoke(),range(2))),[live_grant,live_grant])
             self.assertEqual(read('b'),'f')
+            self.assertEqual(inspect('b'),[])
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
             with self.assertRaises(subprocess.CalledProcessError): revoke(version=revision+1)

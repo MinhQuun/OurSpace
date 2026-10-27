@@ -967,3 +967,14 @@ Acceptance: owner can grant a supported role to the other active Space member on
 - Real PostgreSQL integration PASS (25.521 seconds): execute-only probe, missing role policy denied; explicit test M01 diary viewer policy allows owner; recipient acting as owner, self/unrelated recipient, unsupported editor role, stale version and false consent denied; rollback does not grant read; concurrent identical requests return one grant and one receipt/audit/outbox. Earlier revoke/links/read/lifecycle assertions remain passing.
 - Lint/typecheck/diff check PASS. No production domain policies or runtime grants seeded, no API exposed. Next: Permission Inspector and domain payload/read/write security POC; domain-specific Contributor and conditional permissions remain incomplete. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 460 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit c09200cde72dd9c25c11972494778c2b5e940e23 PUSHED; remote master matches HEAD. Next: scoped Permission Inspector and authorized payload/write/aggregate POC.
+
+## Task 02.10f - Non-enumerating base Permission Inspector
+
+Acceptance: actor can inspect its own base resource access, owner can see source-level denial reason, and unauthorized/private/nonexistent resources have identical empty responses without leaking another user's grants.
+
+- Migration 0046 adds internal inspect_resource_access with explicit resource ID/version, own role, base_read_allowed and reason. It reuses current read gate; owner may inspect its conditional/deleted metadata, while nonowners require current read access. Grant role selection respects exact Space lifecycle/processing scope. No arbitrary subject parameter, content, recipient list or grant history exposed; no runtime/public grant yet.
+- Execute-only PostgreSQL probe PASS within ACL integration (29.062 seconds): conditional owner reason with false read, unauthorized/invalid/unknown empty, standard editor role/true read and exact field allowlist, Private target hidden, revoked recipient inspector empty. Base result explicitly does not claim domain-specific action or final content authorization.
+- Initial run passed functional assertions but failed cleanup after temporary database removal; corrected role cleanup to use maintenance connection and removed the exact leftover disposable role. Final lint/typecheck/diff check PASS.
+- Next: payload/list/count and shared-write POC, then runtime/API/Inspector UI. Stage 02 incomplete; Contributor/conditional domain adapters remain required.
+- History/worktree heuristic audit PASS: 463 blobs, no findings; authorized historical binary caveat unchanged.
