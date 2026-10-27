@@ -905,3 +905,13 @@ Acceptance: users inspect counterpart/Space identity and lifecycle, explicitly c
 - Real two-browser desktop/mobile tests PASS 2/2 (8.7 seconds): existing pairing flow followed by missing-consent no-op, actual password-authenticated disconnect, removed credential form, partner Frozen visibility, reload/deadline, no horizontal overflow and no browser storage. Local desktop/mobile screenshots inspected. MFA browser variants remain for next task; not claimed covered here.
 - Lint/typecheck/production build/diff review PASS. Existing styling reused. No content inventory/export/disposition UI claimed; later domain integration and object ACL POC still pending. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 441 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit bca56741163f8f8319ec61d1e504fc5f35bed0b9 PUSHED; remote master matches HEAD. Next: MFA/negative-path disconnect browser coverage, then object ACL security POC.
+
+## Task 02.9k - MFA disconnect browser matrix
+
+Acceptance: desktop/mobile disconnect enforces actual account MFA, rejects missing/invalid proof without changing Active state, clears credentials after failure and supports TOTP/recovery completion.
+
+- Parameterized real two-browser pairing/disconnect E2E for password, TOTP and recovery on both viewports. MFA is enabled through real HTTP enrollment, verification, recovery issuance and acknowledgment; no route mocks or fake provider responses.
+- PASS 6/6 (33.6 seconds). Each MFA variant first submits without factor (specific MFA-required message), then invalid factor (generic denial), verifies Active remains and password/code fields clear, then submits valid TOTP or recovery code and observes Frozen/deadline in both browsers. Required consent, reload, storage and overflow assertions remain. Password-only path still passes.
+- Lint/typecheck/diff check PASS. Production code unchanged; reused preceding production build. Stage 02 still needs object ACL/linked-private-data security POC; full domain D35/disposition work remains future integration. Next: begin object permission foundation against approved contracts.
+- History/worktree heuristic audit PASS: 446 blobs, no findings; authorized historical binary caveat unchanged.
