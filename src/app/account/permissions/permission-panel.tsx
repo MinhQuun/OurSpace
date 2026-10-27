@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import SharingPanel from "./sharing-panel";
 import type { BasePermissionInspection } from "../../../modules/m10/permissions/service.server";
 const roles = { owner: "Chủ sở hữu", editor: "Người chỉnh sửa", commenter: "Người bình luận", viewer: "Người xem" };
 export default function PermissionPanel({ resourceId }: { resourceId: string }) {
@@ -37,6 +38,7 @@ export default function PermissionPanel({ resourceId }: { resourceId: string }) 
       <p>{result.read_reason === "source_deleted" ? "Nội dung đã bị xóa." : result.read_reason === "domain_conditions_required" ? "Nội dung có điều kiện truy cập riêng; vai trò này không cho phép mở trước điều kiện." : result.base_read_allowed ? "Quyền cơ bản cho phép xem." : "Hiện chưa được phép xem."}</p>
       <p>Các điều kiện riêng của nội dung vẫn áp dụng. Vai trò này không tự cho phép phê duyệt, mở thư hẹn giờ hoặc xuất dữ liệu.</p>
     </div>}
+    {result?.role === "owner" && <SharingPanel key={`${resourceId}:${retry}`} resourceId={resourceId} onChanged={()=>setRetry(value=>value+1)} />}
     {login && <Link href="/account">Đăng nhập</Link>}
     <button type="button" disabled={busy} onClick={() => setRetry(value => value+1)}>Kiểm tra lại</button>
   </section>;
