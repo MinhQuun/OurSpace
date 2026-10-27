@@ -106,6 +106,19 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
         self.assertEqual(payload('b',query='private'),empty)
         self.assertEqual(payload('c'),empty)
         self.assertEqual(payload('b',query='journal')['count'],1)
+        edit_role='edit_probe_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {edit_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {edit_role}; GRANT EXECUTE ON FUNCTION app_internal.lock_shared_resource_edit(text,uuid,uuid) TO {edit_role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {edit_role};'))
+        def edit(token,key=resource,space_id=space):
+            return sql(f"BEGIN; SET LOCAL ROLE {edit_role}; SELECT app_internal.lock_shared_resource_edit(repeat('{token}',64),'{space_id}','{key}'); COMMIT;",self.database)
+        self.assertEqual(edit('a'),a)
+        self.assertEqual(edit('b'),b)
+        for args in [('b',child,space),('c',resource,space),('b',str(uuid.uuid4()),space),('b',resource,str(uuid.uuid4()))]:
+            with self.assertRaises(subprocess.CalledProcessError): edit(*args)
+        sql(f"UPDATE m10.resources SET access_mode='conditional' WHERE id='{resource}';",self.database)
+        for token in ['a','b']:
+            with self.assertRaises(subprocess.CalledProcessError): edit(token)
+        sql(f"UPDATE m10.resources SET access_mode='standard' WHERE id='{resource}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError):
             sql(f'BEGIN; SET LOCAL ROLE {payload_role}; SELECT * FROM payload_poc.documents; COMMIT;',self.database)
         sql(f"INSERT INTO m10.resource_links(source_id,target_id,relation) VALUES ('{resource}','{child}','attachment');",self.database)
@@ -152,6 +165,7 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
             self.assertEqual(payload('b'),empty)
             self.assertEqual(payload('b',resource),empty)
             self.assertEqual(payload('b',query='journal'),empty)
+            with self.assertRaises(subprocess.CalledProcessError): edit('b')
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
             with self.assertRaises(subprocess.CalledProcessError): revoke(version=revision+1)
@@ -178,8 +192,11 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{issue_command}';",self.database),'1')
         finally: sql(f'DROP OWNED BY {issue_role}; DROP ROLE {issue_role};',self.database)
+        with self.assertRaises(subprocess.CalledProcessError): edit('b')  # viewer cannot edit
         sql(f"BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
         self.assertEqual(read('b'),'t')  # existing read rights during processing, no write capability
+        for token in ['a','b']:
+            with self.assertRaises(subprocess.CalledProcessError): edit(token)
         sql(f"UPDATE m10.couple_spaces SET state='archived' WHERE id='{space}';",self.database)
         self.assertEqual(read('b'),'f')
         self.assertEqual(read('a'),'t')

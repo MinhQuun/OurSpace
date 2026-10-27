@@ -988,3 +988,13 @@ Acceptance: an execute-only database reader must return only authorized payload 
 - Real PostgreSQL integration PASS (31.929 seconds): owner sees two rows, recipient only explicitly shared row; private detail/unknown/invalid session/private search return identical zero-count empty results; revoked child remains hidden; parent revocation immediately removes list, detail and search payloads. Existing grants, Inspector, lifecycle and link assertions also pass.
 - Lint/typecheck/diff check PASS. Runtime/API authorization, Inspector UI, scoped writes, storage and realtime security remain pending. Stage 02 remains incomplete; no domain P0 completion claimed.
 - History/worktree heuristic audit PASS: 466 blobs, no findings; historical binary review limitation remains covered by explicit publication authorization.
+- Commit 44f07b8ecfe12599374f911dd51ccff31dfafc25 PUSHED; remote master matches HEAD. Next: scoped write authorization and revocation concurrency, then runtime/API/Inspector UI. Stage 02 incomplete.
+
+## Task 02.10h - Transaction-scoped shared object edit guard
+
+Acceptance: shared edits require a live session, Active exact Space, nondeleted standard object and current Owner/Editor role; Viewer, revoked grants, private children, invalid sessions and Frozen Space cannot edit.
+
+- Migration 0047 adds internal lock_shared_resource_edit. It takes the lifecycle locks first, then locks the resource through the surrounding transaction, checks owner membership in the exact Space and the current exact-object Editor grant. No public/runtime execution grant. Domain commands must still enforce editable fields/state and domain-specific consent; this gate cannot authorize Seal, approval, reveal or export.
+- PostgreSQL integration PASS (39.249 seconds): execute-only probe allows owner/editor; rejects private child, unknown object/Space, invalid session, conditional resource even for owner, revoked editor, viewer and frozen owner/recipient. Existing payload/read/Inspector/grant/lifecycle assertions pass.
+- Lint/typecheck/diff check PASS. Next task must prove concurrent write/revoke serialization with observed blocking and actual payload mutation; this task verifies permission decisions, not the complete concurrency acceptance criterion. Runtime/API/Inspector UI and storage/realtime POC remain pending. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 468 blobs, no findings; approved historical binary caveat unchanged.
