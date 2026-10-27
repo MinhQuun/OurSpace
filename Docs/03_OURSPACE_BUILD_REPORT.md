@@ -1071,3 +1071,13 @@ Acceptance: current sessions and same-origin mutation requests required; consent
 - Extended real paired-account HTTP integration PASS (final 1 test, 5.9 seconds): missing origin 403, false consent/oversized JSON 400, recipient management 403, owner grant/replay, owner-only listing, recipient read, stale revoke 409, revoke removes read/list, rate limit 429 with Retry-After, grant exhaustion does not block revoke replay. Existing pairing/disconnect lifecycle checks still pass. Temporary test domain policy removed; synthetic immutable fixture history retained locally.
 - Lint/typecheck/production build/diff review PASS. Next: owner consent UI with server-derived sharing choices; domain source integration and storage/realtime security POC remain pending. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 510 blobs, no findings; approved historical binary caveat unchanged.
+- Commit 6c654257207bf3f7220cfade3a8a3e06952e3e49 PUSHED; remote master matches HEAD. Next: owner grant/revoke consent UI and server-derived available sharing options. Stage 02 incomplete.
+
+## Task 02.10p - Server-derived sharing choices
+
+Acceptance: owner receives only an active partner and domain-supported roles for standard undeleted objects without an existing live grant; unrelated actors and absent policy yield no choices. Choices are advisory and issuance must revalidate.
+
+- Migration 0051 adds internal resource_sharing_options with explicit version/Space/recipient ID/display name/role projection. Exact owner session, Active Space, active recipient, standard nondeleted source, declared role policy and no existing live grant required. No public/runtime grant yet. No email or unrelated profile data returned.
+- Real PostgreSQL integration PASS (46.013 seconds): execute-only owner receives exact viewer choice/version after policy exists; missing policy, recipient actor, invalid session, unknown object and unrelated child return empty; conditional source and deactivated recipient denied in rolled-back transactions; choices disappear after grant issuance and remain empty after disconnect. Earlier ACL/concurrency tests pass.
+- Lint/typecheck/diff review PASS. Next: wire choices to runtime/API and implement owner grant/revoke consent UI. No production domain policy seeded. Stage 02 remains incomplete.
+- History/worktree heuristic audit PASS: 515 blobs, no findings; approved historical binary caveat unchanged. Prior commit/push attempt was not executed because automatic approval review hit a usage limit; resuming the same tested task without bypassing review.

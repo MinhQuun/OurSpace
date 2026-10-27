@@ -57,6 +57,10 @@ COMMIT;""",self.database)
         def inspect(token,key=resource):
             return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.inspect_resource_access(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
         self.addCleanup(lambda: sql(f'DROP ROLE {inspector_role};'))
+        sql(f'GRANT EXECUTE ON FUNCTION app_internal.resource_sharing_options(text,uuid) TO {inspector_role};',self.database)
+        def options(token,key=resource):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.resource_sharing_options(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
+        self.assertEqual(options('a'),[])
         sql(f'GRANT EXECUTE ON FUNCTION app_internal.list_owned_resource_grants(text,uuid) TO {inspector_role};',self.database)
         def grants(token,key=resource):
             return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.list_owned_resource_grants(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
@@ -239,7 +243,19 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
             def issue(token='a',recipient=b,role='viewer',version=issue_revision,confirmed='true',ending='COMMIT'):
                 return sql(f"BEGIN; SET LOCAL ROLE {issue_role}; SELECT app_internal.issue_resource_grant(repeat('{token}',64),'{issue_command}','{resource}','{space}','{recipient}','{role}',{version},{confirmed}); {ending};",self.database)
             with self.assertRaises(subprocess.CalledProcessError): issue()
+            self.assertEqual(options('a'),[])  # no domain policy
             sql("INSERT INTO app_internal.resource_role_policies VALUES ('M01','diary','viewer');",self.database)
+            choices=options('a')
+            self.assertEqual(len(choices),1)
+            self.assertEqual(choices[0]['recipient_id'],b)
+            self.assertEqual(choices[0]['space_id'],space)
+            self.assertEqual(choices[0]['role'],'viewer')
+            self.assertEqual(choices[0]['resource_version'],issue_revision)
+            self.assertEqual(set(choices[0]),{'resource_version','space_id','recipient_id','recipient_name','role'})
+            for token,key in [('b',resource),('c',resource),('a',str(uuid.uuid4())),('a',child)]:
+                self.assertEqual(options(token,key),[])
+            self.assertEqual(sql(f"BEGIN; UPDATE m10.resources SET access_mode='conditional' WHERE id='{resource}'; SET LOCAL ROLE {inspector_role}; SELECT count(*) FROM app_internal.resource_sharing_options(repeat('a',64),'{resource}'); ROLLBACK;",self.database),'0')
+            self.assertEqual(sql(f"BEGIN; UPDATE m10.accounts SET state='deactivated' WHERE id='{b}'; SET LOCAL ROLE {inspector_role}; SELECT count(*) FROM app_internal.resource_sharing_options(repeat('a',64),'{resource}'); ROLLBACK;",self.database),'0')
             for args in [dict(token='b'),dict(recipient=a),dict(recipient=str(uuid.uuid4())),dict(role='editor'),dict(version=issue_revision+1),dict(confirmed='false')]:
                 with self.assertRaises(subprocess.CalledProcessError): issue(**args)
             issue(ending='ROLLBACK')
@@ -247,6 +263,7 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
             with ThreadPoolExecutor(max_workers=2) as pool:
                 results=list(pool.map(lambda _:issue(),range(2)))
             self.assertEqual(results[0],results[1])
+            self.assertEqual(options('a'),[])  # existing live grant must be managed explicitly
             self.assertEqual(read('b'),'t')
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{issue_command}';",self.database),'1')
@@ -256,6 +273,7 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
         self.assertEqual(read('b'),'t')  # existing read rights during processing, no write capability
         self.assertEqual(len(grants('a')),1)  # owner can still identify a grant to revoke
         self.assertEqual(grants('b'),[])
+        self.assertEqual(options('a'),[])
         for token in ['a','b']:
             with self.assertRaises(subprocess.CalledProcessError): edit(token)
         sql(f"UPDATE m10.couple_spaces SET state='archived' WHERE id='{space}';",self.database)
