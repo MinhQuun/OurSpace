@@ -1030,3 +1030,13 @@ Acceptance: current session required; only self-inspection; inaccessible and non
 - Real HTTP test against production build PASS (1 test, 2.7 seconds): anonymous/revoked 401, owner exact allowlisted metadata, Private/unknown identical 404, malformed/extra subject 400, cross-site 403, no-store and budget 429/Retry-After. Synthetic database fixture removed after test.
 - Lint/typecheck/production build/diff check PASS. History/worktree heuristic audit: 478 blobs, no findings; approved historical binary limitation unchanged.
 - Next: desktop/mobile Permission Inspector UI. Base ACL is not complete domain effective authorization; storage/realtime POC and further Stage 02 gates remain pending. Stage 02 incomplete.
+- Checkpoint: concurrent user commit 29d8c98c99c4eff2615221bebc28a7b7be5aab0d (format code) captured the endpoint, migration and tests plus broader formatting. Preserved without rewriting history. Commit 4ee303a9653d501c2536775c3280866e2369765c contains this task report; PUSHED and remote master verified. Revalidated formatted HEAD: lint/typecheck/build PASS; Inspector HTTP 1/1 PASS (3.0s); heuristic audit 498 blobs, no findings. Next: Inspector UI; Stage 02 incomplete.
+
+## Task 02.10l - Desktop/mobile base Permission Inspector UI
+
+Acceptance: object-scoped UI loads current own role, distinguishes conditional/deleted states, hides inaccessible objects uniformly, clears stale results on refresh and shows login when session is revoked.
+
+- Added /account/permissions/[resourceId] and reusable PermissionPanel using authenticated no-store endpoint. Pending requests are aborted on navigation; results are cleared before each refresh; no browser storage. Existing account styles reused. The object route is ready for links from future domain screens; no technical ID entry form added.
+- Production build, lint/typecheck PASS. Real desktop/mobile browser tests 2/2 PASS (4.1 seconds): owner read metadata, transition to conditional state, refresh removes previous allowed result, private/unknown identical message, revoked session shows login and clears role, no horizontal overflow or local/session storage. Synthetic DB fixture cleaned up.
+- Final desktop/mobile screenshots inspected in ignored .local/permissions-*.png. Base-role display does not claim complete domain effective authorization or completion of M10 D16; source-screen integration and detailed domain actions remain pending.
+- Diff review PASS; heuristic history/worktree audit 498 blobs, no findings; approved historical binary caveat unchanged. Next: grant management runtime/API and security POC storage/realtime. Stage 02 incomplete.
