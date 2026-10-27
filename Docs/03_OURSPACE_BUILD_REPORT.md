@@ -957,3 +957,13 @@ Acceptance: current owner explicitly revokes one grant with version check; recip
 - Real PostgreSQL test PASS (18.951 seconds): temporary execute-only role, recipient/invalid session/wrong version/false consent denial, rollback preserves recipient read access, two concurrent identical requests return same grant, read denied after commit, exactly one receipt/audit/outbox and changed-command fingerprint rejection. Prior private/link/lifecycle tests remain passing.
 - Lint/typecheck/diff review PASS. No generic role delegation assumed; delegated editor grant management and domain-specific exceptions remain for scoped policy integration. Next: authenticated grant issuance/inspector and runtime/API security POC. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 457 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 9e28f4064a170fff14883bc38a3214f33786a3ef PUSHED; remote master matches HEAD. Next: authenticated grant issuance, Permission Inspector and runtime/API ACL POC.
+
+## Task 02.10e - Explicit domain-policy-controlled grant issuance
+
+Acceptance: owner can grant a supported role to the other active Space member only after explicit consent/version validation; mutation participates in disconnect serialization and receipt/audit/outbox are atomic/idempotent.
+
+- Migration 0045 adds private resource_role_policies and internal issue_resource_grant. Empty policy defaults deny issuance until a domain adapter declares supported whole-object roles. Contributor/conditional resources require dedicated scoped/domain paths; this generic command cannot bypass those constraints. It uses existing lifecycle locks, verifies recipient membership/active account and resource ownership, checks source version/deletion/mode, inserts a new grant and increments revision with audit/outbox.
+- Real PostgreSQL integration PASS (25.521 seconds): execute-only probe, missing role policy denied; explicit test M01 diary viewer policy allows owner; recipient acting as owner, self/unrelated recipient, unsupported editor role, stale version and false consent denied; rollback does not grant read; concurrent identical requests return one grant and one receipt/audit/outbox. Earlier revoke/links/read/lifecycle assertions remain passing.
+- Lint/typecheck/diff check PASS. No production domain policies or runtime grants seeded, no API exposed. Next: Permission Inspector and domain payload/read/write security POC; domain-specific Contributor and conditional permissions remain incomplete. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 460 blobs, no findings; authorized historical binary caveat unchanged.

@@ -103,7 +103,27 @@ COMMIT;""",self.database)
         finally: sql(f'DROP OWNED BY {revoke_role}; DROP ROLE {revoke_role};',self.database)
         sql("UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL;",self.database)
         self.assertEqual(read('b'),'f')
-        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','viewer'); BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
+        issue_role='issue_probe_'+uuid.uuid4().hex
+        issue_command=str(uuid.uuid4())
+        issue_revision=int(sql(f"SELECT version FROM m10.resources WHERE id='{resource}';",self.database))
+        sql(f'CREATE ROLE {issue_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {issue_role}; GRANT EXECUTE ON FUNCTION app_internal.issue_resource_grant(text,uuid,uuid,uuid,uuid,text,bigint,boolean) TO {issue_role};',self.database)
+        try:
+            def issue(token='a',recipient=b,role='viewer',version=issue_revision,confirmed='true',ending='COMMIT'):
+                return sql(f"BEGIN; SET LOCAL ROLE {issue_role}; SELECT app_internal.issue_resource_grant(repeat('{token}',64),'{issue_command}','{resource}','{space}','{recipient}','{role}',{version},{confirmed}); {ending};",self.database)
+            with self.assertRaises(subprocess.CalledProcessError): issue()
+            sql("INSERT INTO app_internal.resource_role_policies VALUES ('M01','diary','viewer');",self.database)
+            for args in [dict(token='b'),dict(recipient=a),dict(recipient=str(uuid.uuid4())),dict(role='editor'),dict(version=issue_revision+1),dict(confirmed='false')]:
+                with self.assertRaises(subprocess.CalledProcessError): issue(**args)
+            issue(ending='ROLLBACK')
+            self.assertEqual(read('b'),'f')
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results=list(pool.map(lambda _:issue(),range(2)))
+            self.assertEqual(results[0],results[1])
+            self.assertEqual(read('b'),'t')
+            for table in ['command_receipts','audit_events','outbox']:
+                self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{issue_command}';",self.database),'1')
+        finally: sql(f'DROP OWNED BY {issue_role}; DROP ROLE {issue_role};',self.database)
+        sql(f"BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
         self.assertEqual(read('b'),'t')  # existing read rights during processing, no write capability
         sql(f"UPDATE m10.couple_spaces SET state='archived' WHERE id='{space}';",self.database)
         self.assertEqual(read('b'),'f')
