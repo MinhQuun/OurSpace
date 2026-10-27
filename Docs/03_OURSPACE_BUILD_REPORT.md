@@ -915,3 +915,14 @@ Acceptance: desktop/mobile disconnect enforces actual account MFA, rejects missi
 - PASS 6/6 (33.6 seconds). Each MFA variant first submits without factor (specific MFA-required message), then invalid factor (generic denial), verifies Active remains and password/code fields clear, then submits valid TOTP or recovery code and observes Frozen/deadline in both browsers. Required consent, reload, storage and overflow assertions remain. Password-only path still passes.
 - Lint/typecheck/diff check PASS. Production code unchanged; reused preceding production build. Stage 02 still needs object ACL/linked-private-data security POC; full domain D35/disposition work remains future integration. Next: begin object permission foundation against approved contracts.
 - History/worktree heuristic audit PASS: 446 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit e6f9541191d30aec6c7f6a2f57a527de72d7fdad PUSHED; remote master matches HEAD. Editor formatting preserved. Next: approved object permission contracts and Stage 02 ACL security POC.
+
+## Task 02.10a - Private-default object ACL registry
+
+Acceptance: M10 D13-D18 / BR-M10-34-48 foundation represents object ownership separately from explicit grants, binds grants to actual Space participants, preserves revocation history and does not infer access from links or membership.
+
+- Migration 0041 adds forced-RLS resources and resource_grants with no public/runtime grants. Resource identity/module/kind/owner immutable; new resources have no grants. Conditional mode is explicit metadata for later fail-closed domain checks, not an unlock override. Each role grant binds resource owner, recipient and exact Space through restrictive foreign keys. No content payload/parent inheritance/Space superadmin field.
+- Grant roles are editor/contributor/commenter/viewer; owner comes from resource ownership. Role/binding immutable; revoke one-way, history deletion denied, a later explicit grant requires a new record. Active duplicate grant prevented. Domain-specific consent/actions are not modeled as role privileges.
+- Real PostgreSQL test PASS (6.110 seconds): default zero grants, immutable owner/module/kind, invalid issuer/Space denial, metadata version increment, actual paired-member grant, role/delete/duplicate denial, no revoked-grant resurrection, explicit replacement retains both records, RLS-hidden resource under probe role.
+- This is schema foundation only. No grant-creation command or effective-permission resolver yet; no claim of complete ACL enforcement across domains. Next: scoped read authorization and linked-private-resource POC, then permission mutations/inspector. Stage 02 incomplete.
+- Lint/typecheck/diff review PASS. History/worktree heuristic audit PASS: 448 blobs, no findings; authorized historical binary caveat unchanged.

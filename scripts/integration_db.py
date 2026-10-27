@@ -18,6 +18,40 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_object_registry_private_default_and_immutable_identity(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        resource=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{resource}','M01','diary','{a}');",self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.resource_grants;',self.database),'0')
+        self.assertEqual(sql('SELECT access_mode FROM m10.resources;',self.database),'standard')
+        for statement in [f"UPDATE m10.resources SET owner_id='{b}';", "UPDATE m10.resources SET module='M02';", "UPDATE m10.resources SET kind='media';", f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{b}','{a}','{uuid.uuid4()}','viewer');"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        sql("UPDATE m10.resources SET access_mode='conditional';",self.database)
+        self.assertEqual(sql('SELECT version FROM m10.resources;',self.database),'2')
+        invitation,space,grant=str(uuid.uuid4()),str(uuid.uuid4()),str(uuid.uuid4())
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{resource}','{a}','{b}','{space}','viewer');
+COMMIT;""",self.database)
+        for statement in ["UPDATE m10.resource_grants SET role='editor';","DELETE FROM m10.resource_grants;",f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','editor');"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        sql('UPDATE m10.resource_grants SET revoked_at=clock_timestamp();',self.database)
+        with self.assertRaises(subprocess.CalledProcessError): sql('UPDATE m10.resource_grants SET revoked_at=NULL;',self.database)
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','editor');",self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.resource_grants;',self.database),'2')
+        role='resource_probe_'+uuid.uuid4().hex
+        try:
+            sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.resources,m10.resource_grants TO {role};',self.database)
+            self.assertEqual(sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM m10.resources; COMMIT;',self.database),'0')
+        finally: sql(f'DROP OWNED BY {role}; DROP ROLE {role};',self.database)
+
     def test_disconnect_step_up_uses_signed_fresh_password_not_refresh_iat(self):
         migrate(database=self.database)
         seed(self.database)
