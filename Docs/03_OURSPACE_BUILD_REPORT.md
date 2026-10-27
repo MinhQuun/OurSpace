@@ -1020,3 +1020,13 @@ Acceptance: server service validates identifiers/session token format, queries c
 - Lint/typecheck/diff check PASS. No HTTP endpoint or UI completed in this task. Next: authenticated Inspector endpoint and desktop/mobile UI with real HTTP tests. Stage 02 incomplete; domain effective permission resolution, storage/realtime POC remain pending.
 - History/worktree heuristic audit PASS: 473 blobs, no findings; approved historical binary caveat unchanged.
 - Commit a4ae2767f3f177bc8e36520eef1212be6b4e41ef PUSHED; remote master matches HEAD. Next: authenticated Inspector HTTP endpoint, then UI. Stage 02 incomplete.
+
+## Task 02.10k - Authenticated Permission Inspector HTTP endpoint
+
+Acceptance: current session required; only self-inspection; inaccessible and nonexistent objects have identical responses; sensitive responses are not cached; request budget applies before lookup.
+
+- Added GET /api/permissions/inspect?resourceId=UUID with live session validation, explicit query shape, cross-site rejection, no-store/Vary Cookie headers, generic errors and base ACL response. No arbitrary subject parameter or payload exposure.
+- Migration 0048 permits a separate permission_inspect request budget. Local provisioning configures 60 requests/60 seconds for evaluation; production threshold review remains pending. Local migration/checksum validation and runtime provisioning PASS.
+- Real HTTP test against production build PASS (1 test, 2.7 seconds): anonymous/revoked 401, owner exact allowlisted metadata, Private/unknown identical 404, malformed/extra subject 400, cross-site 403, no-store and budget 429/Retry-After. Synthetic database fixture removed after test.
+- Lint/typecheck/production build/diff check PASS. History/worktree heuristic audit: 478 blobs, no findings; approved historical binary limitation unchanged.
+- Next: desktop/mobile Permission Inspector UI. Base ACL is not complete domain effective authorization; storage/realtime POC and further Stage 02 gates remain pending. Stage 02 incomplete.
