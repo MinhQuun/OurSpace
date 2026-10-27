@@ -50,6 +50,7 @@ app_internal.list_pairing_invitations(text),
 app_internal.consume_pairing_request(text,text),
 app_internal.disconnect_space(text,text,uuid,uuid,bigint,boolean),
 app_internal.list_my_spaces(text),
+app_internal.inspect_resource_access(text,uuid),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
     # Local evaluation defaults only; production thresholds require separate review.
     # Independent action windows keep inspection spam from exhausting revocation.

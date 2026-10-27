@@ -1008,3 +1008,14 @@ Acceptance: an authorized write and grant revocation serialize through transacti
 - PostgreSQL integration PASS (39.858 seconds): pg_stat_activity confirms the writer is idle inside its transaction; another connection still sees old content; pg_blocking_pids confirms the revoker waits on that exact writer backend. Writer commit persists the edit, revocation then commits, and a subsequent edit fails without changing content. Concurrent replay still returns the original result with one receipt/audit/outbox.
 - Lint/typecheck/diff check PASS. Fixture remains a security POC, not a completed M01 editor or production version-history implementation. Next: runtime ACL service/API and Inspector UI, followed by storage/realtime security POC. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 471 blobs, no findings; approved historical binary caveat unchanged.
+- Commit 26f05115e823e385cd06149b59cad97b3ba3a8d5 PUSHED; remote master matches HEAD. Next: runtime ACL service/API and Inspector UI. Stage 02 incomplete.
+
+## Task 02.10j - Runtime base Permission Inspector service
+
+Acceptance: server service validates identifiers/session token format, queries current self-access with parameterized SQL, hides private/nonexistent targets identically, and runtime receives only the required inspection function privilege.
+
+- Added server-only PermissionService.inspect and auth runtime wiring. Explicit response fields describe base ACL only; domain conditions remain separate. Canonical opaque tokens are hashed before database use, no cached actor/access result, no arbitrary subject argument.
+- Local migrations through 0047 applied with checksum validation; runtime provision now grants inspect_resource_access only, without grants to raw ACL tables or internal read/edit gates.
+- Real runtime database suite PASS: 6 tests, including synthetic owner/private outsider/unknown target/unknown session, malformed input rejection, current conditional state and version, revoked session immediately hidden, direct ACL table and internal gate access denied. Synthetic fixture rows cleaned up in finally.
+- Lint/typecheck/diff check PASS. No HTTP endpoint or UI completed in this task. Next: authenticated Inspector endpoint and desktop/mobile UI with real HTTP tests. Stage 02 incomplete; domain effective permission resolution, storage/realtime POC remain pending.
+- History/worktree heuristic audit PASS: 473 blobs, no findings; approved historical binary caveat unchanged.

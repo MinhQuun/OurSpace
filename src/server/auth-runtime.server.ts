@@ -1,3 +1,4 @@
+import { PermissionService } from "../modules/m10/permissions/service.server";
 import { SpaceService } from "../modules/m10/spaces/service.server";
 import "server-only";
 import { PairingService } from "../modules/m10/pairing/service.server";
@@ -18,6 +19,7 @@ let instance:
       recovery: RecoveryService;
       pairing: PairingService;
       spaces: SpaceService;
+      permissions: PermissionService;
     }
   | undefined;
 export function authRuntime() {
@@ -49,6 +51,7 @@ export function authRuntime() {
     recovery: new RecoveryService(db, provider),
     pairing: new PairingService(db),
     spaces: new SpaceService(db, provider),
+    permissions: new PermissionService(db),
   };
   return instance;
 }
