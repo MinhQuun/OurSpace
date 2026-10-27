@@ -26,7 +26,7 @@ function failure(error: unknown) {
     { error: reason },
     reason === "invalid_input"
       ? 400
-      : (reason === "denied" || reason === "mfa_required")
+      : reason === "denied" || reason === "mfa_required"
         ? 403
         : reason === "conflict"
           ? 409
@@ -89,41 +89,71 @@ async function body(request: NextRequest): Promise<Record<string, unknown>> {
   }
 }
 function string(input: Record<string, unknown>, key: string) {
-  if (typeof input[key] !== "string") throw new AuthProviderError("invalid_input");
+  if (typeof input[key] !== "string")
+    throw new AuthProviderError("invalid_input");
   return input[key] as string;
 }
 export async function GET(request: NextRequest, context: Context) {
-  if ((await context.params).action !== "list") return json({ error: "not_found" },404);
+  if ((await context.params).action !== "list")
+    return json({ error: "not_found" }, 404);
   try {
     const session = await actor(request);
-    if (!session) return json({ error: "unauthenticated" },401);
-    const limited = await budget(session,"spaces_list");
+    if (!session) return json({ error: "unauthenticated" }, 401);
+    const limited = await budget(session, "spaces_list");
     if (limited) return limited;
     return json({ spaces: await session.auth.spaces.list(session.token) });
-  } catch (error) { return failure(error); }
+  } catch (error) {
+    return failure(error);
+  }
 }
 export async function POST(request: NextRequest, context: Context) {
-  if ((await context.params).action !== "disconnect") return json({ error: "not_found" },404);
+  if ((await context.params).action !== "disconnect")
+    return json({ error: "not_found" }, 404);
   try {
     const auth = authRuntime();
-    if (request.headers.get("origin") !== auth.origin || request.headers.get("sec-fetch-site") === "cross-site")
-      return json({ error: "forbidden" },403);
+    if (
+      request.headers.get("origin") !== auth.origin ||
+      request.headers.get("sec-fetch-site") === "cross-site"
+    )
+      return json({ error: "forbidden" }, 403);
     const session = await actor(request);
-    if (!session) return json({ error: "unauthenticated" },401);
-    const limited = await budget(session,"disconnect");
+    if (!session) return json({ error: "unauthenticated" }, 401);
+    const limited = await budget(session, "disconnect");
     if (limited) return limited;
     const input = await body(request);
-    if (typeof input.version !== "number") throw new AuthProviderError("invalid_input");
+    if (typeof input.version !== "number")
+      throw new AuthProviderError("invalid_input");
     let factor: SecondFactor | undefined;
     if (input.factor !== undefined) {
-      if (!input.factor || typeof input.factor !== "object" || Array.isArray(input.factor)) throw new AuthProviderError("invalid_input");
-      const value = input.factor as Record<string,unknown>;
-      if (value.method !== "totp" && value.method !== "recovery") throw new AuthProviderError("invalid_input");
-      factor = { method: value.method, code: string(value,"code"),
-        ...(value.factorId === undefined ? {} : { factorId: string(value,"factorId") }) };
+      if (
+        !input.factor ||
+        typeof input.factor !== "object" ||
+        Array.isArray(input.factor)
+      )
+        throw new AuthProviderError("invalid_input");
+      const value = input.factor as Record<string, unknown>;
+      if (value.method !== "totp" && value.method !== "recovery")
+        throw new AuthProviderError("invalid_input");
+      factor = {
+        method: value.method,
+        code: string(value, "code"),
+        ...(value.factorId === undefined
+          ? {}
+          : { factorId: string(value, "factorId") }),
+      };
     }
-    return json(await auth.spaces.disconnect(session.token,
-      { email: string(input,"email"), password: string(input,"password") },
-      string(input,"commandId"),string(input,"spaceId"),input.version,input.confirmed === true,factor));
-  } catch (error) { return failure(error); }
+    return json(
+      await auth.spaces.disconnect(
+        session.token,
+        { email: string(input, "email"), password: string(input, "password") },
+        string(input, "commandId"),
+        string(input, "spaceId"),
+        input.version,
+        input.confirmed === true,
+        factor,
+      ),
+    );
+  } catch (error) {
+    return failure(error);
+  }
 }

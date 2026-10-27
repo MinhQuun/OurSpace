@@ -64,10 +64,20 @@ test("MFA settings recovers interrupted setup and codes then enables and disable
   const secret = (await page.getByTestId("totp-secret").textContent())!;
   const pixels = await page.getByTestId("totp-qr").evaluate((element) => {
     const canvas = element as HTMLCanvasElement;
-    return { width: canvas.width, height: canvas.height,
-      data: Array.from(canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data) };
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      data: Array.from(
+        canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height)
+          .data,
+      ),
+    };
   });
-  const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height);
+  const decoded = jsQR(
+    new Uint8ClampedArray(pixels.data),
+    pixels.width,
+    pixels.height,
+  );
   expect(Boolean(decoded)).toBe(true);
   const otp = new URL(decoded!.data);
   expect(otp.protocol === "otpauth:" && otp.hostname === "totp").toBe(true);
@@ -96,21 +106,33 @@ test("MFA settings recovers interrupted setup and codes then enables and disable
   expect(
     await page.evaluate(() => document.cookie.includes("ourspace_mfa")),
   ).toBe(false);
-  const oldCode = await page.locator(".mfa-settings li code").first().textContent();
+  const oldCode = await page
+    .locator(".mfa-settings li code")
+    .first()
+    .textContent();
   await page.reload();
   await expect(page.locator(".mfa-settings li code")).toHaveCount(0);
   await expect(page.locator('button[value="mfa-acknowledge"]')).toHaveCount(0);
   await fill(localTotp(secret));
   await page.locator('button[value="mfa-replace-recovery"]').click();
   await expect(page.locator(".mfa-settings li code").first()).toBeVisible();
-  const newCodes = await page.locator(".mfa-settings li code").allTextContents();
+  const newCodes = await page
+    .locator(".mfa-settings li code")
+    .allTextContents();
   expect(newCodes.includes(oldCode!)).toBe(false);
   const isolated = await page.context().browser()!.newContext();
   try {
-    const rejected = await isolated.request.post("http://127.0.0.1:3102/api/auth/login", {
-      headers,
-      data: { email, password, secondFactor: { method: "recovery", code: oldCode } },
-    });
+    const rejected = await isolated.request.post(
+      "http://127.0.0.1:3102/api/auth/login",
+      {
+        headers,
+        data: {
+          email,
+          password,
+          secondFactor: { method: "recovery", code: oldCode },
+        },
+      },
+    );
     expect(rejected.status()).toBe(401);
   } finally {
     await isolated.close();

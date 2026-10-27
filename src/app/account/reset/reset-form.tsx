@@ -23,7 +23,13 @@ export default function ResetForm() {
         if (!response.ok) throw new Error();
         const state = await response.json();
         setStage(
-          invalidLink.current ? "request" : token.current ? "prepare" : state.prepared ? "complete" : "request",
+          invalidLink.current
+            ? "request"
+            : token.current
+              ? "prepare"
+              : state.prepared
+                ? "complete"
+                : "request",
         );
         if (invalidLink.current) {
           setFailed(true);
@@ -87,7 +93,10 @@ export default function ResetForm() {
         setMessage(
           "Chưa thể hoàn tất. Nếu link hoặc phiên phục hồi không còn hiệu lực, hãy yêu cầu email mới. Tài khoản bật MFA cần mã xác thực hợp lệ.",
         );
-        if (stage === "prepare" || (stage === "complete" && response.status === 401)) {
+        if (
+          stage === "prepare" ||
+          (stage === "complete" && response.status === 401)
+        ) {
           form.reset();
           token.current = "";
           setStage("request");
@@ -208,7 +217,15 @@ export default function ResetForm() {
       )}
       {stage === "complete" && (
         <p>
-          <button type="button" disabled={busy} onClick={() => { setStage("request"); setMessage(""); setFailed(false); }}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setStage("request");
+              setMessage("");
+              setFailed(false);
+            }}
+          >
             Yêu cầu email mới
           </button>{" "}
           nếu phiên đã hết hạn.

@@ -148,7 +148,10 @@ export class AuthProvider {
 
   async requestPasswordRecovery(email: string): Promise<void> {
     const normalized = email.trim();
-    if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+    if (
+      normalized.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+    )
       throw new AuthProviderError("invalid_input");
     await this.request("/recover", { email: normalized });
   }
@@ -157,9 +160,12 @@ export class AuthProvider {
   async verifyPasswordRecovery(tokenHash: string): Promise<ProviderSession> {
     if (!/^[a-zA-Z0-9_-]{32,256}$/.test(tokenHash))
       throw new AuthProviderError("invalid_input");
-    return this.session(await this.request("/verify", {
-      type: "recovery", token_hash: tokenHash,
-    }));
+    return this.session(
+      await this.request("/verify", {
+        type: "recovery",
+        token_hash: tokenHash,
+      }),
+    );
   }
 
   /** Transport primitive only. Caller must enforce recovery intent, MFA,
@@ -168,7 +174,12 @@ export class AuthProvider {
     if (password.length < 12 || password.length > 1024)
       throw new AuthProviderError("invalid_input");
     const identity = await this.identity(accessToken);
-    const result = await this.request("/user", { password }, accessToken, "PUT");
+    const result = await this.request(
+      "/user",
+      { password },
+      accessToken,
+      "PUT",
+    );
     if (result.id !== identity.id) throw new AuthProviderError("denied");
   }
 

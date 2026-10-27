@@ -1,5 +1,7 @@
+import { Pool } from "pg";
+import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { AuthProvider } from "../src/modules/m10/auth/provider.server";
 import { localTotp } from "../integration/local-totp";
 
@@ -489,13 +491,13 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
   );
   const [a, b, c] = contexts;
   const headers = { Origin: "http://127.0.0.1:3102" };
-  const credentials: {email:string;password:string}[] = [];
+  const credentials: { email: string; password: string }[] = [];
   try {
     expect((await a.get("/api/pairing/list")).status()).toBe(401);
     for (const request of contexts) {
       const email = `pair-http-${randomUUID()}@ourspace.test`,
         password = randomUUID() + "!Aa9";
-      credentials.push({email,password});
+      credentials.push({ email, password });
       expect(
         (
           await request.post("/api/auth/signup", {
@@ -658,22 +660,70 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
     const current = (await (await a.get("/api/spaces/list")).json()).spaces[0];
     expect(current.state).toBe("active");
     expect((await (await c.get("/api/spaces/list")).json()).spaces).toEqual([]);
-    const disconnect = { ...credentials[0], spaceId: current.id, version: Number(current.version), commandId: randomUUID(), confirmed: true };
-    expect((await a.post("/api/spaces/disconnect", { data: disconnect })).status()).toBe(403);
-    expect((await a.post("/api/spaces/disconnect", { headers, data: {...disconnect, confirmed:false} })).status()).toBe(400);
-    expect((await a.post("/api/spaces/disconnect", { headers, data: {...disconnect, ...credentials[1]} })).status()).toBe(403);
-    expect((await c.post("/api/spaces/disconnect", { headers, data: {...disconnect,...credentials[2]} })).status()).toBe(403);
+    const disconnect = {
+      ...credentials[0],
+      spaceId: current.id,
+      version: Number(current.version),
+      commandId: randomUUID(),
+      confirmed: true,
+    };
+    expect(
+      (await a.post("/api/spaces/disconnect", { data: disconnect })).status(),
+    ).toBe(403);
+    expect(
+      (
+        await a.post("/api/spaces/disconnect", {
+          headers,
+          data: { ...disconnect, confirmed: false },
+        })
+      ).status(),
+    ).toBe(400);
+    expect(
+      (
+        await a.post("/api/spaces/disconnect", {
+          headers,
+          data: { ...disconnect, ...credentials[1] },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await c.post("/api/spaces/disconnect", {
+          headers,
+          data: { ...disconnect, ...credentials[2] },
+        })
+      ).status(),
+    ).toBe(403);
     expect((await b.post("/api/auth/logout", { headers })).status()).toBe(200);
-    const stopped = await a.post("/api/spaces/disconnect", { headers, data: disconnect });
+    const stopped = await a.post("/api/spaces/disconnect", {
+      headers,
+      data: disconnect,
+    });
     expect(stopped.status()).toBe(200);
     expect(stopped.headers()["cache-control"]).toBe("no-store");
-    expect(await stopped.json()).toEqual({spaceId:current.id});
-    expect((await a.post("/api/spaces/disconnect", { headers, data: disconnect })).status()).toBe(200);
-    expect((await (await a.get("/api/spaces/list")).json()).spaces[0].state).toBe("frozen");
-    expect((await a.post("/api/spaces/disconnect", { headers, data: {padding:"x".repeat(5000)} })).status()).toBe(400);
+    expect(await stopped.json()).toEqual({ spaceId: current.id });
+    expect(
+      (
+        await a.post("/api/spaces/disconnect", { headers, data: disconnect })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (await (await a.get("/api/spaces/list")).json()).spaces[0].state,
+    ).toBe("frozen");
+    expect(
+      (
+        await a.post("/api/spaces/disconnect", {
+          headers,
+          data: { padding: "x".repeat(5000) },
+        })
+      ).status(),
+    ).toBe(400);
     let exhausted = false;
-    for (let index=0; index<10; index++) {
-      const attempt = await a.post("/api/spaces/disconnect", { headers, data: {...disconnect,confirmed:false} });
+    for (let index = 0; index < 10; index++) {
+      const attempt = await a.post("/api/spaces/disconnect", {
+        headers,
+        data: { ...disconnect, confirmed: false },
+      });
       if (attempt.status() === 429) {
         expect(Number(attempt.headers()["retry-after"])).toBeGreaterThan(0);
         exhausted = true;
@@ -688,5 +738,112 @@ test("pairing HTTP enforces session, origin, capability and two-party consent", 
     expect((await a.get("/api/pairing/list")).status()).toBe(401);
   } finally {
     await Promise.all(contexts.map((context) => context.dispose()));
+  }
+});
+
+test("permission Inspector HTTP hides private objects and rechecks sessions", async ({
+  request,
+}) => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const actor = randomUUID(),
+    outsider = randomUUID(),
+    resource = randomUUID(),
+    session = randomUUID();
+  const token = randomBytes(32).toString("base64url");
+  const url = `/api/permissions/inspect?resourceId=${resource}`;
+  const headers = { Cookie: `ourspace_session=${session}:${token}` };
+  try {
+    expect((await request.get(url)).status()).toBe(401);
+    await owner.query(
+      "INSERT INTO m10.accounts(id,state) VALUES ($1,'active'),($2,'active')",
+      [actor, outsider],
+    );
+    await owner.query(
+      "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+      [session, actor, createHash("sha256").update(token).digest("hex")],
+    );
+    await owner.query(
+      "INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ($1,'M01','diary',$2)",
+      [resource, outsider],
+    );
+    const hidden = await request.get(url, { headers });
+    const missing = await request.get(
+      `/api/permissions/inspect?resourceId=${randomUUID()}`,
+      { headers },
+    );
+    expect(hidden.status()).toBe(404);
+    expect(missing.status()).toBe(404);
+    expect(await hidden.json()).toEqual(await missing.json());
+    expect(hidden.headers()["cache-control"]).toBe("no-store");
+    expect(
+      (
+        await request.get(url, {
+          headers: { ...headers, "Sec-Fetch-Site": "cross-site" },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (await request.get(url + "&subject=" + outsider, { headers })).status(),
+    ).toBe(400);
+    expect(
+      (
+        await request.get("/api/permissions/inspect?resourceId=invalid", {
+          headers,
+        })
+      ).status(),
+    ).toBe(400);
+    const mine = randomUUID();
+    await owner.query(
+      "INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ($1,'M01','diary',$2)",
+      [mine, actor],
+    );
+    const visible = await request.get(
+      `/api/permissions/inspect?resourceId=${mine}`,
+      { headers },
+    );
+    expect(visible.status()).toBe(200);
+    expect(visible.headers()["cache-control"]).toBe("no-store");
+    expect(await visible.json()).toEqual({
+      inspection: {
+        resource_id: mine,
+        resource_version: "1",
+        role: "owner",
+        base_read_allowed: true,
+        read_reason: "base_acl_allowed",
+      },
+    });
+    await owner.query(
+      "UPDATE app_internal.pairing_request_budgets SET requests=60 WHERE account_id=$1 AND action='permission_inspect'",
+      [actor],
+    );
+    const limited = await request.get(url, { headers });
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",
+      [session],
+    );
+    expect((await request.get(url, { headers })).status()).toBe(401);
+  } finally {
+    await owner.query(
+      "DELETE FROM m10.resources WHERE owner_id=ANY($1::uuid[])",
+      [[actor, outsider]],
+    );
+    await owner.query(
+      "DELETE FROM app_internal.pairing_request_budgets WHERE account_id=$1",
+      [actor],
+    );
+    await owner.query("DELETE FROM m10.sessions WHERE id=$1", [session]);
+    await owner.query("DELETE FROM m10.accounts WHERE id=ANY($1::uuid[])", [
+      [actor, outsider],
+    ]);
+    await owner.end();
   }
 });
