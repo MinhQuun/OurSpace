@@ -58,6 +58,27 @@ COMMIT;""",self.database)
         self.assertEqual(read('a'),'t')
         self.assertEqual(read('b'),'t')
         self.assertEqual(read('b',child),'f')  # another resource never inherits the grant
+        sql(f"INSERT INTO m10.resource_links(source_id,target_id,relation) VALUES ('{resource}','{child}','attachment');",self.database)
+        link_role='link_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {link_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {link_role}; GRANT EXECUTE ON FUNCTION app_internal.visible_resource_links(text,uuid) TO {link_role};',self.database)
+        try:
+            def links(token,source=resource):
+                return json.loads(sql(f"BEGIN; SET LOCAL ROLE {link_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.visible_resource_links(repeat('{token}',64),'{source}') x; COMMIT;",self.database))
+            self.assertEqual(links('b'),[])
+            self.assertEqual(links('b',str(uuid.uuid4())),[])
+            self.assertEqual(links('c'),[])
+            self.assertEqual(links('a'),[dict(target_id=child,module='M02',kind='media',relation='attachment')])
+            sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{child}','{a}','{b}','{space}','viewer');",self.database)
+            self.assertEqual(len(links('b')),1)
+            sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{child}';",self.database)
+            self.assertEqual(len(links('b')),0)
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(f'BEGIN; SET LOCAL ROLE {link_role}; SELECT * FROM m10.resource_links; COMMIT;',self.database)
+            # Removing reference never cascades into either source object.
+            sql(f"DELETE FROM m10.resource_links WHERE source_id='{resource}';",self.database)
+            self.assertEqual(sql(f"SELECT count(*) FROM m10.resources WHERE id IN ('{resource}','{child}');",self.database),'2')
+        finally: sql(f'DROP OWNED BY {link_role}; DROP ROLE {link_role};',self.database)
+
         self.assertEqual(read('a',child),'t')
         self.assertEqual(read('b',str(uuid.uuid4())),'f')
         self.assertEqual(read('c'),'f')

@@ -937,3 +937,13 @@ Acceptance: base read authorization resolves current actor and exact resource gr
 - Test uses actual registry/grants/sessions/Space rows, but not a complete linked-resource API yet. Next: authorized payload/list/linked-preview POC with execute-only runtime and count/search leakage checks; grant commands and Permission Inspector remain pending. Conditional/Contributor domain support not claimed complete. Stage 02 incomplete.
 - Lint/typecheck/diff review PASS.
 - History/worktree heuristic audit PASS: 451 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 88eab7ac126cdab0b2e21660ee1f12dbaeaacfde PUSHED; remote master matches HEAD. Next: execute-only authorized payload/linked-preview/count POC, then permission commands and inspector.
+
+## Task 02.10c - Independently authorized resource references
+
+Acceptance: M10 D15 / BR-M10-37/38/41/42 cross-resource reads require both source and target access, without target IDs/type metadata leaking from a shared parent, and unlink does not cascade-delete domain objects.
+
+- Migration 0043 adds private forced-RLS resource_links with restrictive source/target foreign keys and no permission inheritance. visible_resource_links checks the current-session read gate for both endpoints and returns only authorized target ID/module/kind/relation. No hidden-count/placeholder/private metadata is returned. No public/runtime grant yet; future source-specific APIs must also apply domain restrictions.
+- Real PostgreSQL integration PASS (14.953 seconds), using temporary execute-only role: Shared source plus Private target yields empty array like nonexistent source/invalid session; owner sees explicit allowlisted metadata; deliberate target grant exposes one link; revocation restores zero visible links; direct link table read denied. Unlink retains both resource rows. Existing ownership/read/session/lifecycle assertions remain passing.
+- Lint/typecheck/diff check PASS. This covers reference metadata, not domain payload/search/export/storage/realtime integration. Next: authority-preserving permission mutations/inspector and payload/count security POC. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 454 blobs, no findings; authorized historical binary caveat unchanged.
