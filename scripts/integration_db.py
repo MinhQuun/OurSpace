@@ -90,6 +90,23 @@ COMMIT;""",self.database)
         self.assertEqual(set(inspect('b')[0]),{'resource_id','resource_version','role','base_read_allowed','read_reason'})
         self.assertEqual(inspect('b',child),[])
         self.assertEqual(read('b',child),'f')  # another resource never inherits the grant
+        binary,preview=str(uuid.uuid4()),str(uuid.uuid4())
+        sql(f"INSERT INTO app_internal.binary_objects(id,resource_id,purpose,bucket,byte_size,sha256) VALUES ('{binary}','{child}','original','ourspace-private',3,repeat('a',64)),('{preview}','{child}','preview','ourspace-private',2,repeat('b',64));",self.database)
+        sql(f'GRANT EXECUTE ON FUNCTION app_internal.resolve_readable_binary(text,uuid) TO {inspector_role};',self.database)
+        def resolve(token,key=binary):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {inspector_role}; SELECT coalesce(json_agg(row_to_json(x)),'[]'::json) FROM app_internal.resolve_readable_binary(repeat('{token}',64),'{key}') x; COMMIT;",self.database))
+        self.assertEqual(resolve('a')[0]['resource_id'],child)
+        self.assertEqual(resolve('a')[0]['purpose'],'original')
+        self.assertEqual(resolve('a',preview)[0]['purpose'],'preview')
+        self.assertNotEqual(resolve('a')[0]['object_key'],resolve('a',preview)[0]['object_key'])
+        self.assertEqual(resolve('b'),[])  # parent Editor never opens private child bytes
+        self.assertEqual(resolve('b',preview),[])
+        self.assertEqual(resolve('c'),[])
+        self.assertEqual(resolve('a',str(uuid.uuid4())),[])
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"UPDATE app_internal.binary_objects SET resource_id='{resource}' WHERE id='{binary}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f'BEGIN; SET LOCAL ROLE {inspector_role}; SELECT * FROM app_internal.binary_objects; COMMIT;',self.database)
         # Disposable domain payload POC: real rows and an execute-only reader.
         # This is not a production domain model or a completed export feature.
         payload_role='payload_probe_'+uuid.uuid4().hex
@@ -162,8 +179,12 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
             self.assertEqual(links('a'),[dict(target_id=child,module='M02',kind='media',relation='attachment')])
             sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{child}','{a}','{b}','{space}','viewer');",self.database)
             self.assertEqual(len(links('b')),1)
+            self.assertEqual(resolve('b')[0]['binary_id'],binary)
+            self.assertEqual(resolve('b',preview)[0]['binary_id'],preview)
             sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{child}';",self.database)
             self.assertEqual(len(links('b')),0)
+            self.assertEqual(resolve('b'),[])
+            self.assertEqual(resolve('b',preview),[])
             with self.assertRaises(subprocess.CalledProcessError):
                 sql(f'BEGIN; SET LOCAL ROLE {link_role}; SELECT * FROM m10.resource_links; COMMIT;',self.database)
             # Removing reference never cascades into either source object.
@@ -283,6 +304,7 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
         self.assertEqual(read('a'),'f')
         sql("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE token_hash=repeat('a',64);",self.database)
         self.assertEqual(read('a',child),'f')
+        self.assertEqual(resolve('a'),[])
         role='resource_probe_'+uuid.uuid4().hex
         try:
             sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.resources,m10.resource_grants TO {role};',self.database)
