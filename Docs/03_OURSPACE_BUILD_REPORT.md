@@ -947,3 +947,13 @@ Acceptance: M10 D15 / BR-M10-37/38/41/42 cross-resource reads require both sourc
 - Real PostgreSQL integration PASS (14.953 seconds), using temporary execute-only role: Shared source plus Private target yields empty array like nonexistent source/invalid session; owner sees explicit allowlisted metadata; deliberate target grant exposes one link; revocation restores zero visible links; direct link table read denied. Unlink retains both resource rows. Existing ownership/read/session/lifecycle assertions remain passing.
 - Lint/typecheck/diff check PASS. This covers reference metadata, not domain payload/search/export/storage/realtime integration. Next: authority-preserving permission mutations/inspector and payload/count security POC. Stage 02 incomplete.
 - History/worktree heuristic audit PASS: 454 blobs, no findings; authorized historical binary caveat unchanged.
+- Commit 2b4a028479f1c9b5f3802fdc1747e318667b6b79 PUSHED; remote master matches HEAD. Next: permission mutations/inspector and authorized payload/count POC; Stage 02 remains incomplete.
+
+## Task 02.10d - Atomic owner grant revocation
+
+Acceptance: current owner explicitly revokes one grant with version check; recipients cannot act as owner; access change/receipt/audit/outbox commit together and retries do not duplicate effects.
+
+- Migration 0044 adds internal revoke_resource_grant. Locks current active account/session, exact owned resource and grant, validates consent/version, revokes without deleting history and advances resource revision. Same command/fingerprint replays result; conflicting reuse denied. No public/runtime grant yet. Revocation does not require Active Space because it only narrows access.
+- Real PostgreSQL test PASS (18.951 seconds): temporary execute-only role, recipient/invalid session/wrong version/false consent denial, rollback preserves recipient read access, two concurrent identical requests return same grant, read denied after commit, exactly one receipt/audit/outbox and changed-command fingerprint rejection. Prior private/link/lifecycle tests remain passing.
+- Lint/typecheck/diff review PASS. No generic role delegation assumed; delegated editor grant management and domain-specific exceptions remain for scoped policy integration. Next: authenticated grant issuance/inspector and runtime/API security POC. Stage 02 incomplete.
+- History/worktree heuristic audit PASS: 457 blobs, no findings; authorized historical binary caveat unchanged.

@@ -82,6 +82,25 @@ COMMIT;""",self.database)
         self.assertEqual(read('a',child),'t')
         self.assertEqual(read('b',str(uuid.uuid4())),'f')
         self.assertEqual(read('c'),'f')
+        revoke_role='revoke_probe_'+uuid.uuid4().hex
+        live_grant=sql(f"SELECT id FROM m10.resource_grants WHERE resource_id='{resource}' AND revoked_at IS NULL;",self.database)
+        revision=int(sql(f"SELECT version FROM m10.resources WHERE id='{resource}';",self.database))
+        command=str(uuid.uuid4())
+        sql(f'CREATE ROLE {revoke_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {revoke_role}; GRANT EXECUTE ON FUNCTION app_internal.revoke_resource_grant(text,uuid,uuid,uuid,bigint,boolean) TO {revoke_role};',self.database)
+        try:
+            def revoke(token='a',version=revision,confirmed='true',ending='COMMIT'):
+                return sql(f"BEGIN; SET LOCAL ROLE {revoke_role}; SELECT app_internal.revoke_resource_grant(repeat('{token}',64),'{command}','{resource}','{live_grant}',{version},{confirmed}); {ending};",self.database)
+            for token,version,confirmed in [('b',revision,'true'),('c',revision,'true'),('a',revision+1,'true'),('a',revision,'false')]:
+                with self.assertRaises(subprocess.CalledProcessError): revoke(token,version,confirmed)
+            revoke(ending='ROLLBACK')
+            self.assertEqual(read('b'),'t')
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                self.assertEqual(list(pool.map(lambda _: revoke(),range(2))),[live_grant,live_grant])
+            self.assertEqual(read('b'),'f')
+            for table in ['command_receipts','audit_events','outbox']:
+                self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
+            with self.assertRaises(subprocess.CalledProcessError): revoke(version=revision+1)
+        finally: sql(f'DROP OWNED BY {revoke_role}; DROP ROLE {revoke_role};',self.database)
         sql("UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL;",self.database)
         self.assertEqual(read('b'),'f')
         sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{uuid.uuid4()}','{resource}','{a}','{b}','{space}','viewer'); BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}'; COMMIT;",self.database)
