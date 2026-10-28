@@ -9,6 +9,7 @@ export type OwnProfile = {
   nickname: string | null;
   birthday: string | null;
   bio: string | null;
+  avatar_ref: string | null;
   version: string;
 };
 export type ProfileUpdate = {
@@ -18,6 +19,7 @@ export type ProfileUpdate = {
   nickname: string | null;
   birthday: string | null;
   bio: string | null;
+  avatarRef?: string | null;
 };
 function digest(session: string) {
   if (
@@ -48,7 +50,7 @@ export class ProfileService {
   constructor(private readonly db: ReturnType<typeof createDatabase>) {}
   async read(session: string): Promise<OwnProfile | null> {
     const result = await this.db.query<OwnProfile>(
-      "SELECT user_id,display_name,nickname,to_char(birthday,'YYYY-MM-DD') AS birthday,bio,version FROM app_internal.read_my_profile($1)",
+      "SELECT user_id,display_name,nickname,to_char(birthday,'YYYY-MM-DD') AS birthday,bio,avatar_ref,version FROM app_internal.read_my_profile($1)",
       [digest(session)],
     );
     return result.rows[0] ?? null;
@@ -67,6 +69,7 @@ export class ProfileService {
             "nickname",
             "birthday",
             "bio",
+            "avatarRef",
           ].includes(key),
       ) ||
       typeof input.commandId !== "string" ||
@@ -83,11 +86,19 @@ export class ProfileService {
           length(input.nickname.trim()) > 120)) ||
       (input.bio !== null &&
         (typeof input.bio !== "string" || length(input.bio) > 4000)) ||
-      !validBirthday(input.birthday)
+      !validBirthday(input.birthday) ||
+      (input.avatarRef !== undefined &&
+        input.avatarRef !== null &&
+        (typeof input.avatarRef !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            input.avatarRef,
+          )))
     )
       throw new AuthProviderError("invalid_input");
     const result = await this.db.query<{ id: string }>(
-      "SELECT app_internal.update_my_profile($1,$2,$3,$4,$5,$6::date,$7) AS id",
+      input.avatarRef === undefined
+        ? "SELECT app_internal.update_my_profile($1,$2,$3,$4,$5,$6::date,$7) AS id"
+        : "SELECT app_internal.update_my_profile($1,$2,$3,$4,$5,$6::date,$7,$8::uuid) AS id",
       [
         hash,
         input.commandId,
@@ -96,10 +107,10 @@ export class ProfileService {
         input.nickname?.trim() || null,
         input.birthday,
         input.bio || null,
+        ...(input.avatarRef === undefined ? [] : [input.avatarRef]),
       ],
     );
     if (!result.rows[0]?.id) throw new AuthProviderError("denied");
-    // The receipt identifies the committed actor; callers fetch current profile separately.
     return { userId: result.rows[0].id };
   }
 }

@@ -240,6 +240,7 @@ test("profile service preserves own identity, date-only values and private optio
       nickname: input.nickname,
       birthday: "2000-02-29",
       bio: input.bio,
+      avatar_ref: null,
       version: "2",
     });
     expect(await service.read(tokens[1])).toMatchObject({
@@ -288,6 +289,33 @@ test("profile service preserves own identity, date-only values and private optio
       userId: users[0],
     });
     expect((await service.read(tokens[0]))?.version).toBe("3");
+    const media = Array.from({ length: 5 }, () => randomUUID());
+    for (let i = 0; i < media.length; i++) {
+      await owner.query(
+        "INSERT INTO m10.resources(id,module,kind,owner_id,access_mode,deleted_at) VALUES ($1,$2,'media',$3,$4,$5)",
+        [media[i], i === 2 ? "M01" : "M02", i === 1 ? users[1] : users[0],
+          i === 3 ? "conditional" : "standard", i === 4 ? new Date(Date.now() + 1000) : null],
+      );
+    }
+    const avatarInput = { ...input, commandId: randomUUID(), version: 3, avatarRef: media[0] };
+    for (const avatarRef of [...media.slice(1), randomUUID()]) {
+      await expect(service.update(tokens[0], { ...avatarInput, commandId: randomUUID(), avatarRef }))
+        .rejects.toMatchObject({ reason: "denied" });
+    }
+    expect((await service.read(tokens[0]))?.version).toBe("3");
+    await service.update(tokens[0], avatarInput);
+    await service.update(tokens[0], avatarInput);
+    expect(await service.read(tokens[0])).toMatchObject({ avatar_ref: media[0], version: "4" });
+    for (const table of ["command_receipts", "audit_events", "outbox"]) {
+      const rows = await owner.query(`SELECT count(*)::int AS count FROM app_internal.${table} WHERE command_id=$1`, [avatarInput.commandId]);
+      expect(rows.rows[0].count).toBe(1);
+    }
+    await service.update(tokens[0], { ...input, commandId: randomUUID(), version: 4 });
+    expect(await service.read(tokens[0])).toMatchObject({ avatar_ref: media[0], version: "5" });
+    await owner.query("UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id=$1", [media[0]]);
+    expect((await service.read(tokens[0]))?.avatar_ref).toBeNull();
+    await service.update(tokens[0], { ...input, commandId: randomUUID(), version: 5, avatarRef: null });
+    expect(await service.read(tokens[0])).toMatchObject({ avatar_ref: null, version: "6" });
     await expect(db.query("SELECT * FROM m10.profiles")).rejects.toMatchObject({
       reason: "denied",
     });

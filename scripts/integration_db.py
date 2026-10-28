@@ -47,7 +47,7 @@ class MigrationIntegrationTests(unittest.TestCase):
         self.assertEqual(sql(f"SELECT count(*) FROM app_internal.command_receipts WHERE command_id='{command}';",self.database),'0')
         with ThreadPoolExecutor(max_workers=2) as pool:
             self.assertEqual(list(pool.map(lambda _:update(),range(2))),[a,a])
-        self.assertEqual(read('a')[0],{'user_id':a,'display_name':'Synthetic name','nickname':'Synthetic nickname','birthday':'2000-02-29','bio':'Synthetic private bio','version':2})
+        self.assertEqual(read('a')[0],{'user_id':a,'display_name':'Synthetic name','nickname':'Synthetic nickname','birthday':'2000-02-29','bio':'Synthetic private bio','avatar_ref':None,'version':2})
         self.assertIsNone(read('b')[0]['bio'])
         for table in ['command_receipts','audit_events','outbox']:
             self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
