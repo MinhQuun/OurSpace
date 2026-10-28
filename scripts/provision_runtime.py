@@ -54,6 +54,8 @@ app_internal.inspect_resource_access(text,uuid),
 app_internal.list_owned_resource_grants(text,uuid),
 app_internal.resource_sharing_options(text,uuid),
 app_internal.resolve_readable_binary(text,uuid),
+app_internal.read_my_profile(text),
+app_internal.update_my_profile(text,uuid,bigint,text,text,date,text),
 app_internal.issue_resource_grant(text,uuid,uuid,uuid,uuid,text,bigint,boolean),
 app_internal.revoke_resource_grant(text,uuid,uuid,uuid,bigint,boolean),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')

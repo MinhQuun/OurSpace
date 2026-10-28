@@ -1,4 +1,5 @@
 import { PermissionService } from "../modules/m10/permissions/service.server";
+import { ProfileService } from "../modules/m10/profile/service.server";
 import { SpaceService } from "../modules/m10/spaces/service.server";
 import "server-only";
 import { PairingService } from "../modules/m10/pairing/service.server";
@@ -20,6 +21,7 @@ let instance:
       pairing: PairingService;
       spaces: SpaceService;
       permissions: PermissionService;
+      profile: ProfileService;
     }
   | undefined;
 export function authRuntime() {
@@ -52,6 +54,7 @@ export function authRuntime() {
     pairing: new PairingService(db),
     spaces: new SpaceService(db, provider),
     permissions: new PermissionService(db),
+    profile: new ProfileService(db),
   };
   return instance;
 }
