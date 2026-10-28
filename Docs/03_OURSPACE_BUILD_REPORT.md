@@ -1122,3 +1122,14 @@ Acceptance: isolated local vendor Storage database, generated ignored credential
 - First healthcheck resolved localhost to IPv6 while server listened IPv4; fixed to 127.0.0.1. Original waiting compose process ended when replaced; final pinned-image start returned healthy for both services and final integration passed.
 - Lint/typecheck/Python compile/diff review PASS. Git history heuristic audit 531 blobs, no findings; new-file heuristic scan no findings; generated secret paths verified ignored. Historical binary approval/caveat unchanged.
 - Added local operation instructions. This does not complete domain uploads or ACL-revocable downloads. Next: authenticated download proxy and real-byte revoke POC, then realtime active-channel POC. Stage 02 remains incomplete.
+- Commit 031258f8ce3f299ef7e9be9d543cab90befaa808 PUSHED; remote master matches HEAD. Next: authenticated download proxy with real-byte revocation tests. Stage 02 incomplete.
+
+## Task 02.11c - Server-only private Storage transport
+
+Acceptance: actual private Storage bytes read through a trusted server configuration; bounded byte size and SHA-256 verified; unsafe locations/configuration, unauthorized access and cancellation fail closed without exposing provider details.
+
+- Added PrivateStorage transport with server-only import, HTTPS (HTTP loopback only), fixed supported base paths, validated bucket/UUID keys, renewable server credential supplier, no-store fetch, redirect rejection and 30-second timeout. Reads enforce configured size ceiling, exact metadata length and SHA-256 before releasing the buffered result; safe generic errors and response cancellation.
+- Real Supabase Storage tests 2/2 PASS (229ms test time): 8,193 random bytes round trip; wrong hash/shorter or longer expected size/over-limit/missing key/path traversal rejected; authenticated non-service credential denied; canceled request rejected; unsafe configuration errors sanitized. Temporary private bucket cleaned through Storage API.
+- Lint/typecheck/diff review PASS; changed-file secret heuristic scan no findings. No user credentials, backend URLs or provider headers returned to browser. Local operation doc updated.
+- Transport is deliberately not an authorization gate or HTTP endpoint. Next task must apply live source/domain checks around reads; larger-media streaming/range support remains unimplemented. Stage 02 incomplete. Transient next-env.d.ts dev-generation changes were not included.
+- History heuristic audit PASS: 536 blobs, no findings; approved historical binary caveat unchanged.

@@ -27,3 +27,12 @@ Upstream configuration references:
 - https://github.com/supabase/storage/blob/v1.81.0/src/config.ts
 - https://github.com/supabase/storage/blob/v1.81.0/migrations/tenant/0002-storage-schema.sql
 - https://supabase.com/docs/guides/storage/serving/downloads
+
+The server-only TypeScript transport is `src/server/private-storage.server.ts`.
+Run `npx vitest run --config vitest.storage.config.mjs` against the running local
+Storage instance. It reads only validated registry locations, disables caching
+and redirects, enforces a caller-configured byte ceiling and timeout, and checks
+size/SHA-256 before returning bytes. Errors never include backend response bodies.
+This buffered transport is suitable for bounded downloads; larger media streaming
+and range support must be implemented and verified with the relevant domain limits.
+It is not an authorization gate and is not yet exposed by an application route.
