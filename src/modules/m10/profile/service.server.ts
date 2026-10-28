@@ -21,6 +21,25 @@ export type ProfileUpdate = {
   bio: string | null;
   avatarRef?: string | null;
 };
+export const profileFields = ["display_name", "avatar_ref", "nickname", "birthday", "bio"] as const;
+export type ProfileField = (typeof profileFields)[number];
+export type PartnerProfile = Partial<Record<ProfileField, string | null>>;
+export type ProfileFieldGrant = {
+  id: string; field: ProfileField; grantee_id: string; space_id: string;
+  granted_at: Date; revoked_at: Date | null;
+};
+export type ShareProfileField = { commandId: string; spaceId: string; recipientId: string;
+  field: ProfileField; version: number; confirmed: boolean };
+export type RevokeProfileField = { commandId: string; grantId: string; version: number; confirmed: boolean };
+const uuid = (value: unknown): value is string => typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+function command(input: unknown, keys: string[]): asserts input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+    Object.keys(input).some(key => !keys.includes(key))) throw new AuthProviderError("invalid_input");
+  const value = input as Record<string, unknown>;
+  if (!uuid(value.commandId) || !Number.isSafeInteger(value.version) ||
+    (value.version as number) < 1 || value.confirmed !== true) throw new AuthProviderError("invalid_input");
+}
 function digest(session: string) {
   if (
     !/^[A-Za-z0-9_-]{43}$/.test(session) ||
@@ -54,6 +73,37 @@ export class ProfileService {
       [digest(session)],
     );
     return result.rows[0] ?? null;
+  }
+  async partner(session: string, spaceId: string): Promise<PartnerProfile> {
+    const hash = digest(session);
+    if (!uuid(spaceId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ profile: PartnerProfile }>(
+      "SELECT app_internal.read_partner_profile($1,$2) AS profile", [hash, spaceId]);
+    return result.rows[0].profile;
+  }
+  async grants(session: string): Promise<ProfileFieldGrant[]> {
+    const result = await this.db.query<ProfileFieldGrant>(
+      "SELECT id,field,grantee_id,space_id,granted_at,revoked_at FROM app_internal.list_my_profile_field_grants($1)", [digest(session)]);
+    return result.rows;
+  }
+  async shareField(session: string, input: ShareProfileField) {
+    const hash = digest(session);
+    command(input, ["commandId", "spaceId", "recipientId", "field", "version", "confirmed"]);
+    if (!uuid(input.spaceId) || !uuid(input.recipientId) || !profileFields.includes(input.field))
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.issue_profile_field_grant($1,$2,app_internal.session_actor($1),$3,$4,$5,$6,$7) AS id",
+      [hash, input.commandId, input.spaceId, input.recipientId, input.field, input.version, input.confirmed]);
+    return { grantId: result.rows[0].id };
+  }
+  async revokeField(session: string, input: RevokeProfileField) {
+    const hash = digest(session);
+    command(input, ["commandId", "grantId", "version", "confirmed"]);
+    if (!uuid(input.grantId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.revoke_profile_field_grant($1,$2,app_internal.session_actor($1),$3,$4,$5) AS id",
+      [hash, input.commandId, input.grantId, input.version, input.confirmed]);
+    return { grantId: result.rows[0].id };
   }
   async update(session: string, input: ProfileUpdate) {
     const hash = digest(session);

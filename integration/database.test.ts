@@ -316,6 +316,35 @@ test("profile service preserves own identity, date-only values and private optio
     expect((await service.read(tokens[0]))?.avatar_ref).toBeNull();
     await service.update(tokens[0], { ...input, commandId: randomUUID(), version: 5, avatarRef: null });
     expect(await service.read(tokens[0])).toMatchObject({ avatar_ref: null, version: "6" });
+    const invitation = randomUUID(), space = randomUUID();
+    await owner.query("BEGIN");
+    try {
+      await owner.query("INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ($1,$2,$3)", [invitation, users[0], createHash("sha256").update(randomUUID()).digest("hex")]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by=$2,accepted_at=clock_timestamp() WHERE id=$1", [invitation, users[1]]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id=$1", [invitation]);
+      await owner.query("INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ($1,$2)", [space, invitation]);
+      await owner.query("INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ($1,$2,1),($1,$3,2)", [space, users[0], users[1]]);
+      await owner.query("COMMIT");
+    } catch (error) { await owner.query("ROLLBACK"); throw error; }
+    expect(await service.partner(tokens[1], space)).toEqual({});
+    const sharing = { commandId: randomUUID(), spaceId: space, recipientId: users[1], field: "birthday" as const, version: 6, confirmed: true };
+    for (const patch of [{ confirmed: false }, { field: "email" }, { version: 0 }, { recipientId: "invalid" }, { userId: users[1] }]) {
+      await expect(service.shareField(tokens[0], { ...sharing, ...patch } as typeof sharing)).rejects.toMatchObject({ kind: "invalid_input" });
+    }
+    const shared = await service.shareField(tokens[0], sharing);
+    expect(await service.shareField(tokens[0], sharing)).toEqual(shared);
+    expect(await service.partner(tokens[1], space)).toEqual({ birthday: "2000-02-29" });
+    expect(await service.partner(tokens[1], randomUUID())).toEqual({});
+    expect(await service.grants(tokens[1])).toEqual([]);
+    expect(await service.grants(tokens[0])).toMatchObject([{ id: shared.grantId, field: "birthday", revoked_at: null }]);
+    await expect(service.revokeField(tokens[1], { commandId: randomUUID(), grantId: shared.grantId, version: 1, confirmed: true })).rejects.toMatchObject({ reason: "denied" });
+    const revocation = { commandId: randomUUID(), grantId: shared.grantId, version: 7, confirmed: true };
+    await expect(service.revokeField(tokens[0], { ...revocation, version: 6 })).rejects.toMatchObject({ reason: "conflict" });
+    expect(await service.revokeField(tokens[0], revocation)).toEqual(shared);
+    expect(await service.revokeField(tokens[0], revocation)).toEqual(shared);
+    expect(await service.partner(tokens[1], space)).toEqual({});
+    expect((await service.grants(tokens[0]))[0].revoked_at).toBeInstanceOf(Date);
+    await expect(db.query("SELECT * FROM m10.profile_field_grants")).rejects.toMatchObject({ reason: "denied" });
     await expect(db.query("SELECT * FROM m10.profiles")).rejects.toMatchObject({
       reason: "denied",
     });
