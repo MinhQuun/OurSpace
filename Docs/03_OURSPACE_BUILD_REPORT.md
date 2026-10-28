@@ -1207,4 +1207,10 @@ Acceptance: service uses parameterized own-profile commands with no target user,
 - Route: server validates session cookie, origin/sec-fetch-site, body size/content-type, rejects query parameters, enforces per-action budget before DB calls, maps errors to safe statuses (400/401/403/409/429/503) and returns `{ profile }` or `{ userId }` with no-store/Vary headers.
 - Real HTTP/browser coverage present in e2e/auth-http.spec.ts: own read/update, cross-account isolation, invalid/leap dates, oversized bio, replay idempotency, changed replay conflict, stale version conflict, budget 429 with Retry-After, session revocation denial and foreign origin rejection.
 - Lint/typecheck/build and existing Auth/HTTP regression targets unchanged in behavior; no production deployment. No full D07 completion claimed (UI/avatar/field sharing pending).
-- Working tree contains the route (committed in acc8699) and untracked migration 0055/budget wiring; apply migrations before use. Next: own-profile UI and avatar/source permissions, then remaining Stage 03 shared-platform items.
+- Working tree contains the route (committed in acc8699) and migration 0055 committed (c9c3025); apply migrations before use. Next: own-profile UI and avatar/source permissions, then remaining Stage 03 shared-platform items.
+
+
+## Task 03.1d - Own-profile UI panel
+- Acceptance: authenticated account page shows private profile form (display name, nickname, birthday, bio) with client-side validation, loads via GET /api/profile, updates via POST with commandId/version/origin, handles 401/409/429/errors and refreshes on conflict; no target-user fields or browser token storage. Related M10 D07.
+- Added profile-panel.tsx integrated into account-form for signed-in state; uses same-origin fetch, CSRF/header checks rely on server, clears state on expiry.
+- Lint/typecheck PASS. No full D07 completion claimed (avatar/source permissions and broader sharing pending). Next: avatar linkage with source permissions and remaining Stage 03 shared-platform items.
