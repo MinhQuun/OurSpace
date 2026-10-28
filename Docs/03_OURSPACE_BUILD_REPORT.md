@@ -17,7 +17,7 @@ Updated: 2026-10-28 (Asia/Saigon). This report records implementation evidence, 
 | 00 | DONE | Audit and registry pushed and verified; source mappings retain explicit unresolved statuses |
 | 01 | DONE | Local app/DB/Auth, seed, migrations, policy/ownership foundations and hosted CI verified |
 | 02 | DONE (POC gate) | Real Auth/MFA/pairing/ACL/storage/realtime security evidence and full regression; see STAGE02_SECURITY_REVIEW.md. Full M10/domain P0 remains later stages |
-| 03 | NOT_STARTED | Shared platform |
+| 03 | IN_PROGRESS | Own-profile database commands; service/API/UI and remaining shared-platform journeys pending |
 | 04 | NOT_STARTED | M02 |
 | 05 | NOT_STARTED | M01 |
 | 06 | NOT_STARTED | M05 |
@@ -1177,3 +1177,14 @@ Acceptance: two independent account sessions on real sockets; Private join denie
 - History heuristic audit: 569 blobs, no findings; approved historical binaries unchanged. No cloud/prod credentials or production deployment used.
 - Added STAGE02_SECURITY_REVIEW.md with gate-by-gate authoritative tests and explicit limits. Stage 02 security POC exit PASS; architecture A remains viable for this scope. This does not accept complete M10, domain permission policies, export workflows, M01 realtime editing, M07 finance or M08 capsule.
 - Next ordered stage: STAGE 03 shared platform/M10 journeys. First task: D07/ST-02 own profile fields, source validation and optimistic concurrency, followed by service/API/UI and desktop/mobile negative tests. Avatar/media integration must retain source permissions; no domain AC silently dropped.
+- Commit 0b5a979c556e5615c2971c95e454ad0ea1d348de PUSHED; remote master matches HEAD. Stage02 POC gate complete; next task is Stage03 own-profile foundation. Overall M01–M10 P0 goal remains incomplete.
+
+
+## Task 03.1a - Private own-profile data and atomic updates
+
+Acceptance: M10 D07/ST-02/BR11,14,15: current account reads/updates only its own profile; required Display Name and optional Nickname/Birthday/Bio; stable identity, version conflicts, idempotency and atomic receipt/audit/outbox; no automatic Partner sharing.
+
+- Migration0054 adds nullable nickname/birthday/bio to forced-RLS profiles, immutable user_id/version trigger, read_my_profile with no target-account argument, and update_my_profile bound to current active account/session under locks. Same command/payload replays without rewriting later edits; changed command payload denied; stale version conflicts. Audit/outbox contain identifiers only, not personal fields.
+- Technical input ceilings: existing Display Name120, Nickname120, Bio4000 characters; empty optional text clears to null, valid finite date required. No inferred age restriction or sharing policy added. Date fingerprint uses integer days from a fixed date, independent of date formatting.
+- Fresh DB tests 2/2 PASS 14.445s final: owner isolation/invalid session, missing/whitespace name, invalid/leap/infinite dates, oversize text, rollback no receipt, concurrent duplicate one result/event, competing versions one winner, old retry does not overwrite, identity immutability/raw-table denial, revoked session rejects replay, repeatable seed preserves data. Local migration0054/checksums PASS.
+- Lint/typecheck/Python compile/diff review PASS; changed-file secret heuristic no findings. No runtime grants, API or UI yet; no full D07 completion claimed. Avatar source authorization and field-level sharing remain required tasks. Next: typed profile service/runtime grants with real DB integration, then authenticated API and desktop/mobile forms.

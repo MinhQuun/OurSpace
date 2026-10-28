@@ -20,6 +20,57 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_own_profile_private_update_conflict_replay_and_atomicity(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='profile_probe_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.read_my_profile(text),app_internal.update_my_profile(text,uuid,bigint,text,text,date,text) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(row_to_json(p)),'[]'::json) FROM app_internal.read_my_profile(repeat('{token}',64)) p; COMMIT;",self.database))
+        command=str(uuid.uuid4())
+        def update(token='a',cmd=command,version=1,name="'Synthetic name'",nickname="'Synthetic nickname'",birthday="'2000-02-29'",bio="'Synthetic private bio'",ending='COMMIT'):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.update_my_profile(repeat('{token}',64),'{cmd}',{version},{name},{nickname},{birthday}::date,{bio}); {ending};",self.database)
+        self.assertEqual(read('a')[0]['user_id'],a)
+        self.assertEqual(read('b')[0]['user_id'],b)
+        self.assertIsNone(read('b')[0]['bio'])
+        self.assertEqual(read('c'),[])
+        for args in [dict(token='c'),dict(name="''"),dict(name="E'\\t'"),dict(birthday="'infinity'"),dict(birthday="'2001-02-29'"),dict(nickname="repeat('x',121)"),dict(bio="repeat('x',4001)"),dict(version=2)]:
+            with self.assertRaises(subprocess.CalledProcessError): update(**args)
+        update(ending='ROLLBACK')
+        self.assertEqual(read('a')[0]['version'],1)
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.command_receipts WHERE command_id='{command}';",self.database),'0')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(lambda _:update(),range(2))),[a,a])
+        self.assertEqual(read('a')[0],{'user_id':a,'display_name':'Synthetic name','nickname':'Synthetic nickname','birthday':'2000-02-29','bio':'Synthetic private bio','version':2})
+        self.assertIsNone(read('b')[0]['bio'])
+        for table in ['command_receipts','audit_events','outbox']:
+            self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError): update(name="'changed replay'")
+        with self.assertRaises(subprocess.CalledProcessError): update(cmd=str(uuid.uuid4()))
+        def competing(_):
+            try: return update(cmd=str(uuid.uuid4()),version=2,name="'Next name'",nickname='NULL',birthday='NULL',bio='NULL')
+            except subprocess.CalledProcessError: return 'conflict'
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertCountEqual(list(pool.map(competing,range(2))),[a,'conflict'])
+        self.assertEqual(read('a')[0]['version'],3)
+        self.assertIsNone(read('a')[0]['bio'])
+        self.assertEqual(update(),a)  # Replay old receipt never overwrites later profile.
+        self.assertEqual(read('a')[0]['display_name'],'Next name')
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"UPDATE m10.profiles SET user_id='{uuid.uuid4()}' WHERE user_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT * FROM m10.profiles; COMMIT;',self.database)
+        sql("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE token_hash=repeat('a',64);",self.database)
+        self.assertEqual(read('a'),[])
+        with self.assertRaises(subprocess.CalledProcessError): update()
+        self.assertEqual(read('b')[0]['user_id'],b)
+
     def test_object_registry_private_default_and_immutable_identity(self):
         migrate(database=self.database)
         seed(self.database)
