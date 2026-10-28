@@ -245,48 +245,93 @@ test("download service rechecks live source ACL around real Storage bytes", asyn
     const denied = new BinaryDownloadService(db, storage, async () => false);
     expect(await denied.read(tokens[0], binary)).toBeNull();
     expect(reads).toBe(1);
-    const handler = binaryDownloadHandler({origin:"http://127.0.0.1",
-      sessions:new SessionService(db,new AuthProvider("http://127.0.0.1:55433")),
-      budgets:new PairingService(db),downloads:service});
-    http=createServer(async (incoming,outgoing)=>{
-      try {
-        const url=new URL(incoming.url!,"http://127.0.0.1");
-        const requestHeaders=new Headers();
-        for (const [key,value] of Object.entries(incoming.headers))
-          if (value !== undefined) requestHeaders.set(key,Array.isArray(value)?value.join(","):value);
-        const result=await handler(new Request(url,{method:incoming.method,headers:requestHeaders}),url.pathname.slice(1));
-        outgoing.writeHead(result.status,Object.fromEntries(result.headers.entries()));
-        outgoing.end(Buffer.from(await result.arrayBuffer()));
-      } catch { outgoing.writeHead(500); outgoing.end(); }
+    const handler = binaryDownloadHandler({
+      origin: "http://127.0.0.1",
+      sessions: new SessionService(
+        db,
+        new AuthProvider("http://127.0.0.1:55433"),
+      ),
+      budgets: new PairingService(db),
+      downloads: service,
     });
-    http.listen(0,"127.0.0.1"); await once(http,"listening");
-    const address=http.address();
-    if (!address || typeof address === "string") throw new Error("Missing local server");
-    const endpoint=`http://127.0.0.1:${address.port}/`;
-    const cookie=(i:number)=>`ourspace_session=${randomUUID()}:${tokens[i]}`;
-    const get=(id:string=binary, extra:Record<string,string>={}, account=0)=>fetch(endpoint+id,{headers:{Cookie:cookie(account),...extra}});
-    expect((await fetch(endpoint+binary)).status).toBe(401);
-    expect((await get(binary,{"Sec-Fetch-Site":"cross-site"})).status).toBe(403);
-    expect((await get(binary,{Origin:"https://untrusted.test"})).status).toBe(403);
-    expect((await get(binary+"?bucket=forged")).status).toBe(400);
-    expect((await get(binary,{Range:"bytes=0-1"})).status).toBe(416);
-    const privateResult=await get(binary,{},1), unknown=await get(randomUUID(),{},1);
-    expect(privateResult.status).toBe(404); expect(unknown.status).toBe(404);
+    http = createServer(async (incoming, outgoing) => {
+      try {
+        const url = new URL(incoming.url!, "http://127.0.0.1");
+        const requestHeaders = new Headers();
+        for (const [key, value] of Object.entries(incoming.headers))
+          if (value !== undefined)
+            requestHeaders.set(
+              key,
+              Array.isArray(value) ? value.join(",") : value,
+            );
+        const result = await handler(
+          new Request(url, {
+            method: incoming.method,
+            headers: requestHeaders,
+          }),
+          url.pathname.slice(1),
+        );
+        outgoing.writeHead(
+          result.status,
+          Object.fromEntries(result.headers.entries()),
+        );
+        outgoing.end(Buffer.from(await result.arrayBuffer()));
+      } catch {
+        outgoing.writeHead(500);
+        outgoing.end();
+      }
+    });
+    http.listen(0, "127.0.0.1");
+    await once(http, "listening");
+    const address = http.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing local server");
+    const endpoint = `http://127.0.0.1:${address.port}/`;
+    const cookie = (i: number) =>
+      `ourspace_session=${randomUUID()}:${tokens[i]}`;
+    const get = (
+      id: string = binary,
+      extra: Record<string, string> = {},
+      account = 0,
+    ) =>
+      fetch(endpoint + id, { headers: { Cookie: cookie(account), ...extra } });
+    expect((await fetch(endpoint + binary)).status).toBe(401);
+    expect((await get(binary, { "Sec-Fetch-Site": "cross-site" })).status).toBe(
+      403,
+    );
+    expect(
+      (await get(binary, { Origin: "https://untrusted.test" })).status,
+    ).toBe(403);
+    expect((await get(binary + "?bucket=forged")).status).toBe(400);
+    expect((await get(binary, { Range: "bytes=0-1" })).status).toBe(416);
+    const privateResult = await get(binary, {}, 1),
+      unknown = await get(randomUUID(), {}, 1);
+    expect(privateResult.status).toBe(404);
+    expect(unknown.status).toBe(404);
     expect(await privateResult.text()).toBe(await unknown.text());
-    const download=await get(binary,{"If-None-Match":"*"});
+    const download = await get(binary, { "If-None-Match": "*" });
     expect(download.status).toBe(200);
     expect(Buffer.from(await download.arrayBuffer())).toEqual(bytes);
     expect(download.headers.get("cache-control")).toContain("no-store");
-    expect(download.headers.get("content-disposition")).toBe('attachment; filename="download.bin"');
-    expect(download.headers.get("content-type")).toBe("application/octet-stream");
-    for (const name of ["etag","location","authorization","access-control-allow-origin"])
+    expect(download.headers.get("content-disposition")).toBe(
+      'attachment; filename="download.bin"',
+    );
+    expect(download.headers.get("content-type")).toBe(
+      "application/octet-stream",
+    );
+    for (const name of [
+      "etag",
+      "location",
+      "authorization",
+      "access-control-allow-origin",
+    ])
       expect(download.headers.get(name)).toBeNull();
     await owner.query(
       "INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ($1,$2,$3,$4,$5,'viewer')",
       [grant, resource, a, b, space],
     );
     expect(await service.read(tokens[1], binary)).toEqual(bytes);
-    expect((await get(binary,{},1)).status).toBe(200);
+    expect((await get(binary, {}, 1)).status).toBe(200);
     // Revocation commits after the first ACL resolution, before the real fetch.
     const revoking = new PrivateStorage(
       base,
@@ -309,10 +354,14 @@ test("download service rechecks live source ACL around real Storage bytes", asyn
       ),
     ).toBeNull();
     expect(await service.read(tokens[1], binary)).toBeNull();
-    expect((await get(binary,{},1)).status).toBe(404);
+    expect((await get(binary, {}, 1)).status).toBe(404);
     expect(await service.read(tokens[0], binary)).toEqual(bytes);
-    await owner.query("UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='binary_download'",[a]);
-    const limited=await get(); expect(limited.status).toBe(429);
+    await owner.query(
+      "UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='binary_download'",
+      [a],
+    );
+    const limited = await get();
+    expect(limited.status).toBe(429);
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
     const endingSession = new PrivateStorage(
       base,
@@ -337,7 +386,12 @@ test("download service rechecks live source ACL around real Storage bytes", asyn
       db.query("SELECT * FROM app_internal.binary_objects"),
     ).rejects.toMatchObject({ reason: "denied" });
   } finally {
-    if (http) { http.closeAllConnections(); await new Promise<void>((resolve,reject)=>http!.close(error=>error?reject(error):resolve())); }
+    if (http) {
+      http.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        http!.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
     await owner.query("ROLLBACK");
     await owner.query(
       "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL",

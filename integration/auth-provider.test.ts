@@ -1653,30 +1653,88 @@ test("disconnect guard and atomic command accept real password TOTP and recovery
       true,
     );
     const permissions = new PermissionService(db);
-    const objectId = randomUUID(), kind = 'probe_' + randomUUID().replaceAll('-','');
-    await owner.query("INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ($1,'M01',$2,$3)",[objectId,kind,identity]);
-    const grantInput = {commandId:randomUUID(),resourceId:objectId,spaceId:space.spaceId,recipientId:partnerId,role:'viewer' as const,version:1,confirmed:true};
-    await expect(permissions.grant(verified.session.token,grantInput)).rejects.toMatchObject({reason:'denied'});
-    await owner.query("INSERT INTO app_internal.resource_role_policies(module,kind,role) VALUES ('M01',$1,'viewer')",[kind]);
+    const objectId = randomUUID(),
+      kind = "probe_" + randomUUID().replaceAll("-", "");
+    await owner.query(
+      "INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ($1,'M01',$2,$3)",
+      [objectId, kind, identity],
+    );
+    const grantInput = {
+      commandId: randomUUID(),
+      resourceId: objectId,
+      spaceId: space.spaceId,
+      recipientId: partnerId,
+      role: "viewer" as const,
+      version: 1,
+      confirmed: true,
+    };
+    await expect(
+      permissions.grant(verified.session.token, grantInput),
+    ).rejects.toMatchObject({ reason: "denied" });
+    await owner.query(
+      "INSERT INTO app_internal.resource_role_policies(module,kind,role) VALUES ('M01',$1,'viewer')",
+      [kind],
+    );
     try {
-      await expect(permissions.grant(partner.token,grantInput)).rejects.toMatchObject({reason:'denied'});
-      await expect(permissions.grant(verified.session.token,{...grantInput,confirmed:false})).rejects.toThrow();
-      const issued = await permissions.grant(verified.session.token,grantInput);
-      expect(await permissions.grant(verified.session.token,grantInput)).toEqual(issued);
-      expect(await permissions.inspect(partner.token,objectId)).toMatchObject({role:'viewer',base_read_allowed:true});
-      const grants = await permissions.grants(verified.session.token,objectId);
+      await expect(
+        permissions.grant(partner.token, grantInput),
+      ).rejects.toMatchObject({ reason: "denied" });
+      await expect(
+        permissions.grant(verified.session.token, {
+          ...grantInput,
+          confirmed: false,
+        }),
+      ).rejects.toThrow();
+      const issued = await permissions.grant(
+        verified.session.token,
+        grantInput,
+      );
+      expect(
+        await permissions.grant(verified.session.token, grantInput),
+      ).toEqual(issued);
+      expect(await permissions.inspect(partner.token, objectId)).toMatchObject({
+        role: "viewer",
+        base_read_allowed: true,
+      });
+      const grants = await permissions.grants(verified.session.token, objectId);
       expect(grants).toHaveLength(1);
-      expect(grants[0]).toMatchObject({grant_id:issued.grantId,resource_version:'2',grantee_id:partnerId});
-      expect(await permissions.grants(partner.token,objectId)).toEqual([]);
-      const revokeInput = {commandId:randomUUID(),resourceId:objectId,grantId:issued.grantId,version:2,confirmed:true};
-      await expect(permissions.revoke(partner.token,revokeInput)).rejects.toMatchObject({reason:'denied'});
-      await expect(permissions.revoke(verified.session.token,{...revokeInput,version:1})).rejects.toMatchObject({reason:'conflict'});
-      expect(await permissions.revoke(verified.session.token,revokeInput)).toEqual(issued);
-      expect(await permissions.revoke(verified.session.token,revokeInput)).toEqual(issued);
-      expect(await permissions.inspect(partner.token,objectId)).toBeNull();
-      expect(await permissions.grants(verified.session.token,objectId)).toEqual([]);
+      expect(grants[0]).toMatchObject({
+        grant_id: issued.grantId,
+        resource_version: "2",
+        grantee_id: partnerId,
+      });
+      expect(await permissions.grants(partner.token, objectId)).toEqual([]);
+      const revokeInput = {
+        commandId: randomUUID(),
+        resourceId: objectId,
+        grantId: issued.grantId,
+        version: 2,
+        confirmed: true,
+      };
+      await expect(
+        permissions.revoke(partner.token, revokeInput),
+      ).rejects.toMatchObject({ reason: "denied" });
+      await expect(
+        permissions.revoke(verified.session.token, {
+          ...revokeInput,
+          version: 1,
+        }),
+      ).rejects.toMatchObject({ reason: "conflict" });
+      expect(
+        await permissions.revoke(verified.session.token, revokeInput),
+      ).toEqual(issued);
+      expect(
+        await permissions.revoke(verified.session.token, revokeInput),
+      ).toEqual(issued);
+      expect(await permissions.inspect(partner.token, objectId)).toBeNull();
+      expect(
+        await permissions.grants(verified.session.token, objectId),
+      ).toEqual([]);
     } finally {
-      await owner.query("DELETE FROM app_internal.resource_role_policies WHERE module='M01' AND kind=$1",[kind]);
+      await owner.query(
+        "DELETE FROM app_internal.resource_role_policies WHERE module='M01' AND kind=$1",
+        [kind],
+      );
     }
     const spaces = new SpaceService(db, auth);
     const status = (token: string) => spaces.list(token);

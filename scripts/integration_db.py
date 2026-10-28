@@ -7,6 +7,8 @@ import base64
 import hashlib
 import hmac
 import json
+import csv
+import io
 import secrets
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -140,6 +142,20 @@ GRANT EXECUTE ON FUNCTION payload_poc.read_documents(text,uuid,text) TO {payload
         self.assertEqual(payload('b',query='private'),empty)
         self.assertEqual(payload('c'),empty)
         self.assertEqual(payload('b',query='journal')['count'],1)
+        def aggregate(token):
+            return int(sql(f"BEGIN; SET LOCAL ROLE {payload_role}; SELECT coalesce(sum(octet_length(body)),0) FROM payload_poc.read_documents(repeat('{token}',64)); COMMIT;",self.database))
+        def export_payload(token, selected):
+            # A saved selection is only a list of IDs, never a saved authorization.
+            identifiers=','.join(f"'{uuid.UUID(key)}'::uuid" for key in selected)
+            output=sql(f"BEGIN; SET LOCAL ROLE {payload_role}; COPY (SELECT resource_id,body FROM payload_poc.read_documents(repeat('{token}',64)) WHERE resource_id=ANY(ARRAY[{identifiers}])) TO STDOUT WITH CSV HEADER; COMMIT;",self.database)
+            return list(csv.DictReader(io.StringIO(output)))
+        selected=[resource,child]
+        self.assertEqual(aggregate('b'),len('shared synthetic journal'))
+        self.assertEqual(aggregate('a'),len('shared synthetic journal')+len('private synthetic attachment'))
+        self.assertEqual(aggregate('c'),0)
+        self.assertEqual(export_payload('b',selected),[{'resource_id':resource,'body':'shared synthetic journal'}])
+        self.assertEqual(export_payload('b',[child]),[])
+        self.assertEqual(export_payload('c',selected),[])
         edit_role='edit_probe_'+uuid.uuid4().hex
         sql(f"CREATE ROLE {edit_role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {edit_role}; GRANT EXECUTE ON FUNCTION app_internal.lock_shared_resource_edit(text,uuid,uuid) TO {edit_role};",self.database)
         self.addCleanup(lambda: sql(f'DROP ROLE {edit_role};'))
@@ -249,6 +265,9 @@ GRANT EXECUTE ON FUNCTION payload_poc.edit_document(text,uuid,uuid,text) TO {edi
             self.assertEqual(payload('b'),empty)
             self.assertEqual(payload('b',resource),empty)
             self.assertEqual(payload('b',query='journal'),empty)
+            self.assertEqual(aggregate('b'),0)
+            self.assertEqual(export_payload('b',selected),[])
+            self.assertEqual(len(export_payload('a',selected)),2)
             with self.assertRaises(subprocess.CalledProcessError): edit('b')
             for table in ['command_receipts','audit_events','outbox']:
                 self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
