@@ -20,6 +20,65 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_partner_profile_projects_exact_fields_and_live_source_rights(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        sql(f"UPDATE m10.profiles SET nickname='Synthetic nickname',birthday='2000-02-29',bio='Synthetic private bio' WHERE user_id='{a}';",self.database)
+        role='profile_read_probe_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.read_partner_profile(text,uuid),app_internal.list_my_profile_field_grants(text) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token='b',target=space):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.read_partner_profile(repeat('{token}',64),'{target}'); COMMIT;",self.database))
+        def listing(token):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(g),'[]') FROM app_internal.list_my_profile_field_grants(repeat('{token}',64)) g; COMMIT;",self.database))
+        self.assertEqual(read(),{})
+        for field in ['nickname','birthday','avatar_ref']:
+            sql(f"INSERT INTO m10.profile_field_grants(id,profile_id,field,grantee_id,space_id) VALUES ('{uuid.uuid4()}','{a}','{field}','{b}','{space}');",self.database)
+        expected={'nickname':'Synthetic nickname','birthday':'2000-02-29'}
+        self.assertEqual(read(),expected)
+        self.assertEqual(read('a'),{})
+        self.assertEqual(read('c'),{})
+        self.assertEqual(read(target=str(uuid.uuid4())),{})
+        self.assertEqual(len(listing('a')),3)
+        self.assertEqual(listing('b'),[])
+        self.assertEqual(listing('c'),[])
+        media,source_grant=str(uuid.uuid4()),str(uuid.uuid4())
+        sql(f"INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{media}','M02','media','{a}'); UPDATE m10.profiles SET avatar_ref='{media}' WHERE user_id='{a}';",self.database)
+        self.assertEqual(read(),expected)
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{source_grant}','{media}','{a}','{b}','{space}','viewer');",self.database)
+        self.assertEqual(read(),dict(expected,avatar_ref=media))
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{source_grant}';",self.database)
+        self.assertEqual(read(),expected)
+        sql("UPDATE m10.profile_field_grants SET revoked_at=clock_timestamp() WHERE field='birthday';",self.database)
+        self.assertEqual(read(),{'nickname':'Synthetic nickname'})
+        sql(f"UPDATE m10.profiles SET nickname=NULL WHERE user_id='{a}';",self.database)
+        self.assertEqual(read(),{'nickname':None})
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{b}';",self.database)
+        self.assertEqual(read(),{})
+        sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{b}',repeat('d',64),now()+interval '1 hour');",self.database)
+        self.assertEqual(read('d'),{'nickname':None})
+        sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        self.assertEqual(read('d'),{})  # No processing window authorizes this fixture.
+        visible=json.loads(sql(f"BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{a}'); SET LOCAL ROLE {role}; SELECT app_internal.read_partner_profile(repeat('d',64),'{space}'); ROLLBACK;",self.database))
+        self.assertEqual(visible,{'nickname':None})
+        sql(f"INSERT INTO m10.space_disconnects(space_id,initiated_by,initiated_at) VALUES ('{space}','{a}',clock_timestamp()-interval '31 days');",self.database)
+        self.assertEqual(read('d'),{})
+        self.assertEqual(len(listing('a')),3)  # Owner can still inspect/revoke history.
+
     def test_profile_field_revoke_owner_atomicity_and_frozen_space(self):
         migrate(database=self.database)
         seed(self.database)
