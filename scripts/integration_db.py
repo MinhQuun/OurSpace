@@ -20,6 +20,51 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_profile_field_issue_confirmation_concurrency_and_lifecycle(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='profile_issue_probe_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.issue_profile_field_grant(text,uuid,uuid,uuid,uuid,text,bigint,boolean) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        command=str(uuid.uuid4())
+        def issue(token='a',cmd=command,profile=a,recipient=b,field='birthday',version=1,confirmed='true',target_space=space,ending='COMMIT'):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.issue_profile_field_grant(repeat('{token}',64),'{cmd}','{profile}','{target_space}','{recipient}','{field}',{version},{confirmed}); {ending};",self.database)
+        for args in [dict(confirmed='false'),dict(confirmed='NULL'),dict(token='c'),dict(token='b'),dict(profile=b),dict(recipient=a),dict(recipient=str(uuid.uuid4())),dict(field='email'),dict(target_space=str(uuid.uuid4())),dict(version=2)]:
+            with self.assertRaises(subprocess.CalledProcessError): issue(**args)
+        issue(ending='ROLLBACK')
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda _:issue(),range(2)))
+        self.assertEqual(results[0],results[1])
+        for table in ['command_receipts','audit_events','outbox']:
+            self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table} WHERE command_id='{command}';",self.database),'1')
+        self.assertEqual(sql(f"SELECT version FROM m10.profiles WHERE user_id='{a}';",self.database),'2')
+        with self.assertRaises(subprocess.CalledProcessError): issue(field='bio')
+        with self.assertRaises(subprocess.CalledProcessError): issue(cmd=str(uuid.uuid4()))
+        sql('UPDATE m10.profile_field_grants SET revoked_at=clock_timestamp();',self.database)
+        self.assertEqual(issue(),results[0])
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants WHERE revoked_at IS NULL;',self.database),'0')
+        new_grant=issue(cmd=str(uuid.uuid4()),version=2)
+        self.assertNotEqual(new_grant,results[0])
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): issue()
+        sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): issue(token='b',profile=b,recipient=a,cmd=str(uuid.uuid4()))
+
     def test_profile_field_grant_binding_and_irreversible_revocation(self):
         migrate(database=self.database)
         seed(self.database)
