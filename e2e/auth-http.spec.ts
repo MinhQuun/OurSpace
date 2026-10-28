@@ -1191,3 +1191,89 @@ test("own profile HTTP isolates accounts, validates writes and separates request
     await owner.end();
   }
 });
+
+test("profile sharing HTTP isolates fields and preserves revoke budget", async ({
+  request,
+}) => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const users = [randomUUID(), randomUUID()],
+    sessions = [randomUUID(), randomUUID()],
+    tokens = [
+      randomBytes(32).toString("base64url"),
+      randomBytes(32).toString("base64url"),
+    ];
+  const headers = (i = 0) => ({
+    Cookie: `ourspace_session=${sessions[i]}:${tokens[i]}`,
+    Origin: "http://127.0.0.1:3102",
+  });
+  try {
+    expect((await request.get("/api/profile")).status()).toBe(401);
+    for (let i = 0; i < 2; i++) {
+      await owner.query(
+        "INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,'Synthetic initial profile')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [
+          sessions[i],
+          users[i],
+          createHash("sha256").update(tokens[i]).digest("hex"),
+        ],
+      );
+    }
+    const invitation = randomUUID(), space = randomUUID();
+    await owner.query("BEGIN");
+    try {
+      await owner.query("INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ($1,$2,$3)", [invitation, users[0], createHash("sha256").update(randomUUID()).digest("hex")]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by=$2,accepted_at=clock_timestamp() WHERE id=$1", [invitation, users[1]]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id=$1", [invitation]);
+      await owner.query("INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ($1,$2)", [space, invitation]);
+      await owner.query("INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ($1,$2,1),($1,$3,2)", [space, users[0], users[1]]);
+      await owner.query("COMMIT");
+    } catch (error) { await owner.query("ROLLBACK"); throw error; }
+    const input = { commandId: randomUUID(), spaceId: space, recipientId: users[1], field: "display_name", version: 1, confirmed: true };
+    const partner = `/api/profile/partner?spaceId=${space}`;
+    expect((await request.get(partner)).status()).toBe(401);
+    expect(await (await request.get(partner, { headers: headers(1) })).json()).toEqual({ profile: {} });
+    expect((await request.post("/api/profile/share", { headers: { Cookie: headers().Cookie }, data: input })).status()).toBe(403);
+    expect((await request.get(partner, { headers: { ...headers(1), "Sec-Fetch-Site": "cross-site" } })).status()).toBe(403);
+    expect((await request.get(partner + "&spaceId=" + space, { headers: headers(1) })).status()).toBe(400);
+    for (const data of [{ ...input, userId: users[1] }, { ...input, confirmed: false }, { ...input, field: "email" }, [], {}, { ...input, padding: "x".repeat(5000) }]) {
+      expect((await request.post("/api/profile/share", { headers: headers(), data })).status()).toBe(400);
+    }
+    const shared = await request.post("/api/profile/share", { headers: headers(), data: input });
+    expect(shared.status()).toBe(200);
+    const result = await shared.json();
+    expect(await (await request.post("/api/profile/share", { headers: headers(), data: input })).json()).toEqual(result);
+    const visible = await request.get(partner, { headers: headers(1) });
+    expect(visible.headers()["cache-control"]).toBe("no-store");
+    expect(await visible.json()).toEqual({ profile: { display_name: "Synthetic initial profile" } });
+    expect(await (await request.get("/api/profile/grants", { headers: headers(1) })).json()).toEqual({ grants: [] });
+    expect((await request.post("/api/profile/share", { headers: headers(), data: { ...input, commandId: randomUUID() } })).status()).toBe(409);
+    const revoke = { commandId: randomUUID(), grantId: result.grantId, version: 2, confirmed: true };
+    expect((await request.post("/api/profile/revoke", { headers: headers(1), data: revoke })).status()).toBe(403);
+    await owner.query("UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='profile_share'", [users[0]]);
+    const limited = await request.post("/api/profile/share", { headers: headers(), data: input });
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    expect((await request.post("/api/profile/revoke", { headers: headers(), data: revoke })).status()).toBe(200);
+    expect(await (await request.get(partner, { headers: headers(1) })).json()).toEqual({ profile: {} });
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1", [sessions[1]]);
+    expect((await request.get(partner, { headers: headers(1) })).status()).toBe(401);
+  } finally {
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL", [users]);
+    await owner.end();
+  }
+});

@@ -82,7 +82,8 @@ VALUES ('create',10,60),('inspect',30,60),('list',60,60),
 ('accept',10,60),('reject',10,60),('revoke',20,60),('confirm',10,60),
 ('spaces_list',60,60),('disconnect',10,60),('permission_inspect',60,60),
 ('permission_list',60,60),('permission_grant',20,60),('permission_revoke',20,60),('binary_download',30,60),
-('profile_read',60,60),('profile_update',20,60)
+('profile_read',60,60),('profile_update',20,60),
+('profile_partner',60,60),('profile_grants',60,60),('profile_share',20,60),('profile_revoke',20,60)
 ON CONFLICT(action) DO NOTHING;""")
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 
