@@ -20,6 +20,39 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_profile_field_grant_binding_and_irreversible_revocation(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        def insert(field='birthday',recipient=b,space_id=space,grant_id=None):
+            return sql(f"INSERT INTO m10.profile_field_grants(id,profile_id,field,grantee_id,space_id) VALUES ('{grant_id or uuid.uuid4()}','{a}','{field}','{recipient}','{space_id}');",self.database)
+        for args in [dict(field='email'),dict(field='*'),dict(recipient=a),dict(recipient=str(uuid.uuid4())),dict(space_id=str(uuid.uuid4()))]:
+            with self.assertRaises(subprocess.CalledProcessError): insert(**args)
+        insert(grant_id=grant)
+        with self.assertRaises(subprocess.CalledProcessError): insert()
+        for statement in ["UPDATE m10.profile_field_grants SET field='bio'",f"UPDATE m10.profile_field_grants SET profile_id='{b}'",'DELETE FROM m10.profile_field_grants']:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        role='profile_grant_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.profile_field_grants TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        self.assertEqual(sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM m10.profile_field_grants; COMMIT;',self.database),'0')
+        sql('UPDATE m10.profile_field_grants SET revoked_at=clock_timestamp();',self.database)
+        for statement in ['UPDATE m10.profile_field_grants SET revoked_at=NULL','UPDATE m10.profile_field_grants SET revoked_at=clock_timestamp()']:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        insert()  # New explicit grant is a new identity, never resurrection.
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'2')
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants WHERE revoked_at IS NULL;',self.database),'1')
+
     def test_own_profile_private_update_conflict_replay_and_atomicity(self):
         migrate(database=self.database)
         seed(self.database)
