@@ -1133,3 +1133,14 @@ Acceptance: actual private Storage bytes read through a trusted server configura
 - Lint/typecheck/diff review PASS; changed-file secret heuristic scan no findings. No user credentials, backend URLs or provider headers returned to browser. Local operation doc updated.
 - Transport is deliberately not an authorization gate or HTTP endpoint. Next task must apply live source/domain checks around reads; larger-media streaming/range support remains unimplemented. Stage 02 incomplete. Transient next-env.d.ts dev-generation changes were not included.
 - History heuristic audit PASS: 536 blobs, no findings; approved historical binary caveat unchanged.
+- Commit bc42a67ce91bcd45b78f67db4b7a3c170c321e23 PUSHED; remote master matches HEAD. Next: authorized binary resolution/download proxy and real-byte revoke tests. Stage 02 incomplete.
+
+## Task 02.11d - Live ACL around private binary reads
+
+Acceptance: resolve binary only through current session/source ACL, require separate domain download authorization, recheck after backend read, and withhold bytes after committed grant/session revocation during the read.
+
+- Added BinaryDownloadService with strict session/UUID validation, parameterized execute-only resolver, mandatory domain authorizer (no default allow), and repeat binding/ACL/domain checks after verified Storage bytes. Unauthorized/missing/domain-denied results are uniformly null; no backend identity leaves the service result.
+- Runtime provisioning adds only resolve_readable_binary EXECUTE, not raw table privileges. Applied migration 0052 and provisioned local runtime successfully.
+- Real PostgreSQL + Supabase Storage integration suite 3/3 PASS (482ms test time): owner bytes, private outsider/unknown denial without fetching, explicit domain denial, recipient grant bytes, actual revoke command committed between initial ACL check and Storage fetch prevents delivery, later recipient request denied, owner still allowed, session revoked during backend read prevents delivery, raw metadata table denied. Synthetic immutable fixture history retained locally; sessions revoked and test bucket/bytes removed.
+- M02 BRD section 10 explicitly separates Download from View; mandatory domain authorizer preserves that distinction. Test's explicit POC adapter is not a production M02 canDownload implementation. HTTP endpoint, real domain policies, streaming/range and realtime active-channel proof remain pending; Stage 02 incomplete.
+- Lint/typecheck/diff review PASS; changed-file heuristic secret scan no findings. Automatic formatting of transport/test files preserved. Historical scan evidence from preceding task remains applicable to existing history; no history rewrite.
