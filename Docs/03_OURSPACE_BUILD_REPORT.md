@@ -1198,3 +1198,13 @@ Acceptance: service uses parameterized own-profile commands with no target user,
 - Real runtime DB suite 7/7 PASS (260ms test time): independent own profiles, private optional fields, exact leap date, replay idempotency, malformed dates/oversize/blank input and forged userId rejected, stale-version and changed-replay conflicts, Unicode120 characters accepted, clear-to-null, old replay preserves newer version, raw-table access denied and revoked session denied without affecting second account. Synthetic command history retained locally with sessions revoked.
 - Initial typecheck found duplicated ProfileService import/property/initializer in runtime; removed duplicate declarations, final lint/typecheck PASS. Runtime provisioning/diff review and changed-file heuristic secret scan PASS.
 - API/UI, avatar linkage and field-sharing remain pending; no full D07/P0 completion claimed. Next: authenticated own-profile GET/update HTTP boundary with independent read/write budgets and negative HTTP tests.
+- Commit 63bf085df78cdc843b5bb4cdacb045fc5c7042b4 PUSHED; remote master matches HEAD. Next: own-profile API. Stage03 and full P0 goal incomplete.
+
+
+## Task 03.1c - Own-profile HTTP boundary and budgets
+- Acceptance: authenticated GET/POST /api/profile, same-origin/CSRF guards, no target-user parameters, independent profile_read/profile_update budgets, replay/conflict/invalid input/idempotent updates, session revocation enforcement and no-store headers. Related M10 D07/ST-02.
+- Migration 0055 adds profile_read/profile_update to request-policy budget actions. Runtime provisioning includes profile budgets; pairing budget consumption is reused by the route.
+- Route: server validates session cookie, origin/sec-fetch-site, body size/content-type, rejects query parameters, enforces per-action budget before DB calls, maps errors to safe statuses (400/401/403/409/429/503) and returns `{ profile }` or `{ userId }` with no-store/Vary headers.
+- Real HTTP/browser coverage present in e2e/auth-http.spec.ts: own read/update, cross-account isolation, invalid/leap dates, oversized bio, replay idempotency, changed replay conflict, stale version conflict, budget 429 with Retry-After, session revocation denial and foreign origin rejection.
+- Lint/typecheck/build and existing Auth/HTTP regression targets unchanged in behavior; no production deployment. No full D07 completion claimed (UI/avatar/field sharing pending).
+- Working tree contains the route (committed in acc8699) and untracked migration 0055/budget wiring; apply migrations before use. Next: own-profile UI and avatar/source permissions, then remaining Stage 03 shared-platform items.
