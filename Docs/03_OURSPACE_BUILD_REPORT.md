@@ -1214,3 +1214,10 @@ Acceptance: service uses parameterized own-profile commands with no target user,
 - Acceptance: authenticated account page shows private profile form (display name, nickname, birthday, bio) with client-side validation, loads via GET /api/profile, updates via POST with commandId/version/origin, handles 401/409/429/errors and refreshes on conflict; no target-user fields or browser token storage. Related M10 D07.
 - Added profile-panel.tsx integrated into account-form for signed-in state; uses same-origin fetch, CSRF/header checks rely on server, clears state on expiry.
 - Lint/typecheck PASS. No full D07 completion claimed (avatar/source permissions and broader sharing pending). Next: avatar linkage with source permissions and remaining Stage 03 shared-platform items.
+
+
+## Stage03 recovery checkpoint - runtime profile grants
+- Re-read objective and inspected authoritative HEAD 8bf4dbc. Prior build handle 75475 no longer exists; no build success inferred. API/UI commits already present; preserved them and uncommitted avatar work.
+- Local migration runner applied pending 0056 and verified checksums. Provisioning then failed because 0056 removes the seven-argument profile function. Fixed provisioning to resolve only the two explicit profile signatures and grant those present; no schema-wide or table privileges.
+- Provisioning PASS against current local DB; Python compile, lint, typecheck and diff check PASS. Runtime database regression 6/7 PASS, profile update FAIL (DatabaseUnavailableError). Inspection identifies 0056 references nonexistent command_audit and incompatible outbox columns, changes conflict SQLSTATE and does not yet enforce avatar source authorization. These remain repair work; avatar is NOT accepted. Applied migration must be repaired with a forward migration, not silently edited.
+- Existing next-env.d.ts, profile service avatar edits and untracked 0056 are preserved outside this narrow provisioning repair. API HTTP and desktop/mobile profile acceptance need actual test runs after repair; prior UI/API report prose alone is not passing evidence. Stage03 remains IN_PROGRESS and overall M01-M10 P0 incomplete.

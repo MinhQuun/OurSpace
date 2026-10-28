@@ -55,10 +55,22 @@ app_internal.list_owned_resource_grants(text,uuid),
 app_internal.resource_sharing_options(text,uuid),
 app_internal.resolve_readable_binary(text,uuid),
 app_internal.read_my_profile(text),
-app_internal.update_my_profile(text,uuid,bigint,text,text,date,text),
 app_internal.issue_resource_grant(text,uuid,uuid,uuid,uuid,text,bigint,boolean),
 app_internal.revoke_resource_grant(text,uuid,uuid,uuid,bigint,boolean),
 app_internal.current_mfa_enrollment(text) TO ourspace_runtime;''')
+    # Support both deployed profile command signatures during the avatar migration.
+    # Resolve only this fixed allowlist; never grant all schema functions.
+    sql("""DO $$ DECLARE signature text; target regprocedure; BEGIN
+      FOREACH signature IN ARRAY ARRAY[
+        'app_internal.update_my_profile(text,uuid,bigint,text,text,date,text)',
+        'app_internal.update_my_profile(text,uuid,bigint,text,text,date,text,uuid)'
+      ] LOOP
+        target := to_regprocedure(signature);
+        IF target IS NOT NULL THEN
+          EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO ourspace_runtime', target);
+        END IF;
+      END LOOP;
+    END $$;""")
     # Local evaluation defaults only; production thresholds require separate review.
     # Independent action windows keep inspection spam from exhausting revocation.
     sql("""INSERT INTO app_internal.pairing_request_policies(action,max_requests,window_seconds)
