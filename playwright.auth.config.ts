@@ -11,6 +11,7 @@ export default defineConfig({
       name: "desktop",
       testMatch: [
         "auth-ui.spec.ts",
+        "profile-ui.spec.ts",
         "mfa-ui.spec.ts",
         "recovery-ui.spec.ts",
         "pairing-ui.spec.ts",
@@ -22,6 +23,7 @@ export default defineConfig({
       name: "mobile",
       testMatch: [
         "auth-ui.spec.ts",
+        "profile-ui.spec.ts",
         "mfa-ui.spec.ts",
         "recovery-ui.spec.ts",
         "pairing-ui.spec.ts",

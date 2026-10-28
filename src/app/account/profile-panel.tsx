@@ -100,7 +100,7 @@ export default function ProfilePanel({ onExpired }: { onExpired: () => void }) {
       }
       if (response.status === 409) {
         setError(true);
-        setMessage("Hồ sơ đã thay đổi. Hãy tải lại trang.");
+        setMessage("Hồ sơ đã thay đổi. Đã tải bản mới; hãy kiểm tra trước khi lưu lại.");
         await fetchProfile();
         return;
       }
@@ -145,7 +145,7 @@ export default function ProfilePanel({ onExpired }: { onExpired: () => void }) {
           {message}
         </p>
       )}
-      <form className="account-form" onSubmit={submit}>
+      <form key={profile.version} className="account-form" onSubmit={submit}>
         <label className="field">
           <span>Tên hiển thị *</span>
           <input
