@@ -1,6 +1,6 @@
 # Our Space — Build Report
 
-Updated: 2026-10-23 (Asia/Saigon). This report records implementation evidence, not product acceptance.
+Updated: 2026-10-28 (Asia/Saigon). This report records implementation evidence, not product acceptance.
 
 ## Workspace and authority
 
@@ -16,7 +16,7 @@ Updated: 2026-10-23 (Asia/Saigon). This report records implementation evidence, 
 |---|---|---|
 | 00 | DONE | Audit and registry pushed and verified; source mappings retain explicit unresolved statuses |
 | 01 | DONE | Local app/DB/Auth, seed, migrations, policy/ownership foundations and hosted CI verified |
-| 02 | IN_PROGRESS | Real Auth provider transport; application sessions/UI/MFA/pairing/ACL POC pending |
+| 02 | DONE (POC gate) | Real Auth/MFA/pairing/ACL/storage/realtime security evidence and full regression; see STAGE02_SECURITY_REVIEW.md. Full M10/domain P0 remains later stages |
 | 03 | NOT_STARTED | Shared platform |
 | 04 | NOT_STARTED | M02 |
 | 05 | NOT_STARTED | M01 |
@@ -1166,3 +1166,14 @@ Acceptance: two independent account sessions on real sockets; Private join denie
 - Added explicit guard after asynchronous join authorization for shutdown/capacity changes. Lint/typecheck/diff review PASS; changed-file secret heuristic no findings. npm install audit reported zero vulnerabilities; Windows optional dependency cleanup warnings did not prevent install or checks.
 - Transport API verified against official https://github.com/websockets/ws documentation. This is Stage02 read-channel security evidence, not Yjs/Hocuspocus acceptance, CRDT persistence, collaboration writes, awareness or desktop/mobile M01 completion. Those remain Stage05 work. Production domain policy and deployment wiring remain pending.
 - Unrelated automatic formatting changes in existing configs/tests are preserved outside this task commit. Next: Stage02 requirement-by-requirement exit review and remaining security gaps. Stage02 not yet marked complete.
+- Commit a3687d4c3de391c29c5063c1bfe16574d0d85232 PUSHED; remote master matches HEAD. Next: Stage02 exit review and remaining gaps. Stage02 incomplete.
+
+
+## Task 02.13 - Aggregate/export evidence and Stage 02 exit
+
+- Extended execute-only fresh-DB payload POC with sum of visible byte lengths and actual COPY CSV output. Shared parent never includes Private child in sum/export; stale saved selection of IDs yields no rows after revoke; owner still exports own rows. This is security boundary evidence, not completed domain export jobs.
+- These 19 test lines were captured by concurrent user/editor commit ed9e28016a102f533936aedf7cd15fd8d63eb728 (format code), already on origin/master. Preserved it without rewriting history or recreating the change.
+- Final regression: object ACL/aggregate/export test PASS 54.906s; all DB migration/security tests 24/24 PASS 176.016s; Auth integration 17/17 PASS 126.72s; runtime DB 6/6 PASS; HTTP/desktop/mobile E2E 30/30 PASS 2.1m; unit 21/21 PASS; source/registry/audit regression 11/11 PASS. Build/lint/typecheck/Python compile PASS. Storage and active-channel proofs retain passing evidence from immediately preceding tasks.
+- History heuristic audit: 569 blobs, no findings; approved historical binaries unchanged. No cloud/prod credentials or production deployment used.
+- Added STAGE02_SECURITY_REVIEW.md with gate-by-gate authoritative tests and explicit limits. Stage 02 security POC exit PASS; architecture A remains viable for this scope. This does not accept complete M10, domain permission policies, export workflows, M01 realtime editing, M07 finance or M08 capsule.
+- Next ordered stage: STAGE 03 shared platform/M10 journeys. First task: D07/ST-02 own profile fields, source validation and optimistic concurrency, followed by service/API/UI and desktop/mobile negative tests. Avatar/media integration must retain source permissions; no domain AC silently dropped.
