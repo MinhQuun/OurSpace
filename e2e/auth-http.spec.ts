@@ -1001,3 +1001,193 @@ test("permission Inspector HTTP hides private objects and rechecks sessions", as
     await owner.end();
   }
 });
+
+test("own profile HTTP isolates accounts, validates writes and separates request budgets", async ({
+  request,
+}) => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const users = [randomUUID(), randomUUID()],
+    sessions = [randomUUID(), randomUUID()],
+    tokens = [
+      randomBytes(32).toString("base64url"),
+      randomBytes(32).toString("base64url"),
+    ];
+  const headers = (i = 0) => ({
+    Cookie: `ourspace_session=${sessions[i]}:${tokens[i]}`,
+    Origin: "http://127.0.0.1:3102",
+  });
+  const input = {
+    commandId: randomUUID(),
+    version: 1,
+    displayName: "Synthetic edited profile",
+    nickname: "Synthetic nickname",
+    birthday: "2000-02-29",
+    bio: "Synthetic private biography",
+  };
+  try {
+    expect((await request.get("/api/profile")).status()).toBe(401);
+    for (let i = 0; i < 2; i++) {
+      await owner.query(
+        "INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,'Synthetic initial profile')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [
+          sessions[i],
+          users[i],
+          createHash("sha256").update(tokens[i]).digest("hex"),
+        ],
+      );
+    }
+    const initial = await request.get("/api/profile", { headers: headers() });
+    expect(initial.status()).toBe(200);
+    expect(initial.headers()["cache-control"]).toBe("no-store");
+    expect((await initial.json()).profile).toMatchObject({
+      user_id: users[0],
+      version: "1",
+      bio: null,
+    });
+    expect(
+      (
+        await request.get(`/api/profile?userId=${users[1]}`, {
+          headers: headers(),
+        })
+      ).status(),
+    ).toBe(400);
+    expect(
+      (
+        await request.get("/api/profile", {
+          headers: { ...headers(), "Sec-Fetch-Site": "cross-site" },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: { Cookie: headers().Cookie },
+          data: input,
+        })
+      ).status(),
+    ).toBe(403);
+    for (const data of [
+      { ...input, userId: users[1] },
+      { ...input, birthday: "2001-02-29" },
+      { ...input, displayName: " " },
+      [],
+      {},
+    ])
+      expect(
+        (
+          await request.post("/api/profile", { headers: headers(), data })
+        ).status(),
+      ).toBe(400);
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: headers(),
+          data: { ...input, bio: "x".repeat(21000) },
+        })
+      ).status(),
+    ).toBe(400);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const saved = await request.post("/api/profile", {
+        headers: headers(),
+        data: input,
+      });
+      expect(saved.status()).toBe(200);
+      expect(await saved.json()).toEqual({ userId: users[0] });
+    }
+    expect(
+      (await (await request.get("/api/profile", { headers: headers() })).json())
+        .profile,
+    ).toMatchObject({
+      user_id: users[0],
+      birthday: input.birthday,
+      bio: input.bio,
+      version: "2",
+    });
+    expect(
+      (
+        await (
+          await request.get("/api/profile", { headers: headers(1) })
+        ).json()
+      ).profile,
+    ).toMatchObject({ user_id: users[1], bio: null, version: "1" });
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: headers(),
+          data: { ...input, commandId: randomUUID() },
+        })
+      ).status(),
+    ).toBe(409);
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: headers(),
+          data: { ...input, displayName: "Replay mismatch" },
+        })
+      ).status(),
+    ).toBe(400);
+    await owner.query(
+      "UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='profile_read'",
+      [users[0]],
+    );
+    const limited = await request.get("/api/profile", { headers: headers() });
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: headers(),
+          data: { ...input, commandId: randomUUID(), version: 2, bio: null },
+        })
+      ).status(),
+    ).toBe(200);
+    await owner.query(
+      "UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='profile_update'",
+      [users[0]],
+    );
+    expect(
+      (
+        await request.post("/api/profile", {
+          headers: headers(),
+          data: { ...input, commandId: randomUUID(), version: 3 },
+        })
+      ).status(),
+    ).toBe(429);
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",
+      [sessions[0]],
+    );
+    expect(
+      (await request.get("/api/profile", { headers: headers() })).status(),
+    ).toBe(401);
+    expect(
+      (
+        await request.post("/api/profile", { headers: headers(), data: input })
+      ).status(),
+    ).toBe(401);
+    expect(
+      (await request.get("/api/profile", { headers: headers(1) })).status(),
+    ).toBe(200);
+  } finally {
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=ANY($1::uuid[]) AND revoked_at IS NULL",
+      [sessions],
+    );
+    await owner.end();
+  }
+});

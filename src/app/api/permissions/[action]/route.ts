@@ -106,7 +106,13 @@ export async function GET(request: NextRequest, context: Context) {
     const query = request.nextUrl.searchParams;
     if (query.size !== 1 || !query.has("resourceId"))
       throw new AuthProviderError("invalid_input");
-    if (action === "options") return json({ options: await session.auth.permissions.options(session.token,query.get("resourceId")!) });
+    if (action === "options")
+      return json({
+        options: await session.auth.permissions.options(
+          session.token,
+          query.get("resourceId")!,
+        ),
+      });
     return json({
       grants: await session.auth.permissions.grants(
         session.token,

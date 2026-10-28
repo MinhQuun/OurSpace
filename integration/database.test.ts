@@ -180,40 +180,134 @@ test("permission service inspects current owner access without private enumerati
   }
 });
 
-test("profile service preserves own identity, date-only values and private optional fields", async()=>{
-  const owner=new Pool({host:"127.0.0.1",port:55432,database:"ourspace",user:"ourspace_owner",password:readFileSync(".local/db-password","utf8").trim(),max:1});
-  const users=[randomUUID(),randomUUID()], tokens=[randomBytes(32).toString("base64url"),randomBytes(32).toString("base64url")];
-  const service=new ProfileService(db);
+test("profile service preserves own identity, date-only values and private optional fields", async () => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const users = [randomUUID(), randomUUID()],
+    tokens = [
+      randomBytes(32).toString("base64url"),
+      randomBytes(32).toString("base64url"),
+    ];
+  const service = new ProfileService(db);
   try {
-    for (let i=0;i<2;i++) {
-      await owner.query("INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",[users[i]]);
-      await owner.query("INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,'Synthetic profile')",[users[i]]);
-      await owner.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",[randomUUID(),users[i],createHash("sha256").update(tokens[i]).digest("hex")]);
+    for (let i = 0; i < 2; i++) {
+      await owner.query(
+        "INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,'Synthetic profile')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [
+          randomUUID(),
+          users[i],
+          createHash("sha256").update(tokens[i]).digest("hex"),
+        ],
+      );
     }
-    expect(await service.read(tokens[0])).toMatchObject({user_id:users[0],birthday:null,bio:null,version:"1"});
-    const input={commandId:randomUUID(),version:1,displayName:"  Synthetic name  ",nickname:"Synthetic nickname",birthday:"2000-02-29",bio:"Synthetic private bio"};
-    expect(await service.update(tokens[0],input)).toEqual({userId:users[0]});
-    expect(await service.update(tokens[0],input)).toEqual({userId:users[0]});
-    expect(await service.read(tokens[0])).toEqual({user_id:users[0],display_name:"Synthetic name",nickname:input.nickname,birthday:"2000-02-29",bio:input.bio,version:"2"});
-    expect(await service.read(tokens[1])).toMatchObject({user_id:users[1],bio:null,version:"1"});
-    for (const patch of [{birthday:"2001-02-29"},{birthday:"2026-13-01"},{birthday:"0000-01-01"},{birthday:"2000-02-29T00:00:00Z"},{displayName:" \t "},{nickname:"x".repeat(121)},{bio:"x".repeat(4001)},{userId:users[1]}]) {
-      await expect(service.update(tokens[0],{...input,...patch})).rejects.toMatchObject({kind:"invalid_input"});
+    expect(await service.read(tokens[0])).toMatchObject({
+      user_id: users[0],
+      birthday: null,
+      bio: null,
+      version: "1",
+    });
+    const input = {
+      commandId: randomUUID(),
+      version: 1,
+      displayName: "  Synthetic name  ",
+      nickname: "Synthetic nickname",
+      birthday: "2000-02-29",
+      bio: "Synthetic private bio",
+    };
+    expect(await service.update(tokens[0], input)).toEqual({
+      userId: users[0],
+    });
+    expect(await service.update(tokens[0], input)).toEqual({
+      userId: users[0],
+    });
+    expect(await service.read(tokens[0])).toEqual({
+      user_id: users[0],
+      display_name: "Synthetic name",
+      nickname: input.nickname,
+      birthday: "2000-02-29",
+      bio: input.bio,
+      version: "2",
+    });
+    expect(await service.read(tokens[1])).toMatchObject({
+      user_id: users[1],
+      bio: null,
+      version: "1",
+    });
+    for (const patch of [
+      { birthday: "2001-02-29" },
+      { birthday: "2026-13-01" },
+      { birthday: "0000-01-01" },
+      { birthday: "2000-02-29T00:00:00Z" },
+      { displayName: " \t " },
+      { nickname: "x".repeat(121) },
+      { bio: "x".repeat(4001) },
+      { userId: users[1] },
+    ]) {
+      await expect(
+        service.update(tokens[0], { ...input, ...patch }),
+      ).rejects.toMatchObject({ kind: "invalid_input" });
     }
-    await expect(service.update(tokens[0],{...input,commandId:randomUUID()})).rejects.toMatchObject({reason:"conflict"});
-    await expect(service.update(tokens[0],{...input,displayName:"Changed replay"})).rejects.toMatchObject({reason:"invalid_input"});
-    const emoji="\u{1f331}".repeat(120);
-    await service.update(tokens[0],{...input,commandId:randomUUID(),version:2,displayName:emoji,nickname:"",birthday:null,bio:""});
-    expect(await service.read(tokens[0])).toMatchObject({display_name:emoji,nickname:null,birthday:null,bio:null,version:"3"});
-    expect(await service.update(tokens[0],input)).toEqual({userId:users[0]});
+    await expect(
+      service.update(tokens[0], { ...input, commandId: randomUUID() }),
+    ).rejects.toMatchObject({ reason: "conflict" });
+    await expect(
+      service.update(tokens[0], { ...input, displayName: "Changed replay" }),
+    ).rejects.toMatchObject({ reason: "invalid_input" });
+    const emoji = "\u{1f331}".repeat(120);
+    await service.update(tokens[0], {
+      ...input,
+      commandId: randomUUID(),
+      version: 2,
+      displayName: emoji,
+      nickname: "",
+      birthday: null,
+      bio: "",
+    });
+    expect(await service.read(tokens[0])).toMatchObject({
+      display_name: emoji,
+      nickname: null,
+      birthday: null,
+      bio: null,
+      version: "3",
+    });
+    expect(await service.update(tokens[0], input)).toEqual({
+      userId: users[0],
+    });
     expect((await service.read(tokens[0]))?.version).toBe("3");
-    await expect(db.query("SELECT * FROM m10.profiles")).rejects.toMatchObject({reason:"denied"});
-    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=$1 AND revoked_at IS NULL",[users[0]]);
+    await expect(db.query("SELECT * FROM m10.profiles")).rejects.toMatchObject({
+      reason: "denied",
+    });
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=$1 AND revoked_at IS NULL",
+      [users[0]],
+    );
     expect(await service.read(tokens[0])).toBeNull();
-    await expect(service.update(tokens[0],input)).rejects.toMatchObject({reason:"denied"});
-    await expect(service.read("invalid")).rejects.toMatchObject({kind:"denied"});
+    await expect(service.update(tokens[0], input)).rejects.toMatchObject({
+      reason: "denied",
+    });
+    await expect(service.read("invalid")).rejects.toMatchObject({
+      kind: "denied",
+    });
     expect((await service.read(tokens[1]))?.user_id).toBe(users[1]);
   } finally {
-    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL",[users]);
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL",
+      [users],
+    );
     await owner.end();
   }
 });
