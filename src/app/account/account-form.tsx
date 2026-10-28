@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import ProfilePanel from "./profile-panel";
 import SessionPanel from "./session-panel";
 
 export default function AccountForm() {
@@ -147,6 +148,7 @@ export default function AccountForm() {
           <button type="button" disabled={busy} onClick={logout}>
             {busy ? "Đang đăng xuất…" : "Đăng xuất"}
           </button>
+          <ProfilePanel onExpired={sessionExpired} />
           <SessionPanel onExpired={sessionExpired} />
         </>
       ) : (
