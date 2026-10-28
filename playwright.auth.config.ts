@@ -12,6 +12,7 @@ export default defineConfig({
       testMatch: [
         "auth-ui.spec.ts",
         "profile-ui.spec.ts",
+        "profile-sharing-ui.spec.ts",
         "mfa-ui.spec.ts",
         "recovery-ui.spec.ts",
         "pairing-ui.spec.ts",
@@ -24,6 +25,7 @@ export default defineConfig({
       testMatch: [
         "auth-ui.spec.ts",
         "profile-ui.spec.ts",
+        "profile-sharing-ui.spec.ts",
         "mfa-ui.spec.ts",
         "recovery-ui.spec.ts",
         "pairing-ui.spec.ts",
