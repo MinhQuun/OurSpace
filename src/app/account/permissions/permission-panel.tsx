@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import SharingPanel from "./sharing-panel";
 import type { BasePermissionInspection } from "../../../modules/m10/permissions/service.server";
@@ -9,49 +9,75 @@ const roles = {
   commenter: "Người bình luận",
   viewer: "Người xem",
 };
+type Grantee = {
+  grant_id: string;
+  resource_version: string;
+  space_id: string;
+  recipient_id: string;
+  recipient_name: string | null;
+  role: string;
+  granted_at: string;
+};
 export default function PermissionPanel({
   resourceId,
 }: {
   resourceId: string;
 }) {
   const [result, setResult] = useState<BasePermissionInspection | null>(null);
+  const [grantees, setGrantees] = useState<Grantee[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(true);
   const [retry, setRetry] = useState(0);
   const [login, setLogin] = useState(false);
-  useEffect(() => {
+  const load = useCallback(() => {
     const controller = new AbortController();
-    async function inspect() {
+    async function run() {
       setBusy(true);
       setResult(null);
+      setGrantees([]);
       setMessage("");
       setLogin(false);
       try {
-        const response = await fetch(
+        const inspectResponse = await fetch(
           `/api/permissions/inspect?resourceId=${encodeURIComponent(resourceId)}`,
           { cache: "no-store", signal: controller.signal },
         );
-        const value = await response.json();
+        const inspectValue = await inspectResponse.json();
         if (controller.signal.aborted) return;
-        if (response.ok) setResult(value.inspection);
-        else if (response.status === 401) {
+        if (inspectResponse.ok) setResult(inspectValue.inspection);
+        else if (inspectResponse.status === 401) {
           setLogin(true);
           setMessage("Vui lòng đăng nhập để kiểm tra quyền của bạn.");
-        } else if (response.status === 404 || response.status === 400)
+        } else if (inspectResponse.status === 404 || inspectResponse.status === 400)
           setMessage("Không thể xem quyền của nội dung này.");
-        else if (response.status === 429)
+        else if (inspectResponse.status === 429)
           setMessage("Bạn đã kiểm tra nhiều lần. Vui lòng thử lại sau.");
         else setMessage("Chưa thể kiểm tra quyền. Vui lòng thử lại.");
       } catch {
         if (!controller.signal.aborted)
           setMessage("Không thể kết nối. Vui lòng thử lại.");
+      }
+      try {
+        const grantsResponse = await fetch(
+          `/api/permissions/grants?resourceId=${encodeURIComponent(resourceId)}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const grantsValue = await grantsResponse.json();
+        if (controller.signal.aborted) return;
+        if (grantsResponse.ok && grantsValue?.grants)
+          setGrantees(grantsValue.grants);
+      } catch {
+        // Danh sách người được chia sẻ là thông tin bổ trợ; không chặn hiển thị vai trò.
       } finally {
         if (!controller.signal.aborted) setBusy(false);
       }
     }
-    void inspect();
+    void run();
     return () => controller.abort();
-  }, [resourceId, retry]);
+  }, [resourceId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
   return (
     <section
       className="account-card"
@@ -63,7 +89,7 @@ export default function PermissionPanel({
       <div role="status">{busy ? "Đang kiểm tra quyền…" : message}</div>
       {result && (
         <div>
-          <h2>{roles[result.role]}</h2>
+          <h2>{roles[result.role as keyof typeof roles] ?? result.role}</h2>
           <p>
             {result.read_reason === "source_deleted"
               ? "Nội dung đã bị xóa."
@@ -76,6 +102,21 @@ export default function PermissionPanel({
           <p>
             Các điều kiện riêng của nội dung vẫn áp dụng. Vai trò này không tự
             cho phép phê duyệt, mở thư hẹn giờ hoặc xuất dữ liệu.
+          </p>
+        </div>
+      )}
+      {grantees.length > 0 && (
+        <div>
+          <h2>Ai đang có quyền trên nội dung này</h2>
+          <ul>
+            {grantees.map((g) => (
+              <li key={g.grant_id}>
+                {g.recipient_name ?? g.recipient_id} — {roles[g.role as keyof typeof roles] ?? g.role}
+              </li>
+            ))}
+          </ul>
+          <p className="field-help">
+            Danh sách chỉ bao gồm người bạn đã cho phép và được hệ thống xác nhận.
           </p>
         </div>
       )}
