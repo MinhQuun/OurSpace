@@ -1533,4 +1533,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - MediaService added to authRuntime. Typecheck/lint PASS.
 - Commit c7dd287 pushed to origin/master; remote SHA verified equal. Next: M02 album schema/service. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
 
+## Task 04.3 - M02 Media Library album schema/service/routes
+- Migration0087 creates m02.album and m02.media_album tables as M10 resource extensions (module='M02', kind='album') with RLS deny-by-default. Migration0088 adds register_album, list_albums, add_media_to_album, remove_media_from_album functions with command idempotency, source ACL, and album-creator-only media linkage.
+- AlbumService wraps all four functions. POST/GET /api/media/album and POST/DELETE /api/media/album/media routes added with auth and budget checks.
+- Real DB test test_m02_album_create_list_link_with_acl covers creation, private-by-default, grant-based listing, creator-only media linkage, non-creator denial, revocation hiding, and owner access.
+- Lint/typecheck PASS; full integration_db suite 42/42 PASS (266.014s); scripts regression 11/11 PASS.
+- Commit c6e6f6e pushed to origin/master; remote SHA verified equal. Next: M02 sharing (3 ways) and gallery. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
+
 Updated: 2026-10-29 (Asia/Saigon)
