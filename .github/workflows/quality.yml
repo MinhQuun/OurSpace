@@ -46,7 +46,10 @@ jobs:
       - run: npm run test:auth-http
       - name: Stop local auth
         if: always()
-        run: docker compose -f compose.yaml -f compose.auth.yaml stop auth mail
+        run: |
+          if [ -f .local/auth.env ]; then docker compose -f compose.yaml -f compose.auth.yaml stop auth mail; else echo 'Auth was not started'; fi
       - name: Stop local database
         if: always()
-        run: docker compose stop db
+        run: |
+          docker compose stop db || true
+        run: |
