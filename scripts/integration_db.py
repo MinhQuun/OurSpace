@@ -1699,6 +1699,61 @@ ROLLBACK;''', self.database)
         self.assertEqual(result,'0')
         self.assertEqual(read('a',str(uuid.uuid4())),'f')
 
+    def test_m02_media_register_and_list_with_acl(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        space,invitation=[str(uuid.uuid4()) for _ in range(2)]
+        sql(f"""BEGIN;
+        INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+        UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+        UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+        INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+        INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+        COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        command=str(uuid.uuid4())
+        object_key=str(uuid.uuid4())
+        def register(token='a',cmd=command,title='Synthetic photo',mime='image/png',bucket='ourspace-private',okey=object_key,size=1024,sha_expr="repeat('a',64)"):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.register_media(repeat('{token}',64),'{cmd}','{title}','{mime}','{bucket}','{okey}',{size},{sha_expr}); COMMIT;",self.database)
+        role='media_reg_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.register_media(text,uuid,text,text,text,uuid,bigint,text),app_internal.list_media(text,integer) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def set_role():
+            sql(f"SET ROLE {role};",self.database)
+        def list_media(token='b',limit=50):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(row_to_json(m)),'[]'::json) FROM app_internal.list_media(repeat('{token}',64),{limit}) m; COMMIT;",self.database))
+        # A registers media
+        media_id=register()
+        self.assertEqual(sql(f"SELECT count(*) FROM m10.resources WHERE id='{media_id}' AND module='M02' AND kind='media';",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.media WHERE id='{media_id}' AND title='Synthetic photo';",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.binary_objects WHERE resource_id='{media_id}' AND purpose='original';",self.database),'1')
+        # Idempotent retry returns same ID
+        self.assertEqual(register(),media_id)
+        # Changed payload with same commandId is denied
+        with self.assertRaises(subprocess.CalledProcessError): register(title='Changed title')
+        # B cannot list A's media (private by default)
+        self.assertEqual(len(list_media()),0)
+        # Grant B viewer access
+        grant=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{media_id}','{a}','{b}','{space}','viewer');",self.database)
+        # B can now list A's media
+        visible=list_media()
+        self.assertEqual(len(visible),1)
+        self.assertEqual(visible[0]['id'],media_id)
+        self.assertEqual(visible[0]['title'],'Synthetic photo')
+        self.assertEqual(visible[0]['byte_size'],1024)
+        # Revoke grant hides media again
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}';",self.database)
+        self.assertEqual(len(list_media()),0)
+        # A can still list their own media
+        visible_a=list_media(token='a')
+        self.assertEqual(len(visible_a),1)
+        self.assertEqual(visible_a[0]['id'],media_id)
+
     def setUp(self):
         self.database = 'ourspace_test_' + uuid.uuid4().hex
         sql(f'CREATE DATABASE {self.database};')
