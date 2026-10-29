@@ -157,6 +157,7 @@ export default function PreferencesPanel() {
         return;
       }
       if (response.status === 409) {
+        applyPreferences(saved);
         setConflict(true);
         setFailed(true);
         setMessage(
