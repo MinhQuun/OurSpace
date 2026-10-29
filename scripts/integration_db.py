@@ -20,6 +20,43 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_account_export_section_live_owner_allowlist(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';", self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');", self.database)
+        sql(f"UPDATE m10.profiles SET display_name='Synthetic A',nickname='A only',birthday='2000-02-29',bio='Private A' WHERE user_id='{a}'; UPDATE m10.profiles SET bio='Private B sentinel' WHERE user_id='{b}'; INSERT INTO m10.personal_preferences(user_id,theme,font_scale) VALUES ('{a}','dark',1.25);", self.database)
+        role='export_section_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role};", self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token='a'):
+            return json.loads(sql(f"SET ROLE {role}; SELECT app_internal.export_my_account_section(repeat('{token}',64));",self.database))
+        with self.assertRaises(subprocess.CalledProcessError): read()
+        sql(f"GRANT EXECUTE ON FUNCTION app_internal.export_my_account_section(text) TO {role};",self.database)
+        section=read()
+        self.assertEqual(set(section),{'schema_version','section','account_id','profile','personal_preferences'})
+        self.assertEqual(section['account_id'],a)
+        self.assertEqual(section['section'],'m10.account_profile_preferences')
+        self.assertEqual(section['schema_version'],1)
+        self.assertEqual(section['profile'],{'display_name':'Synthetic A','nickname':'A only','birthday':'2000-02-29','bio':'Private A','version':'2'})
+        self.assertEqual(set(section['personal_preferences']),{'theme','language','timezone','date_format','hour_cycle','reduced_motion','font_scale','version'})
+        self.assertEqual(section['personal_preferences']['font_scale'],'1.25')
+        self.assertNotIn('Private B sentinel',json.dumps(section))
+        self.assertEqual(read('b')['profile']['bio'],'Private B sentinel')
+        self.assertIsNone(read('b')['personal_preferences'])
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"SET ROLE {role}; SELECT * FROM m10.profiles;",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): read('c')
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): read()
+        sql(f"UPDATE m10.sessions SET expires_at=now()-interval '1 second' WHERE account_id='{b}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): read('b')
+        self.assertEqual(sql("SELECT count(*) FROM m10.export_jobs;",self.database),'0')
+        self.assertEqual(sql("SELECT count(*) FROM app_internal.command_receipts;",self.database),'0')
+
     def test_unimplemented_jobs_cannot_report_completion(self):
         # Apply the historical migrations first to reproduce the false-success rows.
         with tempfile.TemporaryDirectory() as directory:
