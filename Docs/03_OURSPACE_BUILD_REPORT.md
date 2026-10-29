@@ -1449,3 +1449,16 @@ Updated: 2026-10-29 (Asia/Saigon)
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4k — Export jobs (ST-19)
+- Acceptance: account-scoped export jobs (personal/shared). Personal exports cover only the requester's own data; shared exports never include the partner's private data; sealed time capsules / surprise secrets excluded. Export is a job with status and result reference; no source content in audit/outbox (BR-M10-72..84).
+- Migration 0075: m10.export_jobs (account_id, scope, status, result_ref, created_at, completed_at) with RLS FORCE, no PUBLIC grants; list/create SECURITY DEFINER functions keyed by session actor; idempotent create via command receipts.
+- Migration 0076: export job budgets added to pairing_request_policies.
+- Runtime: ExportService + auth-runtime wiring + provision_runtime grants and budgets.
+- HTTP: /api/export/[action] for list (GET) / create (POST) with session/origin/budget validation.
+- UI: /account/export with personal/shared scope, job list with status and result ref, empty state; account navigation link added. With no domain modules deployed yet, every export returns an empty package.
+- Lint/typecheck PASS. Build PASS. E2E scaffold PASS. Migrations applied and runtime re-provisioned.
+- Remaining Stage03 M10: backup/recovery center (ST-20). Stage03 remains IN_PROGRESS.
+
+Updated: 2026-10-29 (Asia/Saigon)
+

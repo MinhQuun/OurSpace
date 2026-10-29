@@ -11,6 +11,7 @@ import { MfaService } from "../modules/m10/auth/mfa.server";
 import { RecoveryService } from "../modules/m10/auth/recovery.server";
 import { NotificationService } from "../modules/m10/notifications/service.server";
 import { TrashService } from "../modules/m10/trash/service.server";
+import { ExportService } from "../modules/m10/export/service.server";
 
 let instance:
   | {
@@ -26,6 +27,7 @@ let instance:
       profile: ProfileService;
       notifications: NotificationService;
       trash: TrashService;
+      export: ExportService;
     }
   | undefined;
 export function authRuntime() {
@@ -61,6 +63,7 @@ export function authRuntime() {
     profile: new ProfileService(db),
     notifications: new NotificationService(db),
     trash: new TrashService(db),
+    export: new ExportService(db),
   };
   return instance;
 }
