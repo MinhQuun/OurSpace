@@ -73,7 +73,11 @@ GRANT EXECUTE ON FUNCTION app_internal.session_actor(text),
     app_internal.mark_all_notifications_read(text),
     app_internal.hide_notification(text,uuid),
     app_internal.read_notification_preferences(text),
-    app_internal.update_notification_preferences(text,uuid,bigint,boolean,boolean,integer,integer,jsonb) TO ourspace_runtime;''')
+    app_internal.update_notification_preferences(text,uuid,bigint,boolean,boolean,integer,integer,jsonb),
+    app_internal.list_trashed_items(text),
+    app_internal.restore_trashed_item(text,uuid,uuid),
+    app_internal.purge_trashed_item(text,uuid,uuid),
+    app_internal.purge_expired_trashed_items(text) TO ourspace_runtime;''')
     # Support both deployed profile command signatures during the avatar migration.
     # Resolve only this fixed allowlist; never grant all schema functions.
     sql("""DO $$ DECLARE signature text; target regprocedure; BEGIN
@@ -98,7 +102,8 @@ VALUES ('create',10,60),('inspect',30,60),('list',60,60),
 ('profile_preferences',60,60),('profile_preferences_update',20,60),
 ('profile_couple',60,60),('profile_couple_history',60,60),('profile_couple_update',20,60),
 ('profile_partner',60,60),('profile_grants',60,60),('profile_share',20,60),('profile_revoke',20,60),
-('notifications_list',60,60),('notifications_count',120,60),('notifications_read',60,60),('notifications_hide',60,60),('notifications_read_all',30,60),('notifications_preferences',60,60),('notifications_preferences_update',20,60)
+('notifications_list',60,60),('notifications_count',120,60),('notifications_read',60,60),('notifications_hide',60,60),('notifications_read_all',30,60),('notifications_preferences',60,60),('notifications_preferences_update',20,60),
+('trash_list',60,60),('trash_restore',20,60),('trash_purge',20,60),('trash_purge_expired',30,60)
 ON CONFLICT(action) DO NOTHING;""")
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

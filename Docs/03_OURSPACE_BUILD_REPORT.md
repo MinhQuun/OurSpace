@@ -1436,3 +1436,16 @@ Updated: 2026-10-29 (Asia/Saigon)
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4j — Trash Center (ST-21)
+- Acceptance: 30-day trash container at account scope; owner can list trashed references, restore (state→restored) or permanently drop the reference (state→purged); expired items are purged by maintenance sweep; source objects owned by domain modules are never cascade-deleted. No source content leaked via trash UI.
+- Migration 0073: m10.trashed_items (owner_id, space_id, source_module/type/id, title_key, trashed_at, expires_at = now()+30d, state) with RLS FORCE, no PUBLIC grants; list/restore/purge/purge_expired SECURITY DEFINER functions keyed by session actor; idempotent command receipts for restore/purge.
+- Migration 0074: trash request budgets added to pairing_request_policies.
+- Runtime: TrashService + auth-runtime wiring + provision_runtime grants and budgets.
+- HTTP: /api/trash/[action] for list (GET) / restore / purge / purge_expired (POST) with session/origin/budget validation.
+- UI: /account/trash with item list, restore/purge per item, purge expired, empty state; account navigation link added.
+- Lint/typecheck PASS. Build PASS. E2E scaffold PASS. Migrations applied and runtime re-provisioned.
+- Remaining Stage03 M10: export jobs (ST-19), backup/recovery center (ST-20). Stage03 remains IN_PROGRESS.
+
+Updated: 2026-10-29 (Asia/Saigon)
+
