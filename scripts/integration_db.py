@@ -1356,6 +1356,66 @@ SET LOCAL ROLE {role}; SELECT count(*) FROM m10.mfa_enrollments; ROLLBACK;''', s
                     outcomes.append(False)
         self.assertEqual(sorted(outcomes), [False, True])
 
+    def test_notification_list_and_count_hide_unreadable_sources(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,resource,private,grant=[str(uuid.uuid4()) for _ in range(5)]
+        sql(f"""BEGIN;
+        INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+        UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+        UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+        INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+        INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+        INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{resource}','M01','diary','{a}');
+        INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{private}','M02','media','{a}');
+        INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{resource}','{a}','{b}','{space}','viewer');
+        COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        shared_note,private_note,account_note,unknown_note=[str(uuid.uuid4()) for _ in range(4)]
+        sql(f"""BEGIN;
+        INSERT INTO m10.notifications(id,recipient_id,space_id,notification_type,source_module,source_id,title_key,body_key,priority)
+        VALUES ('{shared_note}','{b}','{space}','shared','M01','{resource}','shared.title','shared.body','normal');
+        INSERT INTO m10.notifications(id,recipient_id,space_id,notification_type,source_module,source_id,title_key,body_key,priority)
+        VALUES ('{private_note}','{b}','{space}','private','M02','{private}','private.title','private.body','normal');
+        INSERT INTO m10.notifications(id,recipient_id,space_id,notification_type,source_module,source_id,title_key,body_key,priority)
+        VALUES ('{account_note}','{b}',NULL,'account',NULL,NULL,'account.title','account.body','normal');
+        INSERT INTO m10.notifications(id,recipient_id,notification_type,source_module,source_id,title_key,body_key,priority)
+        VALUES ('{unknown_note}','{b}','unknown','M99','{uuid.uuid4()}','unknown.title','unknown.body','normal');
+        COMMIT;""",self.database)
+        role='notification_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.read_notifications(text,integer,boolean),app_internal.unread_notification_count(text) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def list_notifications(token='b',limit=50,include_read='true'):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(row_to_json(n)),'[]'::json) FROM app_internal.read_notifications(repeat('{token}',64),{limit},{include_read}) n; COMMIT;",self.database))
+        def count_unread(token='b'):
+            return int(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.unread_notification_count(repeat('{token}',64)); COMMIT;",self.database))
+        visible=list_notifications()
+        self.assertEqual(len(visible),2)
+        self.assertEqual({n['id'] for n in visible},{shared_note,account_note})
+        self.assertEqual(count_unread(),2)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}';",self.database)
+        self.assertEqual(len(list_notifications()),1)
+        self.assertEqual(count_unread(),1)
+        self.assertEqual(list_notifications()[0]['id'],account_note)
+        self.assertEqual(len(list_notifications()),1)
+        self.assertEqual(count_unread(),1)
+        own_note=str(uuid.uuid4())
+        sql(f"""INSERT INTO m10.notifications(id,recipient_id,space_id,notification_type,source_module,source_id,title_key,body_key,priority)
+        VALUES ('{own_note}','{a}','{space}','own','M02','{private}','own.title','own.body','normal');""",self.database)
+        self.assertEqual(len(list_notifications(token='a')),1)
+        self.assertEqual(count_unread(token='a'),1)
+        sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        self.assertEqual(len(list_notifications(token='b')),1)
+        self.assertEqual(count_unread(token='b'),1)
+        sql(f"INSERT INTO m10.space_disconnects(space_id,initiated_by,initiated_at) VALUES ('{space}','{a}',clock_timestamp()-interval '31 days');",self.database)
+        self.assertEqual(len(list_notifications(token='b')),1)
+        self.assertEqual(count_unread(token='b'),1)
+        self.assertEqual(list_notifications(token='b')[0]['id'],account_note)
+
     def setUp(self):
         self.database = 'ourspace_test_' + uuid.uuid4().hex
         sql(f'CREATE DATABASE {self.database};')

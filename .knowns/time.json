@@ -1,11 +1,3 @@
 {
-  "active": [
-    {
-      "taskId": "OS-424Z4W",
-      "taskTitle": "Stage03 — Notification list/count source reauthorization",
-      "startedAt": "2026-10-29T12:36:48.811Z",
-      "pausedAt": null,
-      "totalPausedMs": 0
-    }
-  ]
+  "active": []
 }

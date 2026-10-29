@@ -1514,3 +1514,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Knowns code discovery failed with LSP daemon timeout; terminated remaining read-only discovery call and used filesystem fallback for scoped edits. Task/time tracking remains available. Production scheduling/maintenance credentials and backup retention remain separate unimplemented deployment work; this is not automatic production cleanup.
 - Next: remaining account/domain export coverage and full assembly; broader Stage03 notification/Trash acceptance audit. Full M01-M10 P0 incomplete.
 - Commit 33b1e321161fabd3b4f69cacf0614b698ef1bd8e PUSHED; remote master SHA verified equal. Knowns OS-EH5QEK done; next remaining export coverage and Stage03 acceptance.
+
+## Task 03.4s - Notification list/count source reauthorization (Knowns OS-424Z4W)
+- Migration0084 updates app_internal.read_notifications and app_internal.unread_notification_count to require app_internal.can_read_resource(session_hash, source_id) when source_module/source_id is present; account-only notices (both NULL) remain visible. Revoked, private, conditional and unknown sources no longer leak through list or unread count.
+- Real DB test test_notification_list_and_count_hide_unreadable_sources in scripts/integration_db.py covers authorized source visibility, immediate hiding after grant revocation, unknown/mismatched source denial, account-only notice persistence, owner access to own source, and Space disconnect processing-window expiry.
+- Lint/typecheck PASS; full integration_db suite 39/39 PASS (249.584s); scripts regression 11/11 PASS. Migration checksums verified on fresh test databases.
+- Commit pushed to origin/master; remote SHA verified equal. Knowns OS-424Z4W done. Stage03 remains IN_PROGRESS: remaining M10 journeys include real export artifact assembly, genuine backup/restore, broader domain integration and PO acceptance. Full M01-M10 P0 incomplete.
+
+Updated: 2026-10-29 (Asia/Saigon)

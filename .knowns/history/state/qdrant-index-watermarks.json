@@ -21,7 +21,7 @@
     "entityType": "task",
     "entityId": "OS-424Z4W",
     "canonicalHash": "bf86c71eb00d761162126e15fa96739cf35e8c9551c3eeceda45d82f5ae137e3",
-    "revision": 1,
+    "revision": 2,
     "path": "tasks/OS-424Z4W.md",
     "indexedAt": "0001-01-01T00:00:00Z",
     "stale": true
