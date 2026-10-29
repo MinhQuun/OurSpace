@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
+import { usePreferences } from "../../preference-runtime";
 type Invite = {
   id: string;
   state: string;
@@ -50,6 +51,7 @@ async function post(action: string, data: object) {
   return response.json();
 }
 export default function PairingPanel() {
+  const { formatDateTime } = usePreferences();
   const capability = useRef<{ id: string; token: string } | null>(null);
   const commands = useRef(new Map<string, string>());
   const [actor, setActor] = useState("");
@@ -261,9 +263,7 @@ export default function PairingPanel() {
                   <small>{item.recipient_id}</small>
                 </p>
               )}
-              <p>
-                Hết hạn: {new Date(item.expires_at).toLocaleString("vi-VN")}
-              </p>
+              <p>Hết hạn: {formatDateTime(item.expires_at)}</p>
               {item.space_id && (
                 <p>
                   Space: <small>{item.space_id}</small>

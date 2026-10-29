@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import ProfilePanel from "./profile-panel";
 import SessionPanel from "./session-panel";
+import { sessionChangedEvent } from "../preference-runtime";
 
 export default function AccountForm() {
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -19,6 +20,7 @@ export default function AccountForm() {
     setMode("login");
     setFailed(false);
     setMessage("Phiên đã kết thúc. Vui lòng đăng nhập lại.");
+    window.dispatchEvent(new Event(sessionChangedEvent));
   }, []);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ export default function AccountForm() {
       } else {
         setState("signed-in");
         setMessage("Đăng nhập thành công.");
+        window.dispatchEvent(new Event(sessionChangedEvent));
       }
     } catch {
       setFailed(true);
@@ -113,6 +116,7 @@ export default function AccountForm() {
       setState("guest");
       setMode("login");
       setMessage("Bạn đã đăng xuất.");
+      window.dispatchEvent(new Event(sessionChangedEvent));
     } catch {
       setFailed(true);
       setMessage("Chưa thể đăng xuất. Vui lòng thử lại.");

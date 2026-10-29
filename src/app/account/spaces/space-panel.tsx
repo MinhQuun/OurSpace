@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
+import { usePreferences } from "../../preference-runtime";
 type Space = {
   id: string;
   state: string;
@@ -44,6 +45,7 @@ async function failure(response: Response): Promise<never> {
   );
 }
 export default function SpacePanel() {
+  const { formatDateTime } = usePreferences();
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -185,7 +187,7 @@ export default function SpacePanel() {
               {space.processing_until && (
                 <p>
                   Thời hạn xử lý:{" "}
-                  {new Date(space.processing_until).toLocaleString("vi-VN")}.
+                  {formatDateTime(space.processing_until)}.
                   Nội dung chung chỉ được truy cập theo quyền của từng đối
                   tượng.
                 </p>

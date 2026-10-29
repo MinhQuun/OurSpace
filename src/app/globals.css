@@ -3,6 +3,34 @@
   --ink: #342e32;
   --muted: #655a61;
   --paper: #faf7f2;
+  --surface: #ffffff;
+  --line: #d8cdd1;
+  --line-strong: #97828c;
+  --accent: #643c50;
+  --accent-ink: #ffffff;
+  --focus: #9c587b;
+  --success-bg: #e8eee5;
+  --error-bg: #f6e3e3;
+  --error-ink: #752525;
+  --font-scale: 1;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f5eef2;
+  --muted: #c9bcc4;
+  --paper: #161214;
+  --surface: #241d21;
+  --line: #4c3f46;
+  --line-strong: #a28895;
+  --accent: #e2a9c6;
+  --accent-ink: #2a1620;
+  --focus: #f3bcd8;
+  --success-bg: #1e2f27;
+  --error-bg: #3a2024;
+  --error-ink: #ffd9dd;
+}
+html {
+  font-size: calc(100% * var(--font-scale, 1));
 }
 * {
   box-sizing: border-box;
@@ -38,7 +66,7 @@ h1 {
   font-size: 1.1rem;
 }
 aside {
-  border-top: 1px solid #d8cdd1;
+  border-top: 1px solid var(--line);
   margin-top: 4rem;
   padding-top: 1.5rem;
   max-width: 34rem;
@@ -74,18 +102,40 @@ aside p {
   width: 100%;
   min-width: 0;
   padding: 0.8rem;
-  border: 1px solid #97828c;
+  border: 1px solid var(--line-strong);
   border-radius: 0.5rem;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
+}
+.account-card select,
+.account-card textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.account-card input[type="range"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+.account-card input[type="checkbox"] {
+  width: auto;
+  min-width: 1.5rem;
+  height: 1.5rem;
 }
 .account-card button {
   min-height: 44px;
   border: 0;
   border-radius: 0.5rem;
-  background: #643c50;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-ink);
   padding: 0.8rem 1.4rem;
   font: inherit;
   cursor: pointer;
@@ -95,7 +145,7 @@ aside p {
   cursor: wait;
 }
 .account-card .text-button {
-  color: #643c50;
+  color: var(--accent);
   background: transparent;
   padding-left: 0;
   text-align: left;
@@ -109,18 +159,26 @@ aside p {
 }
 .form-message {
   padding: 1rem;
-  background: #e8eee5;
+  background: var(--success-bg);
   border-radius: 0.5rem;
   line-height: 1.6;
 }
 .form-error {
-  background: #f6e3e3;
-  color: #752525;
+  background: var(--error-bg);
+  color: var(--error-ink);
+}
+.preference-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid #9c587b;
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 .sr-only {
@@ -133,7 +191,7 @@ a:focus-visible {
 }
 .session-panel {
   margin-top: 2rem;
-  border-top: 1px solid #d8cdd1;
+  border-top: 1px solid var(--line);
   padding-top: 1rem;
 }
 .session-actions {
@@ -147,7 +205,7 @@ a:focus-visible {
 }
 .session-list li {
   margin: 1rem 0;
-  border: 1px solid #d8cdd1;
+  border: 1px solid var(--line);
   padding: 1rem;
   border-radius: 0.5rem;
   overflow-wrap: anywhere;
@@ -174,11 +232,30 @@ a:focus-visible {
 }
 
 .pairing-invitation {
-  border-top: 1px solid #b9a4ad;
+  border-top: 1px solid var(--line-strong);
   margin-top: 2rem;
   padding-top: 1rem;
   overflow-wrap: anywhere;
 }
 .pairing-panel small {
   overflow-wrap: anywhere;
+}
+/* M10 D24: reduced motion removes decorative animation but never gates an action. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+:root[data-reduced-motion="reduce"] *,
+:root[data-reduced-motion="reduce"] *::before,
+:root[data-reduced-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

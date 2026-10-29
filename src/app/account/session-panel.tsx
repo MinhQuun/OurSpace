@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePreferences } from "../preference-runtime";
 
 type Session = {
   id: string;
@@ -12,6 +13,7 @@ type Session = {
 };
 
 export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
+  const { formatDateTime } = usePreferences();
   const [items, setItems] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -168,17 +170,17 @@ export default function SessionPanel({ onExpired }: { onExpired: () => void }) {
                 <p className="field-help">
                   Hoạt động gần nhất:{" "}
                   <time dateTime={item.last_seen}>
-                    {new Date(item.last_seen).toLocaleString("vi-VN")}
+                    {formatDateTime(item.last_seen)}
                   </time>
                   <br />
                   Bắt đầu:{" "}
                   <time dateTime={item.created_at}>
-                    {new Date(item.created_at).toLocaleString("vi-VN")}
+                    {formatDateTime(item.created_at)}
                   </time>
                   <br />
                   Hết hạn:{" "}
                   <time dateTime={item.expires_at}>
-                    {new Date(item.expires_at).toLocaleString("vi-VN")}
+                    {formatDateTime(item.expires_at)}
                   </time>
                 </p>
                 {state === "Đang hoạt động" && (

@@ -2,9 +2,18 @@
   "task:OS-184SV5": {
     "entityType": "task",
     "entityId": "OS-184SV5",
-    "canonicalHash": "191ec242a2d60045c8c5be1eccf81dbbaf931d323d4bb004b5a75cd43f63a334",
-    "revision": 1,
+    "canonicalHash": "04a573194b45e96fb96e5c9a349b6a34296d55938f6b41fb54068b595a28c8bb",
+    "revision": 3,
     "path": "tasks/OS-184SV5.md",
+    "indexedAt": "0001-01-01T00:00:00Z",
+    "stale": true
+  },
+  "task:OS-9DSGCE": {
+    "entityType": "task",
+    "entityId": "OS-9DSGCE",
+    "canonicalHash": "52cc76588b2bcd6535f93197711a3b6d9fd0b13850e05750fb238ea1526d02d7",
+    "revision": 2,
+    "path": "tasks/OS-9DSGCE.md",
     "indexedAt": "0001-01-01T00:00:00Z",
     "stale": true
   },

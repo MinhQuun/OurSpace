@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import PreferenceRuntime from "./preference-runtime";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,7 +13,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="vi">
-      <body>{children}</body>
+      <body>
+        <PreferenceRuntime>{children}</PreferenceRuntime>
+      </body>
     </html>
   );
 }
