@@ -20,6 +20,50 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_personal_preference_commands_session_isolation_and_retry(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b'),(a,'c')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='preference_commands_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.read_personal_preferences(text),app_internal.update_personal_preferences(text,uuid,bigint,text,text,text,text,text,text,numeric) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token='a'):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(p),'[]') FROM app_internal.read_personal_preferences(repeat('{token}',64)) p; COMMIT;",self.database))
+        def update(token='a',version=0,theme='dark',command=None,scale='1.5',rollback=False):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.update_personal_preferences(repeat('{token}',64),'{command or uuid.uuid4()}',{version},'{theme}','vi-VN','UTC','yyyy-MM-dd','h12','reduce',{scale}); {'ROLLBACK' if rollback else 'COMMIT'};",self.database)
+        initial=read()
+        self.assertEqual(initial[0]['version'],0)
+        self.assertEqual(read('b'),initial)
+        self.assertEqual(read('d'),[])
+        update(rollback=True)
+        self.assertEqual(read(),initial)
+        command=str(uuid.uuid4())
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(lambda _: update(command=command),range(2))),[a,a])
+        self.assertEqual(update(command=command,scale='1.50'),a)
+        self.assertEqual(read('c')[0]['version'],1)
+        self.assertEqual(read('b'),initial)
+        for args in [dict(command=command,theme='light'),dict(version=0),dict(token='d'),dict(version=1,scale='1.555'),dict(version=1,theme='invalid')]:
+            with self.assertRaises(subprocess.CalledProcessError): update(**args)
+        def compete(token):
+            try: update(token=token,version=1); return True
+            except subprocess.CalledProcessError: return False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(sum(pool.map(compete,['a','c'])),1)
+        self.assertEqual(read()[0]['version'],2)
+        for table in ['command_receipts','audit_events','outbox']:
+            self.assertEqual(sql(f'SELECT count(*) FROM app_internal.{table};',self.database),'2')
+        update(token='b')
+        self.assertEqual(read()[0]['version'],2)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        self.assertEqual(read(),[])
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command)
+        self.assertEqual(read('b')[0]['version'],1)
+
     def test_personal_preferences_constraints_identity_and_isolation(self):
         migrate(database=self.database)
         seed(self.database)
