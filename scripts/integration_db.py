@@ -170,6 +170,61 @@ COMMIT;""",self.database)
         sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError): issue(token='b',profile=b,recipient=a,cmd=str(uuid.uuid4()))
 
+    def test_couple_profile_command_concurrency_and_lifecycle(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='couple_update_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_couple_profile(text,uuid,uuid,bigint,text) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def update(token='a',version=0,title='Synthetic title',command=None,target=space,rollback=False):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.update_couple_profile(repeat('{token}',64),'{command or uuid.uuid4()}','{target}',{version},{'NULL' if title is None else chr(39)+title+chr(39)}); {'ROLLBACK' if rollback else 'COMMIT'};",self.database)
+        for args in [dict(token='c'),dict(target=str(uuid.uuid4())),dict(version=-1),dict(title=' '),dict(title='x'*121)]:
+            with self.assertRaises(subprocess.CalledProcessError): update(**args)
+        update(rollback=True)
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_profiles;',self.database),'0')
+        command=str(uuid.uuid4())
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(lambda _: update(command=command),range(2)))
+        self.assertEqual(results,[space,space])
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command,title='Changed replay')
+        def competing(token):
+            try:
+                update(token=token,version=1,title='Edit by '+token)
+                return token
+            except subprocess.CalledProcessError:
+                return None
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            winners=[x for x in pool.map(competing,['a','b']) if x]
+        self.assertEqual(len(winners),1)
+        self.assertEqual(sql('SELECT version FROM m10.couple_profiles;',self.database),'2')
+        self.assertEqual(sql('SELECT title FROM m10.couple_profiles;',self.database),'Edit by '+winners[0])
+        update(token='b',version=2,title=None)
+        self.assertEqual(sql('SELECT updated_by FROM m10.couple_profiles;',self.database),b)
+        for table in ['command_receipts','audit_events','outbox']:
+            self.assertEqual(sql(f'SELECT count(*) FROM app_internal.{table};',self.database),'3')
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_profile_revisions;',self.database),'3')
+        self.assertEqual(update(command=command),space)
+        self.assertEqual(sql('SELECT version FROM m10.couple_profiles;',self.database),'3')
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command)
+        sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(token='b',version=3)
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_profile_revisions;',self.database),'3')
+
     def test_couple_profile_revision_history_identity_and_privacy(self):
         migrate(database=self.database)
         seed(self.database)
