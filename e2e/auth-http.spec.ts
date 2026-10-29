@@ -1616,6 +1616,7 @@ test("Couple Profile HTTP enforces versions and independent budgets", async ({
       spaceId: space,
       version: 0,
       title: "Synthetic couple",
+      accent: "#B83280",
     };
     const post = (data: unknown, i = 0) =>
       request.post("/api/profile/couple_update", { headers: headers(i), data });
@@ -1650,6 +1651,8 @@ test("Couple Profile HTTP enforces versions and independent budgets", async ({
       { ...input, userId: users[1] },
       { ...input, version: -1 },
       { ...input, title: " " },
+      { ...input, accent: "purple" },
+      { ...input, accent: "#12345" },
       { ...input, padding: "x".repeat(5000) },
     ])
       expect((await post(data)).status()).toBe(400);
@@ -1661,7 +1664,12 @@ test("Couple Profile HTTP enforces versions and independent budgets", async ({
     const read = await request.get(path, { headers: headers(1) });
     expect(read.headers()["cache-control"]).toBe("no-store");
     expect(await read.json()).toMatchObject({
-      profile: { title: input.title, version: "1", updated_by: users[0] },
+      profile: {
+        title: input.title,
+        accent: "#b83280",
+        version: "1",
+        updated_by: users[0],
+      },
     });
     expect(
       (
@@ -1675,7 +1683,9 @@ test("Couple Profile HTTP enforces versions and independent budgets", async ({
       await (
         await request.get(history + "&before=2", { headers: headers(1) })
       ).json(),
-    ).toMatchObject({ revisions: [{ version: "1", title: input.title }] });
+    ).toMatchObject({
+      revisions: [{ version: "1", title: input.title, accent: "#b83280" }],
+    });
     await owner.query(
       "UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='profile_couple_update'",
       [users[0]],

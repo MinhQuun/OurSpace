@@ -32,6 +32,14 @@
       "hash": "b1f9170a66a2d20ebd1a3144b3f0c84cd2fc907ac9127198e86d25a6302385b9",
       "revision": 4,
       "headHash": "b1f9170a66a2d20ebd1a3144b3f0c84cd2fc907ac9127198e86d25a6302385b9"
+    },
+    "task:OS-XW4AB9": {
+      "entityType": "task",
+      "entityId": "OS-XW4AB9",
+      "path": "tasks/OS-XW4AB9.md",
+      "hash": "d1cd26303e9c116af198306e4f66b9b96fe2fe92f8168c4733eb4d0e341d7a6d",
+      "revision": 2,
+      "headHash": "d1cd26303e9c116af198306e4f66b9b96fe2fe92f8168c4733eb4d0e341d7a6d"
     }
   }
 }

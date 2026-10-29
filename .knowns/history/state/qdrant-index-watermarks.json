@@ -34,5 +34,14 @@
     "path": "tasks/OS-RCXJTX.md",
     "indexedAt": "0001-01-01T00:00:00Z",
     "stale": true
+  },
+  "task:OS-XW4AB9": {
+    "entityType": "task",
+    "entityId": "OS-XW4AB9",
+    "canonicalHash": "d1cd26303e9c116af198306e4f66b9b96fe2fe92f8168c4733eb4d0e341d7a6d",
+    "revision": 2,
+    "path": "tasks/OS-XW4AB9.md",
+    "indexedAt": "0001-01-01T00:00:00Z",
+    "stale": true
   }
 }

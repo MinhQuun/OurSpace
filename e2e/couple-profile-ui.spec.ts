@@ -83,25 +83,50 @@ test("Couple Profile UI saves history and reviews conflicts", async ({
     ]);
     await page.goto("/account/couple");
     const field = page.getByRole("textbox", { name: "Tên không gian chung" });
+    const accentToggle = page.getByRole("checkbox", {
+      name: /Dùng màu nhấn chung/,
+    });
+    const accentPicker = page.getByRole("textbox", { name: "Màu nhấn chung" });
     await field.fill("Synthetic shared title");
-    await page.getByRole("button", { name: "Lưu tên chung" }).click();
+    await accentToggle.check();
+    await accentPicker.fill("#336699");
+    await page.getByRole("button", { name: "Lưu hồ sơ chung" }).click();
     await expect(page.getByText("Đã lưu hồ sơ chung.")).toBeVisible();
     await expect(page.locator("li strong")).toHaveText([
       "Synthetic shared title",
     ]);
+    expect(
+      (
+        await owner.query(
+          "SELECT title,accent FROM m10.couple_profiles WHERE space_id=$1",
+          [space],
+        )
+      ).rows[0],
+    ).toEqual({ title: "Synthetic shared title", accent: "#336699" });
+    expect(
+      (
+        await owner.query(
+          "SELECT count(*)::int AS count FROM m10.personal_preferences WHERE user_id=ANY($1::uuid[])",
+          [users],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    await page.reload();
+    await expect(accentPicker).toHaveValue("#336699");
+    await expect(accentToggle).toBeChecked();
     await owner.query(
       "UPDATE m10.couple_profiles SET title='Synthetic Partner edit',updated_by=$2 WHERE space_id=$1",
       [space, users[1]],
     );
     await field.fill("Stale edit");
-    await page.getByRole("button", { name: "Lưu tên chung" }).click();
+    await page.getByRole("button", { name: "Lưu hồ sơ chung" }).click();
     await expect(
       page.getByText(
         "Hồ sơ đã thay đổi. Tải lại và xem xét tên mới trước khi lưu.",
       ),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Lưu tên chung" }),
+      page.getByRole("button", { name: "Lưu hồ sơ chung" }),
     ).toBeDisabled();
     expect(
       (
@@ -114,14 +139,14 @@ test("Couple Profile UI saves history and reviews conflicts", async ({
     await page.getByRole("button", { name: "Tải lại hồ sơ chung" }).click();
     await expect(field).toHaveValue("Synthetic Partner edit");
     await field.fill("Reviewed title");
-    await page.getByRole("button", { name: "Lưu tên chung" }).click();
+    await page.getByRole("button", { name: "Lưu hồ sơ chung" }).click();
     await expect(page.locator("li strong")).toHaveText([
       "Reviewed title",
       "Synthetic Partner edit",
       "Synthetic shared title",
     ]);
     await field.fill("");
-    await page.getByRole("button", { name: "Lưu tên chung" }).click();
+    await page.getByRole("button", { name: "Lưu hồ sơ chung" }).click();
     await expect(page.locator("li strong").first()).toHaveText("Chưa đặt tên");
     expect(
       (

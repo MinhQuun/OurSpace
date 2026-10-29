@@ -173,6 +173,19 @@ aside p {
   gap: 0.75rem;
   margin-top: 1rem;
 }
+.couple-theme-band {
+  height: 0.5rem;
+  border-radius: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+}
+.couple-revision-accent {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  vertical-align: middle;
+}
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,

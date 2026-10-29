@@ -3,9 +3,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePreferences } from "../../preference-runtime";
 type Space = { id: string; state: string };
-type Profile = { title: string | null; version: string };
+type Profile = { title: string | null; accent: string | null; version: string };
 type Revision = {
   title: string | null;
+  accent: string | null;
   version: string;
   actor_id: string;
   recorded_at: string;
@@ -18,6 +19,8 @@ export default function CouplePanel() {
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [more, setMore] = useState(false);
   const [title, setTitle] = useState("");
+  const [accent, setAccent] = useState("#643c50");
+  const [useAccent, setUseAccent] = useState(false);
   const [busy, setBusy] = useState(true);
   const [expired, setExpired] = useState(false);
   const [message, setMessage] = useState("");
@@ -30,6 +33,7 @@ export default function CouplePanel() {
       setProfile(null);
       setRevisions([]);
       setTitle("");
+      setUseAccent(false);
     }
     if (status === 409) setConflict(true);
     setMessage(
@@ -84,6 +88,8 @@ export default function CouplePanel() {
         if (current !== generation.current) return;
         setProfile(data.profile);
         setTitle(data.profile?.title ?? "");
+        setAccent(data.profile?.accent ?? "#643c50");
+        setUseAccent(Boolean(data.profile?.accent));
         setRevisions(past.revisions);
         setMore(past.revisions.length === 50);
         retry.current = { payload: "", commandId: "" };
@@ -109,6 +115,7 @@ export default function CouplePanel() {
       spaceId: selected,
       version: Number(profile.version),
       title: title.trim() || null,
+      accent: useAccent ? accent : null,
     };
     const payload = JSON.stringify(data);
     if (retry.current.payload !== payload)
@@ -192,6 +199,13 @@ export default function CouplePanel() {
             <>
               {spaces.find((s) => s.id === selected)?.state === "active" ? (
                 <form onSubmit={save}>
+                  <div
+                    className="couple-theme-band"
+                    style={{
+                      background: useAccent ? accent : "var(--line-strong)",
+                    }}
+                    aria-hidden="true"
+                  />
                   <label className="field">
                     Tên không gian chung
                     <input
@@ -200,9 +214,28 @@ export default function CouplePanel() {
                       disabled={busy || conflict}
                     />
                   </label>
+                  <label className="field">
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={useAccent}
+                        disabled={busy || conflict}
+                        onChange={(event) => setUseAccent(event.target.checked)}
+                      />{" "}
+                      Dùng màu nhấn chung
+                    </span>
+                    <input
+                      type="color"
+                      aria-label="Màu nhấn chung"
+                      value={accent}
+                      disabled={busy || conflict || !useAccent}
+                      onChange={(event) => setAccent(event.target.value)}
+                    />
+                  </label>
                   <p>
                     Để trống để bỏ tên đã đặt. Cả hai thành viên đều thấy thay
-                    đổi này.
+                    đổi này. Màu nhấn chỉ đổi giao diện chung, không ghi đè cài
+                    đặt cá nhân của từng người.
                   </p>
                   <button
                     className="button button-primary"
@@ -210,7 +243,7 @@ export default function CouplePanel() {
                       busy || conflict || Array.from(title.trim()).length > 120
                     }
                   >
-                    Lưu tên chung
+                    Lưu hồ sơ chung
                   </button>
                 </form>
               ) : (
@@ -225,6 +258,13 @@ export default function CouplePanel() {
                 {revisions.map((row) => (
                   <li key={row.version} style={{ overflowWrap: "anywhere" }}>
                     <strong>{row.title ?? "Chưa đặt tên"}</strong>
+                    {row.accent && (
+                      <span
+                        className="couple-revision-accent"
+                        style={{ background: row.accent }}
+                        title={`Màu nhấn ${row.accent}`}
+                      />
+                    )}{" "}
                     <p>
                       Phiên bản {row.version} ·{" "}
                       {formatDateTime(row.recorded_at)}

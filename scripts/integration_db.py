@@ -273,7 +273,7 @@ COMMIT;""",self.database)
         def read(token='a',history=False,before='NULL',target=space):
             call=f"app_internal.read_couple_profile_history(repeat('{token}',64),'{target}',{before})" if history else f"app_internal.read_couple_profile(repeat('{token}',64),'{target}')"
             return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(r),'[]') FROM {call} r; COMMIT;",self.database))
-        self.assertEqual(read(),[dict(space_id=space,title=None,version=0,updated_by=None,updated_at=None)])
+        self.assertEqual(read(),[dict(space_id=space,title=None,accent=None,version=0,updated_by=None,updated_at=None)])
         self.assertEqual(read(history=True),[])
         sql(f"INSERT INTO m10.couple_profiles(space_id,title,updated_by) VALUES ('{space}','Synthetic first title','{a}');",self.database)
         sql(f"DO $test$ BEGIN FOR i IN 2..52 LOOP UPDATE m10.couple_profiles SET title='Synthetic title '||i,updated_by='{b}' WHERE space_id='{space}'; END LOOP; END $test$;",self.database)
@@ -319,11 +319,12 @@ COMMIT;""",self.database)
         for actor,token in [(a,'a'),(b,'b')]:
             sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
         role='couple_update_probe_'+uuid.uuid4().hex
-        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_couple_profile(text,uuid,uuid,bigint,text) TO {role};',self.database)
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_couple_profile(text,uuid,uuid,bigint,text,text) TO {role};',self.database)
         self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
-        def update(token='a',version=0,title='Synthetic title',command=None,target=space,rollback=False):
-            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.update_couple_profile(repeat('{token}',64),'{command or uuid.uuid4()}','{target}',{version},{'NULL' if title is None else chr(39)+title+chr(39)}); {'ROLLBACK' if rollback else 'COMMIT'};",self.database)
-        for args in [dict(token='c'),dict(target=str(uuid.uuid4())),dict(version=-1),dict(title=' '),dict(title='x'*121)]:
+        def update(token='a',version=0,title='Synthetic title',accent='#1a2b3c',command=None,target=space,rollback=False):
+            accent_sql='NULL' if accent is None else chr(39)+accent+chr(39)
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.update_couple_profile(repeat('{token}',64),'{command or uuid.uuid4()}','{target}',{version},{'NULL' if title is None else chr(39)+title+chr(39)},{accent_sql}); {'ROLLBACK' if rollback else 'COMMIT'};",self.database)
+        for args in [dict(token='c'),dict(target=str(uuid.uuid4())),dict(version=-1),dict(title=' '),dict(title='x'*121),dict(accent='purple'),dict(accent='#12345')]:
             with self.assertRaises(subprocess.CalledProcessError): update(**args)
         update(rollback=True)
         self.assertEqual(sql('SELECT count(*) FROM m10.couple_profiles;',self.database),'0')
@@ -343,6 +344,7 @@ COMMIT;""",self.database)
         self.assertEqual(len(winners),1)
         self.assertEqual(sql('SELECT version FROM m10.couple_profiles;',self.database),'2')
         self.assertEqual(sql('SELECT title FROM m10.couple_profiles;',self.database),'Edit by '+winners[0])
+        self.assertEqual(sql('SELECT accent FROM m10.couple_profiles;',self.database),'#1a2b3c')
         update(token='b',version=2,title=None)
         self.assertEqual(sql('SELECT updated_by FROM m10.couple_profiles;',self.database),b)
         for table in ['command_receipts','audit_events','outbox']:
