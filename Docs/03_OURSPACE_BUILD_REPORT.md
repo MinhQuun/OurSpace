@@ -17,7 +17,7 @@ Updated: 2026-10-28 (Asia/Saigon). This report records implementation evidence, 
 | 00 | DONE | Audit and registry pushed and verified; source mappings retain explicit unresolved statuses |
 | 01 | DONE | Local app/DB/Auth, seed, migrations, policy/ownership foundations and hosted CI verified |
 | 02 | DONE (POC gate) | Real Auth/MFA/pairing/ACL/storage/realtime security evidence and full regression; see STAGE02_SECURITY_REVIEW.md. Full M10/domain P0 remains later stages |
-| 03 | IN_PROGRESS | Own-profile database commands; service/API/UI and remaining shared-platform journeys pending |
+| 03 | DONE | Shared-platform/M10 journeys complete: own profile, field sharing, Couple Profile, preferences, notification center/preferences/Quiet Hours, personalized home, Privacy Inspector, Trash Center, export section artifacts, backup/restore center schemas, notification source ACL. Remaining: domain integration in Stage 13; full export/backup/restore artifact workflows depend on domain modules |
 | 04 | NOT_STARTED | M02 |
 | 05 | NOT_STARTED | M01 |
 | 06 | NOT_STARTED | M05 |
