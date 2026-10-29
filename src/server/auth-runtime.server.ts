@@ -1,3 +1,4 @@
+import { MediaService } from "../modules/m02/media/service.server";
 import { PermissionService } from "../modules/m10/permissions/service.server";
 import { ProfileService } from "../modules/m10/profile/service.server";
 import { SpaceService } from "../modules/m10/spaces/service.server";
@@ -30,6 +31,7 @@ let instance:
       trash: TrashService;
       export: ExportService;
       backup: BackupService;
+      media: MediaService;
     }
   | undefined;
 export function authRuntime() {
@@ -67,6 +69,7 @@ export function authRuntime() {
     trash: new TrashService(db),
     export: new ExportService(db),
     backup: new BackupService(db),
+    media: new MediaService(db),
   };
   return instance;
 }
