@@ -170,6 +170,39 @@ COMMIT;""",self.database)
         sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError): issue(token='b',profile=b,recipient=a,cmd=str(uuid.uuid4()))
 
+    def test_couple_profile_revision_history_identity_and_privacy(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        sql(f"INSERT INTO m10.couple_profiles(space_id,title,updated_by,version) VALUES ('{space}','Synthetic shared title','{a}',99);",self.database)
+        self.assertEqual(sql('SELECT version FROM m10.couple_profiles;',self.database),'1')
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_profile_revisions;',self.database),'1')
+        sql(f"BEGIN; UPDATE m10.couple_profiles SET title='Rolled back title',updated_by='{b}'; ROLLBACK;",self.database)
+        self.assertEqual(sql('SELECT count(*) FROM m10.couple_profile_revisions;',self.database),'1')
+        sql(f"UPDATE m10.couple_profiles SET title='Synthetic second title',updated_by='{b}',version=99;",self.database)
+        rows=json.loads(sql('SELECT json_agg(r ORDER BY version) FROM (SELECT version,title,actor_id FROM m10.couple_profile_revisions) r;',self.database))
+        self.assertEqual(rows,[{'version':1,'title':'Synthetic shared title','actor_id':a},{'version':2,'title':'Synthetic second title','actor_id':b}])
+        for statement in ["UPDATE m10.couple_profiles SET title=' '","UPDATE m10.couple_profiles SET title=repeat('x',121)",f"UPDATE m10.couple_profiles SET updated_by='{uuid.uuid4()}'",f"UPDATE m10.couple_profiles SET space_id='{uuid.uuid4()}'",'DELETE FROM m10.couple_profiles',"UPDATE m10.couple_profile_revisions SET title='tampered'",'DELETE FROM m10.couple_profile_revisions']:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        role='couple_profile_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.couple_profiles,m10.couple_profile_revisions TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        for table in ['couple_profiles','couple_profile_revisions']:
+            self.assertEqual(sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM m10.{table}; COMMIT;',self.database),'0')
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql('UPDATE m10.couple_profiles SET title=NULL;',self.database)
+        self.assertEqual(sql('SELECT version FROM m10.couple_profiles;',self.database),'3')
+
     def test_profile_field_grant_binding_and_irreversible_revocation(self):
         migrate(database=self.database)
         seed(self.database)
