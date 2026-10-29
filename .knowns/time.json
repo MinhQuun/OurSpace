@@ -1,11 +1,3 @@
 {
-  "active": [
-    {
-      "taskId": "OS-9DSGCE",
-      "taskTitle": "Stage03.4e — Preference settings UI and rendered appearance/accessibility",
-      "startedAt": "2026-10-29T06:40:45.000Z",
-      "pausedAt": null,
-      "totalPausedMs": 0
-    }
-  ]
+  "active": []
 }

@@ -11,8 +11,8 @@
   "task:OS-9DSGCE": {
     "entityType": "task",
     "entityId": "OS-9DSGCE",
-    "canonicalHash": "52cc76588b2bcd6535f93197711a3b6d9fd0b13850e05750fb238ea1526d02d7",
-    "revision": 2,
+    "canonicalHash": "e4429043afcf4de175f88ca4d049cfdfb08106fa2b394ad4b7af8ea2f8702230",
+    "revision": 4,
     "path": "tasks/OS-9DSGCE.md",
     "indexedAt": "0001-01-01T00:00:00Z",
     "stale": true
