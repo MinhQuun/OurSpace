@@ -79,7 +79,11 @@ GRANT EXECUTE ON FUNCTION app_internal.session_actor(text),
     app_internal.purge_trashed_item(text,uuid,uuid),
     app_internal.purge_expired_trashed_items(text),
     app_internal.list_export_jobs(text),
-    app_internal.create_export_job(text,uuid,text) TO ourspace_runtime;''')
+    app_internal.create_export_job(text,uuid,text),
+    app_internal.list_backup_jobs(text),
+    app_internal.create_backup_job(text,uuid,text),
+    app_internal.list_restore_jobs(text),
+    app_internal.create_restore_job(text,uuid,text,uuid) TO ourspace_runtime;''')
     # Support both deployed profile command signatures during the avatar migration.
     # Resolve only this fixed allowlist; never grant all schema functions.
     sql("""DO $$ DECLARE signature text; target regprocedure; BEGIN
@@ -106,7 +110,8 @@ VALUES ('create',10,60),('inspect',30,60),('list',60,60),
 ('profile_partner',60,60),('profile_grants',60,60),('profile_share',20,60),('profile_revoke',20,60),
 ('notifications_list',60,60),('notifications_count',120,60),('notifications_read',60,60),('notifications_hide',60,60),('notifications_read_all',30,60),('notifications_preferences',60,60),('notifications_preferences_update',20,60),
 ('trash_list',60,60),('trash_restore',20,60),('trash_purge',20,60),('trash_purge_expired',30,60),
-('export_jobs_create',20,60),('export_jobs_list',60,60)
+('export_jobs_create',20,60),('export_jobs_list',60,60),
+('backup_jobs_create',20,60),('backup_jobs_list',60,60),('restore_jobs_create',20,60),('restore_jobs_list',60,60)
 ON CONFLICT(action) DO NOTHING;""")
     print('Local runtime login provisioned; explicit auth functions only, no table grants.')
 

@@ -1462,3 +1462,16 @@ Updated: 2026-10-29 (Asia/Saigon)
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4l — Backup &amp; Restore Center (ST-20)
+- Acceptance: backup preserves identity, links, rights and business state; restore checks cross-module consistency and never creates duplicates; restore cannot bypass time locks or revoked access; full-system restore cannot let one account single-handedly overwrite the other's data; backup has retention/deletion policy consistent with data governance; export/restore requests have status, result and execution history (BR-M10-76..82).
+- Migration 0077: m10.backup_jobs and m10.restore_jobs (account_id, scope, status, result_ref, created_at, completed_at; restore references source backup job) with RLS FORCE, no PUBLIC grants; list/create functions for backups and restores SECURITY DEFINER keyed by session actor; idempotent create via command receipts; restore validates source backup belongs to actor and is completed.
+- Migration 0078: backup/restore job budgets added to pairing_request_policies.
+- Runtime: BackupService + auth-runtime wiring + provision_runtime grants and budgets.
+- HTTP: /api/backup/[action] for backups_list/restores_list (GET) and backups_create/restores_create (POST) with session/origin/budget validation.
+- UI: /account/backup with create backup (personal/shared/full_system), create restore (scope + source backup), backup/restore history lists, empty states, policy notes; account navigation link added. With no domain modules deployed yet, jobs complete empty.
+- Lint/typecheck PASS. Build PASS. E2E scaffold PASS. Migrations applied and runtime re-provisioned.
+- Stage03 M10 shared-platform journeys now complete: personalized home, Privacy Inspector, Trash Center, export jobs, backup/restore center. Stage03 remains IN_PROGRESS pending broader domain integration / PO acceptance.
+
+Updated: 2026-10-29 (Asia/Saigon)
+

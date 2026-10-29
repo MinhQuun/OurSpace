@@ -15,6 +15,7 @@ export default function AccountPage() {
       <Link href="/account/notifications">Thông báo</Link>
       <Link href="/account/trash">Thùng rác</Link>
       <Link href="/account/export">Xuất dữ liệu</Link>
+      <Link href="/account/backup">Sao lưu &amp; phục hồi</Link>
       <Link href="/account/spaces">Space và ngừng liên kết</Link>
       <Link href="/account/pairing">Ghép đôi</Link>
       <Link href="/account/reset">Quên mật khẩu?</Link>

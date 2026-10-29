@@ -12,6 +12,7 @@ import { RecoveryService } from "../modules/m10/auth/recovery.server";
 import { NotificationService } from "../modules/m10/notifications/service.server";
 import { TrashService } from "../modules/m10/trash/service.server";
 import { ExportService } from "../modules/m10/export/service.server";
+import { BackupService } from "../modules/m10/backup/service.server";
 
 let instance:
   | {
@@ -28,6 +29,7 @@ let instance:
       notifications: NotificationService;
       trash: TrashService;
       export: ExportService;
+      backup: BackupService;
     }
   | undefined;
 export function authRuntime() {
@@ -64,6 +66,7 @@ export function authRuntime() {
     notifications: new NotificationService(db),
     trash: new TrashService(db),
     export: new ExportService(db),
+    backup: new BackupService(db),
   };
   return instance;
 }
