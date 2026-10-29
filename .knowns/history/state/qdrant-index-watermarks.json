@@ -1,0 +1,29 @@
+{
+  "task:OS-184SV5": {
+    "entityType": "task",
+    "entityId": "OS-184SV5",
+    "canonicalHash": "191ec242a2d60045c8c5be1eccf81dbbaf931d323d4bb004b5a75cd43f63a334",
+    "revision": 1,
+    "path": "tasks/OS-184SV5.md",
+    "indexedAt": "0001-01-01T00:00:00Z",
+    "stale": true
+  },
+  "task:OS-BCNRN2": {
+    "entityType": "task",
+    "entityId": "OS-BCNRN2",
+    "canonicalHash": "f385e2e8401f27503c030aae15697d938d046d499bea024f36d47afbfc6a9a82",
+    "revision": 4,
+    "path": "tasks/OS-BCNRN2.md",
+    "indexedAt": "0001-01-01T00:00:00Z",
+    "stale": true
+  },
+  "task:OS-RCXJTX": {
+    "entityType": "task",
+    "entityId": "OS-RCXJTX",
+    "canonicalHash": "b1f9170a66a2d20ebd1a3144b3f0c84cd2fc907ac9127198e86d25a6302385b9",
+    "revision": 4,
+    "path": "tasks/OS-RCXJTX.md",
+    "indexedAt": "0001-01-01T00:00:00Z",
+    "stale": true
+  }
+}

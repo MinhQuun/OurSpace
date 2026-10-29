@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "entries": {
+    "task:OS-184SV5": {
+      "entityType": "task",
+      "entityId": "OS-184SV5",
+      "path": "tasks/OS-184SV5.md",
+      "hash": "191ec242a2d60045c8c5be1eccf81dbbaf931d323d4bb004b5a75cd43f63a334",
+      "revision": 1,
+      "headHash": "191ec242a2d60045c8c5be1eccf81dbbaf931d323d4bb004b5a75cd43f63a334"
+    },
+    "task:OS-BCNRN2": {
+      "entityType": "task",
+      "entityId": "OS-BCNRN2",
+      "path": "tasks/OS-BCNRN2.md",
+      "hash": "f385e2e8401f27503c030aae15697d938d046d499bea024f36d47afbfc6a9a82",
+      "revision": 4,
+      "headHash": "f385e2e8401f27503c030aae15697d938d046d499bea024f36d47afbfc6a9a82"
+    },
+    "task:OS-RCXJTX": {
+      "entityType": "task",
+      "entityId": "OS-RCXJTX",
+      "path": "tasks/OS-RCXJTX.md",
+      "hash": "b1f9170a66a2d20ebd1a3144b3f0c84cd2fc907ac9127198e86d25a6302385b9",
+      "revision": 4,
+      "headHash": "b1f9170a66a2d20ebd1a3144b3f0c84cd2fc907ac9127198e86d25a6302385b9"
+    }
+  }
+}
