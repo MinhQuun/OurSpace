@@ -50,9 +50,11 @@ type Context = { params: Promise<{ action: string }> };
 async function handle(request: NextRequest, context: Context, write: boolean) {
   try {
     const { action } = await context.params;
-    if (!["list", "create"].includes(action))
+    if (
+      !["list", "create", "account_create", "account_download"].includes(action)
+    )
       return json({ error: "not_found" }, 404);
-    if (write !== (action === "create"))
+    if (write !== (action === "create" || action === "account_create"))
       return json({ error: "method_not_allowed" }, 405);
     const auth = authRuntime();
     const origin = request.headers.get("origin");
@@ -69,7 +71,13 @@ async function handle(request: NextRequest, context: Context, write: boolean) {
     if (!match || !(await auth.sessions.actor(match[1])))
       return json({ error: "unauthenticated" }, 401);
     const budgetAction =
-      action === "list" ? "export_jobs_list" : "export_jobs_create";
+      action === "account_create"
+        ? "export_account_create"
+        : action === "account_download"
+          ? "export_account_download"
+          : action === "list"
+            ? "export_jobs_list"
+            : "export_jobs_create";
     const budget = await auth.pairing.consumeRequest(match[1], budgetAction);
     if (!budget.allowed) {
       const response = json(
@@ -79,11 +87,56 @@ async function handle(request: NextRequest, context: Context, write: boolean) {
       response.headers.set("Retry-After", String(budget.retry_after));
       return response;
     }
+    if (action === "account_download") {
+      const params = request.nextUrl.searchParams;
+      if (
+        params.getAll("artifactId").length !== 1 ||
+        [...params.keys()].some((key) => key !== "artifactId")
+      )
+        return json({ error: "invalid_input" }, 400);
+      const artifact = await auth.export.downloadAccountSection(
+        match[1],
+        params.get("artifactId"),
+      );
+      if (!artifact) return json({ error: "not_found" }, 404);
+      if (!(await auth.sessions.actor(match[1])))
+        return json({ error: "unauthenticated" }, 401);
+      if (artifact.expires_at.getTime() <= Date.now())
+        return json({ error: "not_found" }, 404);
+      return new NextResponse(new Uint8Array(artifact.payload), {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Disposition":
+            'attachment; filename="ourspace-profile-preferences.json"',
+          "Content-Length": String(artifact.payload.length),
+          "Cache-Control": "no-store",
+          Vary: "Cookie",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "no-referrer",
+          "Content-Security-Policy": "sandbox",
+        },
+      });
+    }
+    if (request.nextUrl.search) return json({ error: "invalid_input" }, 400);
     if (action === "list")
       return json({ jobs: await auth.export.list(match[1]) });
     if (request.nextUrl.search) return json({ error: "invalid_input" }, 400);
     const input = await body(request);
     const record = input as Record<string, unknown>;
+    if (action === "account_create") {
+      if (
+        Object.keys(record).length !== 1 ||
+        !Object.hasOwn(record, "commandId")
+      )
+        return json({ error: "invalid_input" }, 400);
+      return json({
+        artifactId: await auth.export.createAccountSection(
+          match[1],
+          record.commandId,
+        ),
+        section: "m10.account_profile_preferences",
+      });
+    }
     const commandId = record.commandId as string;
     const scope = record.scope as string;
     if (action === "create")

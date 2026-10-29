@@ -1398,6 +1398,61 @@ test("profile sharing HTTP isolates fields and preserves revoke budget", async (
   }
 });
 
+test("Account section export HTTP returns protected actual bytes", async ({ request }) => {
+  const owner = new Pool({ host: "127.0.0.1", port: 55432, database: "ourspace",
+    user: "ourspace_owner", password: readFileSync(".local/db-password", "utf8").trim(), max: 1 });
+  const users = [randomUUID(), randomUUID()], sessions = [randomUUID(), randomUUID()];
+  const tokens = users.map(() => randomBytes(32).toString("base64url"));
+  const headers = (i = 0) => ({ Cookie: `ourspace_session=${sessions[i]}:${tokens[i]}`, Origin: "http://127.0.0.1:3102" });
+  const create = "/api/export/account_create", download = "/api/export/account_download";
+  const data = { commandId: randomUUID() };
+  try {
+    for (let i = 0; i < 2; i++) {
+      await owner.query("INSERT INTO m10.accounts(id,state) VALUES ($1,'active')", [users[i]]);
+      await owner.query("INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,$2)", [users[i], "Synthetic export " + i]);
+      await owner.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [sessions[i], users[i], createHash("sha256").update(tokens[i]).digest("hex")]);
+    }
+    expect((await request.post(create, { headers: { Origin: headers().Origin }, data })).status()).toBe(401);
+    expect((await request.post(create, { headers: { Cookie: headers().Cookie }, data })).status()).toBe(403);
+    expect((await request.get(create, { headers: headers() })).status()).toBe(405);
+    for (const invalid of [{ ...data, userId: users[1] }, { commandId: "invalid" }, { ...data, padding: "x".repeat(5000) }])
+      expect((await request.post(create, { headers: headers(), data: invalid })).status()).toBe(400);
+    const created = await request.post(create, { headers: headers(), data });
+    expect(created.status()).toBe(200);
+    const result = await created.json();
+    expect(result.section).toBe("m10.account_profile_preferences");
+    expect(await (await request.post(create, { headers: headers(), data })).json()).toEqual(result);
+    const path = download + "?artifactId=" + result.artifactId;
+    const response = await request.get(path, { headers: headers() });
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    expect(response.headers()["content-disposition"]).toContain('attachment; filename="ourspace-profile-preferences.json"');
+    expect(await response.json()).toMatchObject({ account_id: users[0], profile: { display_name: "Synthetic export 0" } });
+    const stored = await owner.query("SELECT sha256 FROM m10.account_export_artifacts WHERE id=$1", [result.artifactId]);
+    expect(createHash("sha256").update(await response.body()).digest("hex")).toBe(stored.rows[0].sha256);
+    expect((await request.get(path, { headers: headers(1) })).status()).toBe(404);
+    expect((await request.get(path)).status()).toBe(401);
+    expect((await request.get(path, { headers: { ...headers(), "Sec-Fetch-Site": "cross-site" } })).status()).toBe(403);
+    expect((await request.get(path + "&artifactId=" + result.artifactId, { headers: headers() })).status()).toBe(400);
+    expect((await request.get(download + "?artifactId=invalid", { headers: headers() })).status()).toBe(400);
+    const expired = randomUUID();
+    await owner.query("INSERT INTO m10.account_export_artifacts(id,account_id,section,payload,created_at,expires_at) VALUES ($1,$2,'m10.account_profile_preferences',$3,now()-interval '2 hours',now()-interval '1 hour')", [expired, users[0], Buffer.from("expired")]);
+    expect((await request.get(download + "?artifactId=" + expired, { headers: headers() })).status()).toBe(404);
+    await owner.query("UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='export_account_create'", [users[0]]);
+    const limited = await request.post(create, { headers: headers(), data });
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    expect((await request.get(path, { headers: headers() })).status()).toBe(200);
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1", [sessions[0]]);
+    expect((await request.get(path, { headers: headers() })).status()).toBe(401);
+    expect((await request.post(create, { headers: headers(), data })).status()).toBe(401);
+  } finally {
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL", [users]);
+    await owner.end();
+  }
+});
+
 test("Personal preferences HTTP isolates accounts and budgets", async ({
   request,
 }) => {

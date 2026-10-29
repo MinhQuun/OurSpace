@@ -28,6 +28,43 @@ function digest(session: string) {
 export class ExportService {
   constructor(private readonly db: ReturnType<typeof createDatabase>) {}
 
+  async createAccountSection(
+    session: string,
+    commandId: unknown,
+  ): Promise<string> {
+    const hash = digest(session);
+    if (!uuid(commandId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.create_account_export_artifact($1,$2) AS id",
+      [hash, commandId],
+    );
+    if (!result.rows[0]) throw new AuthProviderError("unavailable");
+    return result.rows[0].id;
+  }
+
+  async downloadAccountSection(session: string, artifactId: unknown) {
+    const hash = digest(session);
+    if (!uuid(artifactId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{
+      payload: Buffer;
+      sha256: string;
+      expires_at: Date;
+    }>(
+      "SELECT payload,sha256,expires_at FROM app_internal.read_account_export_artifact($1,$2)",
+      [hash, artifactId],
+    );
+    const artifact = result.rows[0];
+    if (!artifact) return null;
+    if (
+      !Buffer.isBuffer(artifact.payload) ||
+      artifact.payload.length > 1048576 ||
+      createHash("sha256").update(artifact.payload).digest("hex") !==
+        artifact.sha256
+    )
+      throw new AuthProviderError("unavailable");
+    return artifact;
+  }
+
   async list(session: string): Promise<ExportJob[]> {
     const hash = digest(session);
     const result = await this.db.query<ExportJob>(
