@@ -20,6 +20,36 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_expired_export_cleanup_boundaries(self):
+        migrate(database=self.database)
+        seed(self.database)
+        actor='10000000-0000-4000-8000-000000000001'
+        before=sql('SELECT json_agg(p) FROM m10.profiles p;',self.database)
+        sql(f"INSERT INTO m10.account_export_artifacts(account_id,section,payload,created_at,expires_at) SELECT '{actor}','m10.account_profile_preferences',convert_to('expired','UTF8'),now()-interval '2 hours',now()-interval '1 hour' FROM generate_series(1,7); INSERT INTO m10.account_export_artifacts(account_id,section,payload) VALUES ('{actor}','m10.account_profile_preferences',convert_to('live','UTF8'));",self.database)
+        sql(f"INSERT INTO app_internal.command_receipts(actor_id,command_id,module,action,request_hash,result_ref) SELECT '{actor}',gen_random_uuid(),'M10','account.export.create',repeat('a',64),id FROM m10.account_export_artifacts WHERE expires_at<now();",self.database)
+        history=sql('SELECT json_agg(r ORDER BY result_ref) FROM app_internal.command_receipts r;',self.database)
+        role='cleanup_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f'SET ROLE {role}; SELECT app_internal.purge_expired_account_export_artifacts(100);',self.database)
+        for invalid in ['NULL','0','1001','-1']:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(f'SELECT app_internal.purge_expired_account_export_artifacts({invalid});',self.database)
+        self.assertEqual(sql('BEGIN; SELECT app_internal.purge_expired_account_export_artifacts(2); ROLLBACK;',self.database),'2')
+        self.assertEqual(sql('SELECT count(*) FROM m10.account_export_artifacts;',self.database),'8')
+        sql(f'GRANT EXECUTE ON FUNCTION app_internal.purge_expired_account_export_artifacts(integer) TO {role};',self.database)
+        def purge():
+            return int(sql(f'SET ROLE {role}; SELECT app_internal.purge_expired_account_export_artifacts(2);',self.database))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            counts=list(pool.map(lambda _: purge(),range(4)))
+        self.assertEqual(sum(counts),7)
+        self.assertTrue(all(0<=count<=2 for count in counts))
+        self.assertEqual(purge(),0)
+        self.assertEqual(sql('SELECT json_agg(r ORDER BY result_ref) FROM app_internal.command_receipts r;',self.database),history)
+        self.assertEqual(sql("SELECT convert_from(payload,'UTF8') FROM m10.account_export_artifacts;",self.database),'live')
+        self.assertEqual(sql('SELECT json_agg(p) FROM m10.profiles p;',self.database),before)
+
     def test_account_export_artifact_retry_bytes_and_access(self):
         migrate(database=self.database)
         seed(self.database)
