@@ -1426,3 +1426,13 @@ Updated: 2026-10-29 (Asia/Saigon)
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4i — Privacy Inspector (ST-12)
+- Acceptance: permission inspector shows viewer's own role/base read decision AND who else has effective access on the resource (recipient + role), so the account can see real access on shared content; no source content leaked via inspector. Owner can manage grants via existing SharingPanel.
+- UI: /app/account/permissions/permission-panel.tsx now also calls /api/permissions/grants and renders an 'Ai đang có quyền' list; role labels localized.
+- Backend: no change — reuses /api/permissions/inspect and /api/permissions/grants + PermissionService already implemented.
+- Lint/typecheck PASS. Build PASS. E2E scaffold PASS.
+- Remaining Stage03 M10: Trash Center, export jobs, backup/recovery center. Stage03 remains IN_PROGRESS.
+
+Updated: 2026-10-29 (Asia/Saigon)
+
