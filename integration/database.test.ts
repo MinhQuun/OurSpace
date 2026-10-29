@@ -214,6 +214,19 @@ test("profile service preserves own identity, date-only values and private optio
         ],
       );
     }
+    const preferences = { commandId: randomUUID(), version: 0, theme: "dark" as const, language: "vi-VN" as const, timezone: "UTC", dateFormat: "yyyy-MM-dd" as const, hourCycle: "h12" as const, reducedMotion: "reduce" as const, fontScale: 1.25 };
+    expect(await service.preferences(tokens[0])).toMatchObject({ theme: "system", version: "0" });
+    for (const patch of [{ userId: users[1] }, { version: -1 }, { theme: "invalid" }, { language: "en-US" }, { timezone: "EST" }, { dateFormat: "invalid" }, { hourCycle: "h25" }, { reducedMotion: "force" }, { fontScale: 1.555 }, { fontScale: NaN }]) {
+      await expect(service.updatePreferences(tokens[0], { ...preferences, ...patch } as typeof preferences)).rejects.toMatchObject({ kind: "invalid_input" });
+    }
+    expect(await service.updatePreferences(tokens[0], preferences)).toEqual({ userId: users[0] });
+    expect(await service.updatePreferences(tokens[0], preferences)).toEqual({ userId: users[0] });
+    expect(await service.preferences(tokens[0])).toMatchObject({ theme: "dark", font_scale: "1.25", version: "1" });
+    expect(await service.preferences(tokens[1])).toMatchObject({ theme: "system", version: "0" });
+    await expect(service.updatePreferences(tokens[0], { ...preferences, commandId: randomUUID() })).rejects.toMatchObject({ reason: "conflict" });
+    await expect(service.updatePreferences(tokens[0], { ...preferences, theme: "light" })).rejects.toMatchObject({ reason: "invalid_input" });
+    await expect(service.updatePreferences(tokens[0], { ...preferences, commandId: randomUUID(), version: 1, timezone: "Unknown/Zone" })).rejects.toMatchObject({ reason: "invalid_input" });
+    await expect(db.query("SELECT * FROM m10.personal_preferences")).rejects.toMatchObject({ reason: "denied" });
     expect(await service.read(tokens[0])).toMatchObject({
       user_id: users[0],
       birthday: null,
@@ -379,6 +392,8 @@ test("profile service preserves own identity, date-only values and private optio
       [users[0]],
     );
     expect(await service.read(tokens[0])).toBeNull();
+    expect(await service.preferences(tokens[0])).toBeNull();
+    await expect(service.updatePreferences(tokens[0], preferences)).rejects.toMatchObject({ reason: "denied" });
     expect(await service.couple(tokens[0], space)).toBeNull();
     expect(await service.coupleHistory(tokens[0], space)).toEqual([]);
     await expect(service.updateCouple(tokens[0], coupleUpdate)).rejects.toMatchObject({ reason: "denied" });

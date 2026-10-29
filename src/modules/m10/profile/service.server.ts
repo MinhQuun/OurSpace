@@ -3,6 +3,16 @@ import { createHash } from "node:crypto";
 import type { createDatabase } from "../../../server/database.server";
 import { AuthProviderError } from "../auth/provider.server";
 
+export type PersonalPreferences = {
+  theme: "light" | "dark" | "system"; language: "vi-VN"; timezone: string;
+  date_format: "dd/MM/yyyy" | "MM/dd/yyyy" | "yyyy-MM-dd"; hour_cycle: "h12" | "h23";
+  reduced_motion: "system" | "reduce"; font_scale: string; version: string;
+};
+export type PreferenceUpdate = {
+  commandId: string; version: number; theme: PersonalPreferences["theme"];
+  language: "vi-VN"; timezone: string; dateFormat: PersonalPreferences["date_format"];
+  hourCycle: PersonalPreferences["hour_cycle"]; reducedMotion: PersonalPreferences["reduced_motion"]; fontScale: number;
+};
 export type OwnProfile = {
   user_id: string;
   display_name: string;
@@ -77,6 +87,28 @@ const length = (text: string) => Array.from(text).length;
 
 export class ProfileService {
   constructor(private readonly db: ReturnType<typeof createDatabase>) {}
+  async preferences(session: string): Promise<PersonalPreferences | null> {
+    const result = await this.db.query<PersonalPreferences>(
+      "SELECT theme,language,timezone,date_format,hour_cycle,reduced_motion,font_scale,version FROM app_internal.read_personal_preferences($1)", [digest(session)]);
+    return result.rows[0] ?? null;
+  }
+  async updatePreferences(session: string, input: PreferenceUpdate) {
+    const hash = digest(session);
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(key => !["commandId","version","theme","language","timezone","dateFormat","hourCycle","reducedMotion","fontScale"].includes(key)) ||
+      !uuid(input.commandId) || !Number.isSafeInteger(input.version) || input.version < 0 ||
+      !["light","dark","system"].includes(input.theme) || input.language !== "vi-VN" ||
+      typeof input.timezone !== "string" || input.timezone.length > 100 ||
+      !(input.timezone === "UTC" || /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+-]+)+$/.test(input.timezone)) ||
+      !["dd/MM/yyyy","MM/dd/yyyy","yyyy-MM-dd"].includes(input.dateFormat) ||
+      !["h12","h23"].includes(input.hourCycle) || !["system","reduce"].includes(input.reducedMotion) ||
+      typeof input.fontScale !== "number" || !Number.isFinite(input.fontScale) || input.fontScale < 1 || input.fontScale > 2 ||
+      Number(input.fontScale.toFixed(2)) !== input.fontScale) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.update_personal_preferences($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) AS id",
+      [hash,input.commandId,input.version,input.theme,input.language,input.timezone,input.dateFormat,input.hourCycle,input.reducedMotion,input.fontScale]);
+    return { userId: result.rows[0].id };
+  }
   async couple(session: string, spaceId: string): Promise<CoupleProfile | null> {
     const hash = digest(session);
     if (!uuid(spaceId)) throw new AuthProviderError("invalid_input");
