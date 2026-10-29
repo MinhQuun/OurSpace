@@ -1277,3 +1277,86 @@ test("profile sharing HTTP isolates fields and preserves revoke budget", async (
     await owner.end();
   }
 });
+
+test("Couple Profile HTTP enforces versions and independent budgets", async ({
+  request,
+}) => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const users = [randomUUID(), randomUUID()],
+    sessions = [randomUUID(), randomUUID()],
+    tokens = [
+      randomBytes(32).toString("base64url"),
+      randomBytes(32).toString("base64url"),
+    ];
+  const headers = (i = 0) => ({
+    Cookie: `ourspace_session=${sessions[i]}:${tokens[i]}`,
+    Origin: "http://127.0.0.1:3102",
+  });
+  try {
+    expect((await request.get("/api/profile")).status()).toBe(401);
+    for (let i = 0; i < 2; i++) {
+      await owner.query(
+        "INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.profiles(user_id,display_name) VALUES ($1,'Synthetic initial profile')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [
+          sessions[i],
+          users[i],
+          createHash("sha256").update(tokens[i]).digest("hex"),
+        ],
+      );
+    }
+    const invitation = randomUUID(), space = randomUUID();
+    await owner.query("BEGIN");
+    try {
+      await owner.query("INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ($1,$2,$3)", [invitation, users[0], createHash("sha256").update(randomUUID()).digest("hex")]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by=$2,accepted_at=clock_timestamp() WHERE id=$1", [invitation, users[1]]);
+      await owner.query("UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id=$1", [invitation]);
+      await owner.query("INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ($1,$2)", [space, invitation]);
+      await owner.query("INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ($1,$2,1),($1,$3,2)", [space, users[0], users[1]]);
+      await owner.query("COMMIT");
+    } catch (error) { await owner.query("ROLLBACK"); throw error; }
+    const path = `/api/profile/couple?spaceId=${space}`;
+    const history = `/api/profile/couple_history?spaceId=${space}`;
+    const input = { commandId: randomUUID(), spaceId: space, version: 0, title: "Synthetic couple" };
+    const post = (data: unknown, i = 0) => request.post("/api/profile/couple_update", { headers: headers(i), data });
+    expect((await request.get(path)).status()).toBe(401);
+    expect((await request.get(path, { headers: { ...headers(), "Sec-Fetch-Site": "cross-site" } })).status()).toBe(403);
+    expect((await request.post("/api/profile/couple_update", { headers: { Cookie: headers().Cookie }, data: input })).status()).toBe(403);
+    for (const url of [path + "&spaceId=" + space, path + "&before=1", history + "&before=0", history + "&before=1&before=2", history + "&before=9007199254740992"]) {
+      expect((await request.get(url, { headers: headers() })).status()).toBe(400);
+    }
+    for (const data of [{ ...input, userId: users[1] }, { ...input, version: -1 }, { ...input, title: " " }, { ...input, padding: "x".repeat(5000) }]) expect((await post(data)).status()).toBe(400);
+    expect((await post(input)).status()).toBe(200);
+    expect((await post(input)).status()).toBe(200);
+    expect((await post({ ...input, commandId: randomUUID() }, 1)).status()).toBe(409);
+    const read = await request.get(path, { headers: headers(1) });
+    expect(read.headers()["cache-control"]).toBe("no-store");
+    expect(await read.json()).toMatchObject({ profile: { title: input.title, version: "1", updated_by: users[0] } });
+    expect((await post({ ...input, commandId: randomUUID(), version: 1, title: null }, 1)).status()).toBe(200);
+    expect(await (await request.get(history + "&before=2", { headers: headers(1) })).json()).toMatchObject({ revisions: [{ version: "1", title: input.title }] });
+    await owner.query("UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='profile_couple_update'", [users[0]]);
+    const limited = await post(input);
+    expect(limited.status()).toBe(429);
+    expect(Number(limited.headers()["retry-after"])).toBeGreaterThan(0);
+    expect((await request.get(history, { headers: headers() })).status()).toBe(200);
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1", [sessions[1]]);
+    expect((await request.get(path, { headers: headers(1) })).status()).toBe(401);
+  } finally {
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL", [users]);
+    await owner.end();
+  }
+});
