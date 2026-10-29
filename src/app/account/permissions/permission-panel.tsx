@@ -27,10 +27,12 @@ export default function PermissionPanel({
   const [grantees, setGrantees] = useState<Grantee[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(true);
-  const [retry, setRetry] = useState(0);
   const [login, setLogin] = useState(false);
+
   const load = useCallback(() => {
-    const controller = new AbortController();
+    let active = true;
+    const inspectController = new AbortController();
+    const grantsController = new AbortController();
     async function run() {
       setBusy(true);
       setResult(null);
@@ -40,12 +42,17 @@ export default function PermissionPanel({
       try {
         const inspectResponse = await fetch(
           `/api/permissions/inspect?resourceId=${encodeURIComponent(resourceId)}`,
-          { cache: "no-store", signal: controller.signal },
+          { cache: "no-store", signal: inspectController.signal },
         );
         const inspectValue = await inspectResponse.json();
-        if (controller.signal.aborted) return;
-        if (inspectResponse.ok) setResult(inspectValue.inspection);
-        else if (inspectResponse.status === 401) {
+        if (!active) return;
+        if (inspectResponse.ok) {
+          if (!inspectValue?.inspection) {
+            setMessage("Không thể xem quyền của nội dung này.");
+          } else {
+            setResult(inspectValue.inspection);
+          }
+        } else if (inspectResponse.status === 401) {
           setLogin(true);
           setMessage("Vui lòng đăng nhập để kiểm tra quyền của bạn.");
         } else if (inspectResponse.status === 404 || inspectResponse.status === 400)
@@ -54,30 +61,32 @@ export default function PermissionPanel({
           setMessage("Bạn đã kiểm tra nhiều lần. Vui lòng thử lại sau.");
         else setMessage("Chưa thể kiểm tra quyền. Vui lòng thử lại.");
       } catch {
-        if (!controller.signal.aborted)
+        if (active)
           setMessage("Không thể kết nối. Vui lòng thử lại.");
       }
       try {
         const grantsResponse = await fetch(
           `/api/permissions/grants?resourceId=${encodeURIComponent(resourceId)}`,
-          { cache: "no-store", signal: controller.signal },
+          { cache: "no-store", signal: grantsController.signal },
         );
         const grantsValue = await grantsResponse.json();
-        if (controller.signal.aborted) return;
+        if (!active) return;
         if (grantsResponse.ok && grantsValue?.grants)
           setGrantees(grantsValue.grants);
       } catch {
         // Danh sách người được chia sẻ là thông tin bổ trợ; không chặn hiển thị vai trò.
       } finally {
-        if (!controller.signal.aborted) setBusy(false);
+        if (active) setBusy(false);
       }
     }
     void run();
-    return () => controller.abort();
+    return () => {
+      active = false;
+      inspectController.abort();
+      grantsController.abort();
+    };
   }, [resourceId]);
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => load(), [load]);
   return (
     <section
       className="account-card"
@@ -122,17 +131,13 @@ export default function PermissionPanel({
       )}
       {result?.role === "owner" && (
         <SharingPanel
-          key={`${resourceId}:${retry}`}
+          key={resourceId}
           resourceId={resourceId}
-          onChanged={() => setRetry((value) => value + 1)}
+          onChanged={() => load()}
         />
       )}
       {login && <Link href="/account">Đăng nhập</Link>}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => setRetry((value) => value + 1)}
-      >
+      <button type="button" disabled={busy} onClick={() => load()}>
         Kiểm tra lại
       </button>
     </section>
