@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { authRuntime } from "../../../../server/auth-runtime.server";
 import { AuthProviderError } from "../../../../modules/m10/auth/provider.server";
 import { DatabaseUnavailableError } from "../../../../server/database.server";
-import type { ShareProfileField, RevokeProfileField, CoupleProfileUpdate } from "../../../../modules/m10/profile/service.server";
+import type {
+  ShareProfileField,
+  RevokeProfileField,
+  CoupleProfileUpdate,
+  PreferenceUpdate,
+} from "../../../../modules/m10/profile/service.server";
 export const runtime = "nodejs";
 const json = (value: unknown, status = 200) =>
   NextResponse.json(value, {
@@ -52,8 +57,27 @@ type Context = { params: Promise<{ action: string }> };
 async function handle(request: NextRequest, context: Context, write: boolean) {
   try {
     const { action } = await context.params;
-    if (!["partner", "grants", "share", "revoke", "couple", "couple_history", "couple_update"].includes(action)) return json({ error: "not_found" }, 404);
-    if (write !== ["share", "revoke", "couple_update"].includes(action)) return json({ error: "method_not_allowed" }, 405);
+    if (
+      ![
+        "partner",
+        "grants",
+        "share",
+        "revoke",
+        "couple",
+        "couple_history",
+        "couple_update",
+        "preferences",
+        "preferences_update",
+      ].includes(action)
+    )
+      return json({ error: "not_found" }, 404);
+    if (
+      write !==
+      ["share", "revoke", "couple_update", "preferences_update"].includes(
+        action,
+      )
+    )
+      return json({ error: "method_not_allowed" }, 405);
     const auth = authRuntime();
     const origin = request.headers.get("origin");
     if (
@@ -83,26 +107,56 @@ async function handle(request: NextRequest, context: Context, write: boolean) {
     if (action === "couple" || action === "couple_history") {
       const params = request.nextUrl.searchParams;
       const allowed = action === "couple" ? ["spaceId"] : ["spaceId", "before"];
-      if (params.getAll("spaceId").length !== 1 || params.getAll("before").length > 1 ||
-        [...params.keys()].some(key => !allowed.includes(key))) return json({ error: "invalid_input" }, 400);
+      if (
+        params.getAll("spaceId").length !== 1 ||
+        params.getAll("before").length > 1 ||
+        [...params.keys()].some((key) => !allowed.includes(key))
+      )
+        return json({ error: "invalid_input" }, 400);
       const spaceId = params.get("spaceId")!;
       const cursor = params.get("before");
-      if (cursor !== null && !/^[1-9][0-9]*$/.test(cursor)) return json({ error: "invalid_input" }, 400);
-      if (action === "couple") return json({ profile: await auth.profile.couple(match[1], spaceId) });
-      return json({ revisions: await auth.profile.coupleHistory(match[1], spaceId, cursor === null ? null : Number(cursor)) });
+      if (cursor !== null && !/^[1-9][0-9]*$/.test(cursor))
+        return json({ error: "invalid_input" }, 400);
+      if (action === "couple")
+        return json({ profile: await auth.profile.couple(match[1], spaceId) });
+      return json({
+        revisions: await auth.profile.coupleHistory(
+          match[1],
+          spaceId,
+          cursor === null ? null : Number(cursor),
+        ),
+      });
     }
     if (action === "partner") {
       const entries = [...request.nextUrl.searchParams.entries()];
-      if (entries.length !== 1 || entries[0][0] !== "spaceId") return json({ error: "invalid_input" }, 400);
-      return json({ profile: await auth.profile.partner(match[1], entries[0][1]) });
+      if (entries.length !== 1 || entries[0][0] !== "spaceId")
+        return json({ error: "invalid_input" }, 400);
+      return json({
+        profile: await auth.profile.partner(match[1], entries[0][1]),
+      });
     }
     if (request.nextUrl.search) return json({ error: "invalid_input" }, 400);
-    if (action === "grants") return json({ grants: await auth.profile.grants(match[1]) });
+    if (action === "grants")
+      return json({ grants: await auth.profile.grants(match[1]) });
+    if (action === "preferences")
+      return json({ preferences: await auth.profile.preferences(match[1]) });
     const input = await body(request);
-    if (action === "couple_update") return json(await auth.profile.updateCouple(match[1], input as CoupleProfileUpdate));
-    return json(action === "share"
-      ? await auth.profile.shareField(match[1], input as ShareProfileField)
-      : await auth.profile.revokeField(match[1], input as RevokeProfileField));
+    if (action === "preferences_update")
+      return json(
+        await auth.profile.updatePreferences(
+          match[1],
+          input as PreferenceUpdate,
+        ),
+      );
+    if (action === "couple_update")
+      return json(
+        await auth.profile.updateCouple(match[1], input as CoupleProfileUpdate),
+      );
+    return json(
+      action === "share"
+        ? await auth.profile.shareField(match[1], input as ShareProfileField)
+        : await auth.profile.revokeField(match[1], input as RevokeProfileField),
+    );
   } catch (error) {
     const reason =
       error instanceof AuthProviderError
@@ -122,5 +176,7 @@ async function handle(request: NextRequest, context: Context, write: boolean) {
     );
   }
 }
-export const GET = (request: NextRequest, context: Context) => handle(request, context, false);
-export const POST = (request: NextRequest, context: Context) => handle(request, context, true);
+export const GET = (request: NextRequest, context: Context) =>
+  handle(request, context, false);
+export const POST = (request: NextRequest, context: Context) =>
+  handle(request, context, true);

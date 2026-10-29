@@ -88,6 +88,7 @@ VALUES ('create',10,60),('inspect',30,60),('list',60,60),
 ('spaces_list',60,60),('disconnect',10,60),('permission_inspect',60,60),
 ('permission_list',60,60),('permission_grant',20,60),('permission_revoke',20,60),('binary_download',30,60),
 ('profile_read',60,60),('profile_update',20,60),
+('profile_preferences',60,60),('profile_preferences_update',20,60),
 ('profile_couple',60,60),('profile_couple_history',60,60),('profile_couple_update',20,60),
 ('profile_partner',60,60),('profile_grants',60,60),('profile_share',20,60),('profile_revoke',20,60)
 ON CONFLICT(action) DO NOTHING;""")
