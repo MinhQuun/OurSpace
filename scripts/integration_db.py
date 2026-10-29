@@ -20,6 +20,40 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_personal_preferences_constraints_identity_and_isolation(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        before=sql('SELECT json_agg(p ORDER BY user_id) FROM m10.profiles p;',self.database)
+        sql(f"INSERT INTO m10.personal_preferences(user_id,version) VALUES ('{a}',99),('{b}',99);",self.database)
+        def read(actor):
+            return json.loads(sql(f"SELECT row_to_json(p) FROM m10.personal_preferences p WHERE user_id='{actor}';",self.database))
+        initial=read(a)
+        self.assertEqual(initial['version'],1)
+        self.assertEqual(initial['theme'],'system')
+        self.assertEqual(initial['language'],'vi-VN')
+        self.assertEqual(initial['timezone'],'Asia/Ho_Chi_Minh')
+        other=read(b)
+        sql(f"UPDATE m10.personal_preferences SET theme='dark',timezone='America/New_York',date_format='yyyy-MM-dd',hour_cycle='h12',reduced_motion='reduce',font_scale=1.5,version=100 WHERE user_id='{a}';",self.database)
+        self.assertEqual(read(a)['version'],2)
+        self.assertEqual(read(a)['font_scale'],1.5)
+        self.assertEqual(read(b),other)
+        for field,value in [('theme',"'invalid'"),('language',"'unknown'"),('timezone',"'EST'"),('timezone',"'Not/AZone'"),('timezone',"'posix/UTC'"),('date_format',"'invalid'"),('hour_cycle',"'h25'"),('reduced_motion',"'force-animation'"),('font_scale','0.9'),('font_scale','2.1'),('user_id',f"'{uuid.uuid4()}'")]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                sql(f"UPDATE m10.personal_preferences SET {field}={value} WHERE user_id='{a}';",self.database)
+        sql(f"BEGIN; UPDATE m10.personal_preferences SET theme='light' WHERE user_id='{a}'; ROLLBACK;",self.database)
+        self.assertEqual(read(a)['theme'],'dark')
+        self.assertEqual(read(a)['version'],2)
+        sql(f"UPDATE m10.personal_preferences SET timezone='UTC',font_scale=2 WHERE user_id='{a}';",self.database)
+        self.assertEqual(read(a)['version'],3)
+        self.assertEqual(sql('SELECT json_agg(p ORDER BY user_id) FROM m10.profiles p;',self.database),before)
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        role='preferences_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA m10 TO {role}; GRANT SELECT ON m10.personal_preferences TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        self.assertEqual(sql(f'BEGIN; SET LOCAL ROLE {role}; SELECT count(*) FROM m10.personal_preferences; COMMIT;',self.database),'0')
+
     def test_partner_profile_projects_exact_fields_and_live_source_rights(self):
         migrate(database=self.database)
         seed(self.database)
