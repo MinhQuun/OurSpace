@@ -1754,6 +1754,49 @@ ROLLBACK;''', self.database)
         self.assertEqual(len(visible_a),1)
         self.assertEqual(visible_a[0]['id'],media_id)
 
+    def test_m02_album_create_list_link_with_acl(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        space,invitation,media,grant=[str(uuid.uuid4()) for _ in range(4)]
+        sql(f"""BEGIN;
+        INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+        UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+        UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+        INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+        INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+        INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{media}','M02','media','{a}');
+        INSERT INTO m02.media(id,title,mime_type,uploaded_by) VALUES ('{media}','Synthetic photo','image/png','{a}');
+        COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='album_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.register_album(text,uuid,text,text),app_internal.list_albums(text),app_internal.add_media_to_album(text,uuid,uuid,uuid),app_internal.remove_media_from_album(text,uuid,uuid,uuid) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def register_album(token='a',cmd=str(uuid.uuid4()),title='Synthetic album',desc='An album'):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.register_album(repeat('{token}',64),'{cmd}','{title}','{desc}'); COMMIT;",self.database)
+        def list_albums(token='b'):
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(row_to_json(a)),'[]'::json) FROM app_internal.list_albums(repeat('{token}',64)) a; COMMIT;",self.database))
+        album_id=register_album()
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.album WHERE id='{album_id}' AND title='Synthetic album';",self.database),'1')
+        self.assertEqual(len(list_albums()),0)
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{album_id}','{a}','{b}','{space}','viewer');",self.database)
+        visible=list_albums()
+        self.assertEqual(len(visible),1)
+        self.assertEqual(visible[0]['id'],album_id)
+        cmd_add=str(uuid.uuid4())
+        self.assertEqual(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.add_media_to_album(repeat('a',64),'{cmd_add}','{album_id}','{media}'); COMMIT;",self.database),'t')
+        cmd_add_b=str(uuid.uuid4())
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.add_media_to_album(repeat('b',64),'{cmd_add_b}','{album_id}','{media}'); COMMIT;",self.database)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}';",self.database)
+        self.assertEqual(len(list_albums()),0)
+        visible_a=list_albums(token='a')
+        self.assertEqual(len(visible_a),1)
+        self.assertEqual(visible_a[0]['id'],album_id)
+
     def setUp(self):
         self.database = 'ourspace_test_' + uuid.uuid4().hex
         sql(f'CREATE DATABASE {self.database};')
