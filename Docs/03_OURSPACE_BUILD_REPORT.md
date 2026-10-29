@@ -1407,3 +1407,12 @@ Acceptance: service uses parameterized own-profile commands with no target user,
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4h — Personalized home (P0-M10-05)
+- Acceptance: home adapts to authentication state; signed-in users see a personalized greeting with their account id and quick links (account, notifications, spaces, couple); signed-out keeps static marketing. Only data the account is permitted to view is shown; no partner data inferred. BR-M10-57.
+- UI: /app/page.tsx converted to client component fetching /api/auth/session; renders signed-in variant when authenticated.
+- Lint/typecheck PASS. Build PASS. E2E scaffold (desktop+mobile) PASS.
+- Remaining Stage03 M10: Privacy Inspector, Trash Center, export jobs, backup/recovery center. Stage03 remains IN_PROGRESS.
+
+Updated: 2026-10-29 (Asia/Saigon)
+
