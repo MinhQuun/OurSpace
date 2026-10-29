@@ -1527,4 +1527,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Lint/typecheck PASS; full integration_db suite 40/40 PASS (256.123s); scripts regression 11/11 PASS. Migration checksums verified on fresh test databases.
 - Commit b38ca5a pushed to origin/master; remote SHA verified equal. Knowns task created for next M02 media service/API. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
 
+## Task 04.2 - M02 Media Library register/list API routes
+- Migration0086 adds app_internal.register_media (command-idempotent, inserts resource/media/binary_objects atomically) and app_internal.list_media (source ACL via can_read_resource). MediaService class wraps both with input validation.
+- POST /api/media/register and GET /api/media/list routes with origin/CSRF checks, session auth, pairing request budget ("media_register"/"media_list"), and error mapping to HTTP status codes.
+- MediaService added to authRuntime. Typecheck/lint PASS.
+- Commit c7dd287 pushed to origin/master; remote SHA verified equal. Next: M02 album schema/service. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
+
 Updated: 2026-10-29 (Asia/Saigon)
