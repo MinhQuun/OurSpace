@@ -20,6 +20,36 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_unimplemented_jobs_cannot_report_completion(self):
+        # Apply the historical migrations first to reproduce the false-success rows.
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            for source in sorted((ROOT / 'db' / 'migrations').glob('*.sql')):
+                if source.name < '0079':
+                    (target / source.name).write_bytes(source.read_bytes())
+            migrate(directory=target, database=self.database)
+        seed(self.database)
+        actor = '10000000-0000-4000-8000-000000000001'
+        sql("UPDATE m10.accounts SET state='active';", self.database)
+        sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('a',64),now()+interval '1 hour');", self.database)
+        export = sql(f"SELECT app_internal.create_export_job(repeat('a',64),'{uuid.uuid4()}','personal');", self.database)
+        backup = sql(f"SELECT app_internal.create_backup_job(repeat('a',64),'{uuid.uuid4()}','personal');", self.database)
+        restore = sql(f"SELECT app_internal.create_restore_job(repeat('a',64),'{uuid.uuid4()}','full_system','{backup}');", self.database)
+        migrate(database=self.database)
+        for table, identifier in [('export_jobs',export),('backup_jobs',backup),('restore_jobs',restore)]:
+            self.assertEqual(sql(f"SELECT status||':'||(result_ref IS NULL)::text||':'||(completed_at IS NULL)::text FROM m10.{table} WHERE id='{identifier}';", self.database), 'failed:true:true')
+        before = sql("SELECT count(*) FROM app_internal.command_receipts;", self.database)
+        role = 'jobs_probe_' + uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.create_export_job(text,uuid,text),app_internal.create_backup_job(text,uuid,text),app_internal.create_restore_job(text,uuid,text,uuid) TO {role};", self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        for function in ['create_export_job','create_backup_job','create_restore_job']:
+            extra = f",'{backup}'" if function == 'create_restore_job' else ''
+            with self.assertRaises(subprocess.CalledProcessError) as failure:
+                sql(f"SET ROLE {role}; SELECT app_internal.{function}(repeat('a',64),'{uuid.uuid4()}','personal'{extra});", self.database)
+            self.assertIn('not implemented', failure.exception.stderr)
+        self.assertEqual(sql("SELECT count(*) FROM app_internal.command_receipts;", self.database), before)
+
+
     def test_personal_preference_commands_session_isolation_and_retry(self):
         migrate(database=self.database)
         seed(self.database)

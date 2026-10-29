@@ -1475,3 +1475,9 @@ Updated: 2026-10-29 (Asia/Saigon)
 
 Updated: 2026-10-29 (Asia/Saigon)
 
+
+## Task 03.4m - Correct false export/backup/restore completion (Knowns OS-2KMYPH)
+- Handoff audit at 1b47486 found migrations0075/0077 create completed jobs with only a UUID result_ref, without artifact creation or restore execution. Earlier03.4k/03.4l statements about empty packages and completed shared-platform journeys are NOT acceptance evidence and are superseded here. Export/backup/restore P0 remain INCOMPLETE; Stage03 remains IN_PROGRESS.
+- Forward migration0079 marks exact synthetic completed rows (result_ref=id) failed, clears their invalid result/timestamp and preserves job/receipt/audit history. Create functions now explicitly reject unsupported execution (SQLSTATE0A000, runtime unavailable); no fabricated success or indefinite queue claim. This is defect containment, not delivery of the required artifact/restore workflows.
+- Real PostgreSQL regression PASS1/1 in6.429s: reproduce all three historical false successes, apply forward migration, verify preserved failed rows, execute-only calls rejected and no new receipts. Lint/typecheck and local migration/checksums PASS; changed-file secret scan clean.
+- Next required work: real account-data export artifact generation/download with ACL revalidation; genuine backup manifests/storage and validated restore with consent and cross-module integrity. Also audit recent Trash/notification/home additions against BRD; scaffold tests alone do not establish P0 acceptance. Preserve user Knowns memory/state; no history rewrite or production deployment.
