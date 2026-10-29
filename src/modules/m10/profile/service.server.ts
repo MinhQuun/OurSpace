@@ -12,6 +12,16 @@ export type OwnProfile = {
   avatar_ref: string | null;
   version: string;
 };
+export type CoupleProfile = {
+  space_id: string; title: string | null; version: string;
+  updated_by: string | null; updated_at: Date | null;
+};
+export type CoupleProfileRevision = {
+  version: string; title: string | null; actor_id: string; recorded_at: Date;
+};
+export type CoupleProfileUpdate = {
+  commandId: string; spaceId: string; version: number; title: string | null;
+};
 export type ProfileUpdate = {
   commandId: string;
   version: number;
@@ -67,6 +77,36 @@ const length = (text: string) => Array.from(text).length;
 
 export class ProfileService {
   constructor(private readonly db: ReturnType<typeof createDatabase>) {}
+  async couple(session: string, spaceId: string): Promise<CoupleProfile | null> {
+    const hash = digest(session);
+    if (!uuid(spaceId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<CoupleProfile>(
+      "SELECT space_id,title,version,updated_by,updated_at FROM app_internal.read_couple_profile($1,$2)",
+      [hash, spaceId]);
+    return result.rows[0] ?? null;
+  }
+  async coupleHistory(session: string, spaceId: string, before: number | null = null): Promise<CoupleProfileRevision[]> {
+    const hash = digest(session);
+    if (!uuid(spaceId) || (before !== null && (!Number.isSafeInteger(before) || before < 1)))
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<CoupleProfileRevision>(
+      "SELECT version,title,actor_id,recorded_at FROM app_internal.read_couple_profile_history($1,$2,$3)",
+      [hash, spaceId, before]);
+    return result.rows;
+  }
+  async updateCouple(session: string, input: CoupleProfileUpdate) {
+    const hash = digest(session);
+    if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some(key => !["commandId", "spaceId", "version", "title"].includes(key)) ||
+      !uuid(input.commandId) || !uuid(input.spaceId) || !Number.isSafeInteger(input.version) || input.version < 0 ||
+      (input.title !== null && (typeof input.title !== "string" || !input.title.trim() || length(input.title.trim()) > 120)))
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.update_couple_profile($1,$2,$3,$4,$5) AS id",
+      [hash, input.commandId, input.spaceId, input.version, input.title?.trim() ?? null]);
+    if (!result.rows[0]?.id) throw new AuthProviderError("denied");
+    return { spaceId: result.rows[0].id };
+  }
   async read(session: string): Promise<OwnProfile | null> {
     const result = await this.db.query<OwnProfile>(
       "SELECT user_id,display_name,nickname,to_char(birthday,'YYYY-MM-DD') AS birthday,bio,avatar_ref,version FROM app_internal.read_my_profile($1)",

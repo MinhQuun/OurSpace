@@ -326,6 +326,32 @@ test("profile service preserves own identity, date-only values and private optio
       await owner.query("INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ($1,$2,1),($1,$3,2)", [space, users[0], users[1]]);
       await owner.query("COMMIT");
     } catch (error) { await owner.query("ROLLBACK"); throw error; }
+    expect(await service.couple(tokens[0], space)).toEqual({ space_id: space, title: null, version: "0", updated_by: null, updated_at: null });
+    expect(await service.coupleHistory(tokens[1], space)).toEqual([]);
+    const coupleUpdate = { commandId: randomUUID(), spaceId: space, version: 0, title: "  Synthetic couple  " };
+    for (const patch of [{ version: -1 }, { version: 0.5 }, { version: Number.MAX_SAFE_INTEGER + 1 }, { title: " \t " }, { title: "x".repeat(121) }, { userId: users[1] }, { spaceId: "invalid" }]) {
+      await expect(service.updateCouple(tokens[0], { ...coupleUpdate, ...patch })).rejects.toMatchObject({ kind: "invalid_input" });
+    }
+    expect(await service.updateCouple(tokens[0], coupleUpdate)).toEqual({ spaceId: space });
+    expect(await service.updateCouple(tokens[0], coupleUpdate)).toEqual({ spaceId: space });
+    await expect(service.updateCouple(tokens[1], { ...coupleUpdate, commandId: randomUUID() })).rejects.toMatchObject({ reason: "conflict" });
+    await expect(service.updateCouple(tokens[0], { ...coupleUpdate, title: "Changed retry" })).rejects.toMatchObject({ reason: "invalid_input" });
+    expect(await service.couple(tokens[1], space)).toMatchObject({ title: "Synthetic couple", version: "1", updated_by: users[0], updated_at: expect.any(Date) });
+    await service.updateCouple(tokens[1], { ...coupleUpdate, commandId: randomUUID(), version: 1, title: null });
+    expect(await service.couple(tokens[0], space)).toMatchObject({ title: null, version: "2", updated_by: users[1] });
+    expect(await service.coupleHistory(tokens[0], space)).toMatchObject([
+      { version: "2", title: null, actor_id: users[1], recorded_at: expect.any(Date) },
+      { version: "1", title: "Synthetic couple", actor_id: users[0] },
+    ]);
+    expect((await service.coupleHistory(tokens[1], space, 2)).map(row => row.version)).toEqual(["1"]);
+    for (const cursor of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(service.coupleHistory(tokens[0], space, cursor)).rejects.toMatchObject({ kind: "invalid_input" });
+    }
+    expect(await service.couple(tokens[0], randomUUID())).toBeNull();
+    expect(await service.coupleHistory(tokens[0], randomUUID())).toEqual([]);
+    for (const table of ["couple_profiles", "couple_profile_revisions"]) {
+      await expect(db.query(`SELECT * FROM m10.${table}`)).rejects.toMatchObject({ reason: "denied" });
+    }
     expect(await service.partner(tokens[1], space)).toEqual({});
     const sharing = { commandId: randomUUID(), spaceId: space, recipientId: users[1], field: "birthday" as const, version: 6, confirmed: true };
     for (const patch of [{ confirmed: false }, { field: "email" }, { version: 0 }, { recipientId: "invalid" }, { userId: users[1] }]) {
@@ -353,6 +379,9 @@ test("profile service preserves own identity, date-only values and private optio
       [users[0]],
     );
     expect(await service.read(tokens[0])).toBeNull();
+    expect(await service.couple(tokens[0], space)).toBeNull();
+    expect(await service.coupleHistory(tokens[0], space)).toEqual([]);
+    await expect(service.updateCouple(tokens[0], coupleUpdate)).rejects.toMatchObject({ reason: "denied" });
     await expect(service.update(tokens[0], input)).rejects.toMatchObject({
       reason: "denied",
     });
