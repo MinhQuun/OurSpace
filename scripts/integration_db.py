@@ -20,6 +20,53 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_account_export_artifact_retry_bytes_and_access(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';", self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');", self.database)
+        role='artifact_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.create_account_export_artifact(text,uuid),app_internal.read_account_export_artifact(text,uuid) TO {role};", self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        command=str(uuid.uuid4())
+        def create(rollback=False):
+            return sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT app_internal.create_account_export_artifact(repeat('a',64),'{command}'); {'ROLLBACK' if rollback else 'COMMIT'};",self.database)
+        create(rollback=True)
+        self.assertEqual(sql("SELECT count(*) FROM m10.account_export_artifacts;",self.database),'0')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            identifiers=list(pool.map(lambda _: create(),range(2)))
+        self.assertEqual(identifiers[0],identifiers[1])
+        artifact=identifiers[0]
+        def read(token='a',identifier=artifact):
+            return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(json_build_object('bytes',encode(payload,'hex'),'sha256',sha256)),'[]') FROM app_internal.read_account_export_artifact(repeat('{token}',64),'{identifier}');",self.database))
+        result=read()[0]
+        payload=bytes.fromhex(result['bytes'])
+        self.assertEqual(hashlib.sha256(payload).hexdigest(),result['sha256'])
+        self.assertEqual(json.loads(payload)['account_id'],a)
+        self.assertEqual(json.loads(payload)['section'],'m10.account_profile_preferences')
+        self.assertEqual(read('b'),[])
+        self.assertEqual(read('c'),[])
+        self.assertEqual(read(identifier=str(uuid.uuid4())),[])
+        for statement in [f"UPDATE m10.account_export_artifacts SET payload=convert_to('changed','UTF8') WHERE id='{artifact}'", f"UPDATE m10.account_export_artifacts SET account_id='{b}' WHERE id='{artifact}'"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(statement,self.database)
+        sql(f"UPDATE m10.profiles SET bio='new profile version' WHERE user_id='{a}';",self.database)
+        self.assertEqual(create(),artifact)
+        self.assertEqual(read()[0],result)
+        expired=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.account_export_artifacts(id,account_id,section,payload,created_at,expires_at) VALUES ('{expired}','{a}','m10.account_profile_preferences',convert_to('expired','UTF8'),now()-interval '2 hours',now()-interval '1 hour');",self.database)
+        self.assertEqual(read(identifier=expired),[])
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"SET ROLE {role}; SELECT * FROM m10.account_export_artifacts;",self.database)
+        for table in ['command_receipts','audit_events','outbox']:
+            self.assertEqual(sql(f"SELECT count(*) FROM app_internal.{table};",self.database),'1')
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        self.assertEqual(read(),[])
+        with self.assertRaises(subprocess.CalledProcessError): create()
+        self.assertEqual(sql("SELECT count(*) FROM m10.export_jobs;",self.database),'0')
+
     def test_account_export_section_live_owner_allowlist(self):
         migrate(database=self.database)
         seed(self.database)
