@@ -1660,6 +1660,49 @@ ROLLBACK;''', self.database)
         sql("UPDATE m10.sessions SET revoked_at = '2026-01-01T12:00:00Z';", self.database)
         self.assertEqual(sql('SELECT count(*) FROM m10.sessions WHERE revoked_at IS NOT NULL;', self.database), '1')
 
+    def test_m02_media_schema_private_by_default_and_versioned(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        resource,grant,space,invitation=[str(uuid.uuid4()) for _ in range(4)]
+        sql(f"""BEGIN;
+        INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+        UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+        UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+        INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+        INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+        INSERT INTO m10.resources(id,module,kind,owner_id) VALUES ('{resource}','M02','media','{a}');
+        INSERT INTO m02.media(id,title,mime_type,uploaded_by) VALUES ('{resource}','Synthetic media','image/png','{a}');
+        COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='media_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.can_read_resource(text,uuid) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token,key=resource):
+            return sql(f"SELECT app_internal.can_read_resource(repeat('{token}',64),'{key}');",self.database)
+        self.assertEqual(read('a'),'t')
+        self.assertEqual(read('b'),'f')
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{resource}','{a}','{b}','{space}','viewer');",self.database)
+        self.assertEqual(read('b'),'t')
+        self.assertEqual(sql(f"SELECT version FROM m02.media WHERE id='{resource}';",self.database),'1')
+        sql(f"UPDATE m02.media SET title='Synthetic media updated' WHERE id='{resource}';",self.database)
+        self.assertEqual(sql(f"SELECT version FROM m02.media WHERE id='{resource}';",self.database),'2')
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}';",self.database)
+        self.assertEqual(read('b'),'f')
+        role2='media_direct_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role2} NOLOGIN; GRANT USAGE ON SCHEMA m02 TO {role2}; GRANT SELECT ON m02.media TO {role2};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role2};'))
+        result=sql(f'''BEGIN; SET LOCAL ROLE {role2}; SELECT count(*) FROM m02.media; ROLLBACK;''',self.database)
+        self.assertEqual(result,'0')
+        self.assertEqual(read('a',str(uuid.uuid4())),'f')
+
+    def setUp(self):
+        self.database = 'ourspace_test_' + uuid.uuid4().hex
+        sql(f'CREATE DATABASE {self.database};')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
