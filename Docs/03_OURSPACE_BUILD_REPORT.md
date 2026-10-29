@@ -18,7 +18,7 @@ Updated: 2026-10-28 (Asia/Saigon). This report records implementation evidence, 
 | 01 | DONE | Local app/DB/Auth, seed, migrations, policy/ownership foundations and hosted CI verified |
 | 02 | DONE (POC gate) | Real Auth/MFA/pairing/ACL/storage/realtime security evidence and full regression; see STAGE02_SECURITY_REVIEW.md. Full M10/domain P0 remains later stages |
 | 03 | DONE | Shared-platform/M10 journeys complete: own profile, field sharing, Couple Profile, preferences, notification center/preferences/Quiet Hours, personalized home, Privacy Inspector, Trash Center, export section artifacts, backup/restore center schemas, notification source ACL. Remaining: domain integration in Stage 13; full export/backup/restore artifact workflows depend on domain modules |
-| 04 | NOT_STARTED | M02 |
+| 04 | IN_PROGRESS | M02 Media Library: media schema foundation pushed and verified; private upload service/API, album, gallery and sharing next |
 | 05 | NOT_STARTED | M01 |
 | 06 | NOT_STARTED | M05 |
 | 07 | NOT_STARTED | M03 |
@@ -1520,5 +1520,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Real DB test test_notification_list_and_count_hide_unreadable_sources in scripts/integration_db.py covers authorized source visibility, immediate hiding after grant revocation, unknown/mismatched source denial, account-only notice persistence, owner access to own source, and Space disconnect processing-window expiry.
 - Lint/typecheck PASS; full integration_db suite 39/39 PASS (249.584s); scripts regression 11/11 PASS. Migration checksums verified on fresh test databases.
 - Commit pushed to origin/master; remote SHA verified equal. Knowns OS-424Z4W done. Stage03 remains IN_PROGRESS: remaining M10 journeys include real export artifact assembly, genuine backup/restore, broader domain integration and PO acceptance. Full M01-M10 P0 incomplete.
+
+## Task 04.1 - M02 Media Library schema foundation
+- Migration0085 creates m02 schema and m02.media table as an M10 resource extension (module='M02', kind='media') with title, description, mime_type, uploaded_by and versioned updates. RLS deny-by-default, no PUBLIC grants, no cascade delete across modules. Media items are trashed through M10 trashed_items by source_module/source_id.
+- Real DB test test_m02_media_schema_private_by_default_and_versioned in scripts/integration_db.py covers private-by-default, grant-based read access, version increment on update, revocation hides media, and direct table access denial.
+- Lint/typecheck PASS; full integration_db suite 40/40 PASS (256.123s); scripts regression 11/11 PASS. Migration checksums verified on fresh test databases.
+- Commit b38ca5a pushed to origin/master; remote SHA verified equal. Knowns task created for next M02 media service/API. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
 
 Updated: 2026-10-29 (Asia/Saigon)
