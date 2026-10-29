@@ -170,6 +170,59 @@ COMMIT;""",self.database)
         sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError): issue(token='b',profile=b,recipient=a,cmd=str(uuid.uuid4()))
 
+    def test_couple_profile_reads_history_and_disconnect_window(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space,grant=[str(uuid.uuid4()) for _ in range(3)]
+        self.assertEqual(sql('SELECT count(*) FROM m10.profile_field_grants;',self.database),'0')
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        outsider=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.accounts(id,state) VALUES ('{outsider}','active'); INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{outsider}',repeat('c',64),now()+interval '1 hour');",self.database)
+        role='couple_read_probe_'+uuid.uuid4().hex
+        sql(f'CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.read_couple_profile(text,uuid),app_internal.read_couple_profile_history(text,uuid,bigint) TO {role};',self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def read(token='a',history=False,before='NULL',target=space):
+            call=f"app_internal.read_couple_profile_history(repeat('{token}',64),'{target}',{before})" if history else f"app_internal.read_couple_profile(repeat('{token}',64),'{target}')"
+            return json.loads(sql(f"BEGIN; SET LOCAL ROLE {role}; SELECT coalesce(json_agg(r),'[]') FROM {call} r; COMMIT;",self.database))
+        self.assertEqual(read(),[dict(space_id=space,title=None,version=0,updated_by=None,updated_at=None)])
+        self.assertEqual(read(history=True),[])
+        sql(f"INSERT INTO m10.couple_profiles(space_id,title,updated_by) VALUES ('{space}','Synthetic first title','{a}');",self.database)
+        sql(f"DO $test$ BEGIN FOR i IN 2..52 LOOP UPDATE m10.couple_profiles SET title='Synthetic title '||i,updated_by='{b}' WHERE space_id='{space}'; END LOOP; END $test$;",self.database)
+        self.assertEqual(read(),read('b'))
+        self.assertEqual(read()[0]['version'],52)
+        self.assertEqual(read()[0]['updated_by'],b)
+        page=read(history=True)
+        self.assertEqual([r['version'] for r in page],list(range(52,2,-1)))
+        older=read('b',history=True,before=page[-1]['version'])
+        self.assertEqual([r['version'] for r in older],[2,1])
+        self.assertEqual(older[-1]['actor_id'],a)
+        self.assertEqual(older[-1]['title'],'Synthetic first title')
+        for history in [False,True]:
+            self.assertEqual(read('c',history=history),[])  # Valid outsider session.
+            self.assertEqual(read('d',history=history),[])
+            self.assertEqual(read(history=history,target=str(uuid.uuid4())),[])
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        self.assertEqual(read(),[])
+        self.assertEqual(read(history=True),[])
+        sql(f"UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        self.assertEqual(read('b'),[])
+        visible=json.loads(sql(f"BEGIN; INSERT INTO m10.space_disconnects(space_id,initiated_by) VALUES ('{space}','{b}'); SET LOCAL ROLE {role}; SELECT json_agg(r) FROM app_internal.read_couple_profile_history(repeat('b',64),'{space}',3) r; ROLLBACK;",self.database))
+        self.assertEqual([r['version'] for r in visible],[2,1])
+        sql(f"INSERT INTO m10.space_disconnects(space_id,initiated_by,initiated_at) VALUES ('{space}','{b}',clock_timestamp()-interval '31 days');",self.database)
+        self.assertEqual(read('b'),[])
+        self.assertEqual(read('b',history=True),[])
+
     def test_couple_profile_command_concurrency_and_lifecycle(self):
         migrate(database=self.database)
         seed(self.database)
