@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 type SessionState = {
@@ -11,24 +11,41 @@ type SessionState = {
 function useSession(): SessionState {
   const [session, setSession] = useState<{ accountId: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/auth/session", { cache: "no-store" });
-      if (response.ok) {
-        const data = (await response.json()) as { accountId?: string };
-        setSession({ accountId: data.accountId ?? "" });
-      } else {
-        setSession(null);
-      }
-    } catch {
-      setSession(null);
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((response) => {
+        if (!active) return null;
+        if (!response.ok) {
+          setSession(null);
+          return null;
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (!active) return;
+        if (
+          data &&
+          typeof data === "object" &&
+          "accountId" in data &&
+          typeof (data as { accountId: unknown }).accountId === "string"
+        ) {
+          setSession({ accountId: (data as { accountId: string }).accountId });
+        } else {
+          setSession(null);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setSession(null);
+      })
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   return { session, loaded };
 }
 
