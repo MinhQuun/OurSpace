@@ -9,6 +9,7 @@ import { SessionService } from "../modules/m10/auth/session.server";
 import { MfaService } from "../modules/m10/auth/mfa.server";
 
 import { RecoveryService } from "../modules/m10/auth/recovery.server";
+import { NotificationService } from "../modules/m10/notifications/service.server";
 
 let instance:
   | {
@@ -22,6 +23,7 @@ let instance:
       spaces: SpaceService;
       permissions: PermissionService;
       profile: ProfileService;
+      notifications: NotificationService;
     }
   | undefined;
 export function authRuntime() {
@@ -55,6 +57,7 @@ export function authRuntime() {
     spaces: new SpaceService(db, provider),
     permissions: new PermissionService(db),
     profile: new ProfileService(db),
+    notifications: new NotificationService(db),
   };
   return instance;
 }
