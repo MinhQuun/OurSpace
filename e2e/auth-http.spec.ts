@@ -1590,6 +1590,155 @@ test("Personal preferences HTTP isolates accounts and budgets", async ({
   }
 });
 
+test("Media sharing HTTP requires confirmation and isolates copy", async ({
+  request,
+}) => {
+  const owner = new Pool({
+    host: "127.0.0.1",
+    port: 55432,
+    database: "ourspace",
+    user: "ourspace_owner",
+    password: readFileSync(".local/db-password", "utf8").trim(),
+    max: 1,
+  });
+  const users = [randomUUID(), randomUUID()],
+    sessions = [randomUUID(), randomUUID()];
+  const tokens = users.map(() => randomBytes(32).toString("base64url"));
+  const headers = (i = 0) => ({
+    Cookie: `ourspace_session=${sessions[i]}:${tokens[i]}`,
+    Origin: "http://127.0.0.1:3102",
+  });
+  try {
+    for (let i = 0; i < 2; i++) {
+      await owner.query(
+        "INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",
+        [users[i]],
+      );
+      await owner.query(
+        "INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [
+          sessions[i],
+          users[i],
+          createHash("sha256").update(tokens[i]).digest("hex"),
+        ],
+      );
+    }
+    const invitation = randomUUID(),
+      space = randomUUID();
+    await owner.query("BEGIN");
+    try {
+      await owner.query(
+        "INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ($1,$2,$3)",
+        [
+          invitation,
+          users[0],
+          createHash("sha256").update(randomUUID()).digest("hex"),
+        ],
+      );
+      await owner.query(
+        "UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by=$2,accepted_at=clock_timestamp() WHERE id=$1",
+        [invitation, users[1]],
+      );
+      await owner.query(
+        "UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id=$1",
+        [invitation],
+      );
+      await owner.query(
+        "INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ($1,$2)",
+        [space, invitation],
+      );
+      await owner.query(
+        "INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ($1,$2,1),($1,$3,2)",
+        [space, users[0], users[1]],
+      );
+      await owner.query("COMMIT");
+    } catch (error) {
+      await owner.query("ROLLBACK");
+      throw error;
+    }
+    const media = (
+      await owner.query(
+        "SELECT app_internal.register_media($1,$2,'Synthetic','image/png','media',$3,3,$4) AS id",
+        [
+          createHash("sha256").update(tokens[0]).digest("hex"),
+          randomUUID(),
+          randomUUID(),
+          "a".repeat(64),
+        ],
+      )
+    ).rows[0].id;
+    const data = {
+      commandId: randomUUID(),
+      mediaId: media,
+      granteeId: users[1],
+      spaceId: space,
+      mode: "shared_copy",
+      version: 1,
+      confirmed: true,
+    };
+    const post = (input: unknown, i = 0) =>
+      request.post("/api/media/share", { headers: headers(i), data: input });
+    expect(
+      (
+        await request.post("/api/media/share", {
+          headers: { Origin: headers().Origin },
+          data,
+        })
+      ).status(),
+    ).toBe(401);
+    expect(
+      (
+        await request.post("/api/media/share", {
+          headers: { Cookie: headers().Cookie },
+          data,
+        })
+      ).status(),
+    ).toBe(403);
+    for (const bad of [
+      { ...data, confirmed: false },
+      { ...data, userId: users[0] },
+      { ...data, version: -1 },
+    ])
+      expect((await post(bad)).status()).toBe(400);
+    expect((await post(data, 1)).status()).toBe(403);
+    const response = await post(data);
+    expect(response.status()).toBe(200);
+    const copied = await response.json();
+    expect(copied.id).not.toBe(media);
+    expect(await (await post(data)).json()).toEqual(copied);
+    expect((await post({ ...data, mode: "private" })).status()).toBe(400);
+    expect(
+      (await post({ ...data, commandId: randomUUID(), version: 999 })).status(),
+    ).toBe(409);
+    expect(
+      (
+        await owner.query(
+          "SELECT source_media_id FROM m02.media_copy_sources WHERE copy_id=$1",
+          [copied.id],
+        )
+      ).rows[0].source_media_id,
+    ).toBe(media);
+    const visible = (
+      await owner.query("SELECT id FROM app_internal.list_media($1,50)", [
+        createHash("sha256").update(tokens[1]).digest("hex"),
+      ])
+    ).rows.map((row) => row.id);
+    expect(visible).toContain(copied.id);
+    expect(visible).not.toContain(media);
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",
+      [sessions[0]],
+    );
+    expect((await post(data)).status()).toBe(401);
+  } finally {
+    await owner.query(
+      "UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL",
+      [users],
+    );
+    await owner.end();
+  }
+});
+
 test("Couple Profile HTTP enforces versions and independent budgets", async ({
   request,
 }) => {

@@ -1550,3 +1550,5 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Build PASS on retry. Next16.4.2 emitted a security advisory warning and stopped its first build; dependency audit is pending and must be addressed separately. No production deployment.
 - Stage04 remains IN_PROGRESS. This validates sharing commands, not gallery/upload or complete M02. Prior registration/album runtime grants, budgets and registration SQL arity need audit; full upload ownership/finalization, media UI and remaining P0 pending. Earlier Stage03 completion labels do not establish full export/backup/restore acceptance: those gaps remain open.
 - Unrelated .agents deletions, Knowns generated state, album formatting and existing HTTP-test formatting preserved outside this task commit. Knowns MCP unavailable; CLI task recovery succeeded. Commit/push verification follows below.
+
+- Commit 387f11427f78d95d8411848331fd6ebe3f182bb2 PUSHED; remote master verified equal. HTTP regression test is committed separately because the initial partial-index patch failed; unrelated test formatting remains outside the commit. npm audit confirms eight moderate dependency findings including Next; security patch task is next.
