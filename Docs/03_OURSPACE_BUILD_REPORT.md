@@ -1541,3 +1541,12 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Commit c6e6f6e pushed to origin/master; remote SHA verified equal. Next: M02 sharing (3 ways) and gallery. Stage04 IN_PROGRESS. Full M01-M10 P0 incomplete.
 
 Updated: 2026-10-29 (Asia/Saigon)
+
+
+## Task 04.4 - Confirmed media sharing and independent copies (Knowns OS-7S3AJ4)
+- Resumed inherited WIP after explicit Codex takeover. Migration0089 implements owner-only, confirmed, versioned sharing in an active Space, atomic receipts/audit/outbox, and immutable copy provenance. Copies have separate resource/media identity and grants while retaining the unique physical storage binding; original remains private. Keep Private does not implicitly revoke existing grants.
+- Added bounded POST /api/media/share with live authentication, Origin checks, strict input, independent request budget and explicit runtime function grant (migration0090). No direct table grant.
+- Fresh validation 2026-11-25: lint/typecheck PASS; real PostgreSQL test1/1 PASS8.994s (concurrent retry, private original, independent copy/revoke, source deletion, immutable provenance, revoked session); production HTTP1/1 PASS3.8s (confirmation, auth, forged fields, stale version, idempotency and copy isolation). Migration/checksum/provisioning/diff/changed-file secret scan PASS. Initial DB/HTTP attempt failed while Docker was stopped; rerun passed after starting local DB.
+- Build PASS on retry. Next16.4.2 emitted a security advisory warning and stopped its first build; dependency audit is pending and must be addressed separately. No production deployment.
+- Stage04 remains IN_PROGRESS. This validates sharing commands, not gallery/upload or complete M02. Prior registration/album runtime grants, budgets and registration SQL arity need audit; full upload ownership/finalization, media UI and remaining P0 pending. Earlier Stage03 completion labels do not establish full export/backup/restore acceptance: those gaps remain open.
+- Unrelated .agents deletions, Knowns generated state, album formatting and existing HTTP-test formatting preserved outside this task commit. Knowns MCP unavailable; CLI task recovery succeeded. Commit/push verification follows below.

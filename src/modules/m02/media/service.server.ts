@@ -21,6 +21,15 @@ export type MediaRegisterInput = {
   byteSize: number;
   sha256: string;
 };
+export type MediaShareInput = {
+  commandId: string;
+  mediaId: string;
+  granteeId: string;
+  spaceId: string;
+  mode: "private" | "share_existing" | "shared_copy";
+  version: number;
+  confirmed: boolean;
+};
 const uuid = (value: unknown): value is string =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -34,7 +43,10 @@ function digest(session: string) {
 }
 export class MediaService {
   constructor(private readonly db: ReturnType<typeof createDatabase>) {}
-  async register(session: string, input: MediaRegisterInput): Promise<{ id: string }> {
+  async register(
+    session: string,
+    input: MediaRegisterInput,
+  ): Promise<{ id: string }> {
     const hash = digest(session);
     if (
       !input ||
@@ -90,5 +102,52 @@ export class MediaService {
       [hash, Math.max(1, Math.min(limit, 100))],
     );
     return result.rows;
+  }
+  async share(
+    session: string,
+    input: MediaShareInput,
+  ): Promise<{ id: string }> {
+    const hash = digest(session);
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (key) =>
+          ![
+            "commandId",
+            "mediaId",
+            "granteeId",
+            "spaceId",
+            "mode",
+            "version",
+            "confirmed",
+          ].includes(key),
+      ) ||
+      !uuid(input.commandId) ||
+      !uuid(input.mediaId) ||
+      !uuid(input.granteeId) ||
+      !uuid(input.spaceId) ||
+      !["private", "share_existing", "shared_copy"].includes(input.mode) ||
+      !Number.isSafeInteger(input.version) ||
+      input.version < 1 ||
+      input.confirmed !== true
+    )
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.share_media($1,$2,$3,$4,$5,$6,$7,$8) AS id",
+      [
+        hash,
+        input.commandId,
+        input.mediaId,
+        input.granteeId,
+        input.spaceId,
+        input.mode,
+        input.version,
+        input.confirmed,
+      ],
+    );
+    if (!result.rows[0]?.id) throw new AuthProviderError("denied");
+    return { id: result.rows[0].id };
   }
 }

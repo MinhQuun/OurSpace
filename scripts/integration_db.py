@@ -20,6 +20,57 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_media_sharing_copy_identity_and_lifecycle(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        invitation,space=[str(uuid.uuid4()) for _ in range(2)]
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('a',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        media=sql(f"SELECT app_internal.register_media(repeat('a',64),'{uuid.uuid4()}','Synthetic','image/png','media','{uuid.uuid4()}',3,repeat('a',64));",self.database)
+        role='media_share_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.share_media(text,uuid,uuid,uuid,uuid,text,bigint,boolean),app_internal.list_media(text,integer),app_internal.resolve_readable_binary(text,uuid) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        def share(mode='shared_copy',version=1,command=None,token='a',confirmed='true'):
+            return sql(f"SET ROLE {role}; SELECT app_internal.share_media(repeat('{token}',64),'{command or uuid.uuid4()}','{media}','{b}','{space}','{mode}',{version},{confirmed});",self.database)
+        def listing(token='b'):
+            return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(m),'[]') FROM app_internal.list_media(repeat('{token}',64),50) m;",self.database))
+        self.assertEqual(share('private'),media)
+        self.assertEqual(listing(),[])
+        for args in [dict(confirmed='false'),dict(version=0),dict(token='b'),dict(version=2)]:
+            with self.assertRaises(subprocess.CalledProcessError): share(**args)
+        command=str(uuid.uuid4())
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            copies=list(pool.map(lambda _: share(command=command),range(2)))
+        copy=copies[0]
+        self.assertEqual(copies,[copy,copy])
+        self.assertNotEqual(copy,media)
+        self.assertEqual([m['id'] for m in listing()],[copy])
+        self.assertEqual(sql(f"SELECT source_media_id FROM m02.media_copy_sources WHERE copy_id='{copy}';",self.database),media)
+        self.assertEqual(sql(f"SELECT owner_id FROM m10.resources WHERE id='{copy}';",self.database),a)
+        self.assertEqual(sql(f"SET ROLE {role}; SELECT count(*) FROM app_internal.resolve_readable_binary(repeat('b',64),'{copy}');",self.database),'1')
+        share('share_existing')
+        self.assertEqual({m['id'] for m in listing()},{media,copy})
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND revoked_at IS NULL; UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id='{media}';",self.database)
+        self.assertEqual([m['id'] for m in listing()],[copy])
+        self.assertEqual(sql(f"SET ROLE {role}; SELECT count(*) FROM app_internal.resolve_readable_binary(repeat('b',64),'{copy}');",self.database),'1')
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{copy}' AND revoked_at IS NULL;",self.database)
+        self.assertEqual(listing(),[])
+        self.assertEqual(sql(f"SET ROLE {role}; SELECT count(*) FROM app_internal.resolve_readable_binary(repeat('b',64),'{copy}');",self.database),'0')
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"UPDATE m02.media_copy_sources SET source_media_id='{copy}' WHERE copy_id='{copy}';",self.database)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): share(command=command)
+
+
     def test_expired_export_cleanup_boundaries(self):
         migrate(database=self.database)
         seed(self.database)
