@@ -1552,3 +1552,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Unrelated .agents deletions, Knowns generated state, album formatting and existing HTTP-test formatting preserved outside this task commit. Knowns MCP unavailable; CLI task recovery succeeded. Commit/push verification follows below.
 
 - Commit 387f11427f78d95d8411848331fd6ebe3f182bb2 PUSHED; remote master verified equal. HTTP regression test is committed separately because the initial partial-index patch failed; unrelated test formatting remains outside the commit. npm audit confirms eight moderate dependency findings including Next; security patch task is next.
+
+- HTTP regression commit 4386f6f49f99ad6c00af345f316c9c89e82d20ea PUSHED and remote SHA verified. Knowns OS-7S3AJ4 done.
+
+## Security maintenance during Stage04 - dependency patches (Knowns OS-15DNPA)
+- Next and eslint-config-next pinned16.4.2 ->16.4.6; compatible transitive lint dependencies patched with npm audit fix (no force/major upgrade). Official release reference: https://nextjs.org/blog/november-2026-security-release . Initial audit reported8 moderate findings; post-install audit reports0 vulnerabilities across432 installed packages. This is dependency advisory coverage, not a complete application security audit.
+- Validation2026-11-25: lint/typecheck/build PASS, unit21/21 PASS, production HTTP4/4 PASS3.7s (private permission inspection/session recheck, actual export bytes, account preferences isolation, media sharing). Changed-file secret scan and diff check PASS. No schema/business-policy changes or production deployment.
+- Next task: audit M02 register/list and album runtime boundaries, then complete secure actual upload and gallery. Full Stage04 and overall P0 remain incomplete. Preserve unrelated .agents deletions, test/album formatting and Knowns generated files. Knowns CLI updates succeed although Qdrant indexing warns about its external projects.json lock; no memory state edited manually.
