@@ -20,6 +20,61 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_owned_upload_reservation_and_atomic_finalize(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        role='upload_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.begin_media_upload(text,uuid,text,text,bigint,text),app_internal.read_media_upload(text,uuid),app_internal.finalize_media_upload(text,uuid,text,bigint,text) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        command=str(uuid.uuid4())
+        def begin(command_id=command,title='Synthetic',token='a',size=3):
+            return sql(f"SET ROLE {role}; SELECT app_internal.begin_media_upload(repeat('{token}',64),'{command_id}','{title}','image/png',{size},repeat('a',64));",self.database)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ids=list(pool.map(lambda _: begin(),range(2)))
+        upload=ids[0]
+        self.assertEqual(ids,[upload,upload])
+        def read(token='a'):
+            return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(u),'[]') FROM app_internal.read_media_upload(repeat('{token}',64),'{upload}') u;",self.database))
+        item=read()[0]
+        self.assertEqual(item['bucket'],'media')
+        self.assertNotEqual(item['object_key'],upload)
+        self.assertIsNone(item['media_id'])
+        self.assertEqual(read('b'),[])
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.media WHERE uploaded_by='{a}';",self.database),'0')
+        for args in [dict(title='Changed'),dict(size=0)]:
+            with self.assertRaises(subprocess.CalledProcessError): begin(**args)
+        # Identical content from another owner is a separate intent, no cross-owner dedup leak.
+        self.assertNotEqual(begin(token='b'),upload)
+        def finish(token='a',size=3,mime='image/png',sha='a'):
+            return sql(f"SET ROLE {role}; SELECT app_internal.finalize_media_upload(repeat('{token}',64),'{upload}','{mime}',{size},repeat('{sha}',64));",self.database)
+        for args in [dict(token='b'),dict(size=4),dict(mime='image/jpeg'),dict(sha='b')]:
+            with self.assertRaises(subprocess.CalledProcessError): finish(**args)
+        sql(f"BEGIN; SET ROLE {role}; SELECT app_internal.finalize_media_upload(repeat('a',64),'{upload}','image/png',3,repeat('a',64)); ROLLBACK;",self.database)
+        self.assertIsNone(read()[0]['media_id'])
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.media WHERE uploaded_by='{a}';",self.database),'0')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            media=list(pool.map(lambda _: finish(),range(2)))
+        self.assertEqual(media,[media[0],media[0]])
+        self.assertEqual(read()[0]['media_id'],media[0])
+        self.assertEqual(finish(),media[0])
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.media WHERE uploaded_by='{a}';",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM m10.resource_grants WHERE resource_id='{media[0]}';",self.database),'0')
+        self.assertEqual(sql(f"SELECT object_key FROM app_internal.binary_objects WHERE resource_id='{media[0]}';",self.database),item['object_key'])
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE resource_id='{media[0]}' AND action='media.register';",self.database),'1')
+        for query in [f"SET ROLE {role}; SELECT * FROM m02.upload_items;",f"UPDATE m02.upload_items SET object_key='{uuid.uuid4()}' WHERE id='{upload}';",f"UPDATE m02.upload_items SET media_id=NULL,completed_at=NULL WHERE id='{upload}';"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(query,self.database)
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"SET ROLE {role}; SELECT app_internal.register_media(repeat('a',64),'{uuid.uuid4()}','Forged','image/png','media','{uuid.uuid4()}',3,repeat('a',64));",self.database)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        self.assertEqual(read(),[])
+        with self.assertRaises(subprocess.CalledProcessError): finish()
+        with self.assertRaises(subprocess.CalledProcessError): begin()
+
     def test_media_sharing_copy_identity_and_lifecycle(self):
         migrate(database=self.database)
         seed(self.database)
