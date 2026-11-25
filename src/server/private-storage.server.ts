@@ -48,20 +48,72 @@ export class PrivateStorage {
     }
   }
 
+  /** Immutable server-side upload. Location must come from an owned upload
+   * reservation, never a client-supplied storage path. Media validation belongs
+   * to the caller; this transport verifies exact bytes, not file semantics.
+   */
+  async write(
+    location: BinaryLocation,
+    bytes: Uint8Array,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    try {
+      location = { ...location };
+      this.validate(location);
+      if (bytes.byteLength !== location.byte_size) throw new Error();
+      // Snapshot before awaiting credentials: callers cannot mutate the payload
+      // between hashing and sending it.
+      const payload = Buffer.from(bytes);
+      if (createHash("sha256").update(payload).digest("hex") !== location.sha256)
+        throw new Error();
+      const abort = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000);
+      const credential = await this.credential();
+      if (!credential || /[\r\n]/.test(credential)) throw new Error();
+      const response = await fetch(
+        `${this.base}/object/${location.bucket}/${location.object_key}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${credential}`,
+            "Content-Type": "application/octet-stream",
+            "x-upsert": "false",
+          },
+          body: payload,
+          cache: "no-store",
+          redirect: "error",
+          signal: abort,
+        },
+      );
+      await response.body?.cancel();
+      // Storage versions use 400 or 409 for an already-existing key. Neither
+      // is success until an authenticated read verifies length and digest.
+      if (![200, 201, 400, 409].includes(response.status)) throw new Error();
+      await this.read(location, abort);
+    } catch {
+      throw new StorageUnavailableError();
+    }
+  }
+
+  private validate(location: BinaryLocation): void {
+    if (
+      !/^[a-z][a-z0-9-]{0,62}$/.test(location.bucket) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        location.object_key,
+      ) ||
+      !Number.isSafeInteger(location.byte_size) ||
+      location.byte_size < 0 ||
+      location.byte_size > this.maxBytes ||
+      !/^[a-f0-9]{64}$/.test(location.sha256)
+    )
+      throw new StorageUnavailableError();
+  }
+
   async read(location: BinaryLocation, signal?: AbortSignal): Promise<Buffer> {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      if (
-        !/^[a-z][a-z0-9-]{0,62}$/.test(location.bucket) ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          location.object_key,
-        ) ||
-        !Number.isSafeInteger(location.byte_size) ||
-        location.byte_size < 0 ||
-        location.byte_size > this.maxBytes ||
-        !/^[a-f0-9]{64}$/.test(location.sha256)
-      )
-        throw new Error();
+      this.validate(location);
       const abort = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
         : AbortSignal.timeout(30_000);

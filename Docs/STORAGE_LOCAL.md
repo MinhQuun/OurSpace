@@ -36,3 +36,11 @@ size/SHA-256 before returning bytes. Errors never include backend response bodie
 This buffered transport is suitable for bounded downloads; larger media streaming
 and range support must be implemented and verified with the relevant domain limits.
 It is not an authorization gate and is not yet exposed by an application route.
+
+
+`PrivateStorage.write` now supports bounded immutable writes with `x-upsert: false`,
+server-side payload length/SHA256 validation, and authenticated readback. A retry
+succeeds only when the stored bytes match exactly; conflicting bytes never replace
+an existing object. It snapshots payload and location before asynchronous work.
+The caller must supply an authorized upload reservation and perform media format
+validation; this transport alone does not make the M02 upload flow complete.

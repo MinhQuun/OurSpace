@@ -416,3 +416,53 @@ test("download service rechecks live source ACL around real Storage bytes", asyn
     await owner.end();
   }
 });
+
+
+test("immutable upload verifies real storage, retries and rejects replacement", async () => {
+  const headers = { Authorization: `Bearer ${credential()}`, "Content-Type": "application/json" };
+  const bucket = "upload-" + randomUUID();
+  const bytes = randomBytes(1025);
+  const location = { bucket, object_key: randomUUID(), byte_size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex") };
+  const storage = new PrivateStorage(base, async () => credential(), 2048);
+  expect((await fetch(base + "/bucket", { method: "POST", headers,
+    body: JSON.stringify({ id: bucket, name: bucket, public: false }) })).status).toBe(200);
+  try {
+    await Promise.all([storage.write(location, bytes), storage.write(location, bytes)]);
+    await storage.write(location, bytes);
+    expect(await storage.read(location)).toEqual(bytes);
+    const replacement = randomBytes(bytes.length);
+    await expect(storage.write({ ...location,
+      sha256: createHash("sha256").update(replacement).digest("hex") }, replacement))
+      .rejects.toThrow(StorageUnavailableError);
+    expect(await storage.read(location)).toEqual(bytes);
+    for (const invalid of [
+      { ...location, object_key: "../escape" },
+      { ...location, bucket: "../escape" },
+      { ...location, byte_size: 4096 },
+      { ...location, byte_size: bytes.length - 1 },
+      { ...location, sha256: "0".repeat(64) },
+    ]) await expect(storage.write(invalid, bytes)).rejects.toThrow(StorageUnavailableError);
+    const unprivileged = new PrivateStorage(base, async () => credential("authenticated"), 2048);
+    await expect(unprivileged.write({ ...location, object_key: randomUUID() }, bytes))
+      .rejects.toThrow(StorageUnavailableError);
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(storage.write(location, bytes, aborted.signal)).rejects.toThrow(StorageUnavailableError);
+    // Hash validation must happen before obtaining backend credentials.
+    let calls = 0;
+    const guarded = new PrivateStorage(base, async () => { calls++; return credential(); }, 2048);
+    await expect(guarded.write(location, replacement)).rejects.toThrow(StorageUnavailableError);
+    expect(calls).toBe(0);
+    const original = Buffer.from(bytes);
+    const snapshot = new PrivateStorage(base, async () => { bytes.fill(0); return credential(); }, 2048);
+    const snapshotLocation = { ...location, object_key: randomUUID() };
+    await snapshot.write(snapshotLocation, bytes);
+    expect(await storage.read(snapshotLocation)).toEqual(original);
+    expect((await fetch(`${base}/object/public/${bucket}/${location.object_key}`)).status).not.toBe(200);
+  } finally {
+    expect((await fetch(base + "/bucket/" + bucket + "/empty", {
+      method: "POST", headers, body: "{}" })).status).toBe(200);
+    expect((await fetch(base + "/bucket/" + bucket, { method: "DELETE", headers })).status).toBe(200);
+  }
+});
