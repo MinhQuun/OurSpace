@@ -23,6 +23,11 @@ export function mediaUploadHandler(d: { origin: string; maxBytes: number; upload
    const budget=await d.budgets.consumeRequest(match[1],action);
    if (!budget.allowed) { headers.set("Retry-After",String(budget.retry_after)); return json({error:"rate_limited"},429); }
    const url=new URL(request.url), ids=url.searchParams.getAll("uploadId");
+   if (method==="GET" && ids.length===0) {
+    const cursors=url.searchParams.getAll("after");
+    if (cursors.length>1 || [...url.searchParams.keys()].some(k=>k!=="after")) return json({error:"invalid_input"},400);
+    return json(await d.uploads.pending(match[1],cursors[0]));
+   }
    if (method==="POST" ? !!url.search : ids.length!==1 || [...url.searchParams.keys()].some(k=>k!=="uploadId")) return json({error:"invalid_input"},400);
    if (method==="GET") return json(await d.uploads.status(match[1],ids[0]));
    if (request.headers.get("content-type")?.split(";")[0].trim() !== (method==="POST" ? "application/json" : "application/octet-stream")) return json({error:"invalid_input"},400);

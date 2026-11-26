@@ -92,6 +92,15 @@ export class MediaUploadService {
     if (!result.rows[0]) throw new AuthProviderError("denied");
     return { token, item: result.rows[0] };
   }
+  async pending(session: string, after?: string) {
+    const token = hash(session);
+    if (after !== undefined && !uuid(after)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<Pick<Upload,"id"|"title"|"mime_type"|"byte_size"|"sha256">>(
+      "SELECT * FROM app_internal.list_pending_media_uploads($1,$2)", [token,after ?? null]);
+    const items = result.rows.slice(0,50).map(row => ({uploadId:row.id,title:row.title,mimeType:row.mime_type,
+      byteSize:Number(row.byte_size),sha256:row.sha256}));
+    return {items,nextCursor:result.rows.length>50 ? items[49].uploadId : null};
+  }
   async status(session: string, uploadId: string) {
     const { item } = await this.owned(session, uploadId);
     return {

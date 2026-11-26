@@ -28,6 +28,12 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    const result=await started.json(); uploads.push(result.uploadId);
    expect(await (await request.post(endpoint,{headers:headers(),data:intent})).json()).toEqual(result);
    const path=endpoint+"?uploadId="+result.uploadId;
+   const pending=await (await request.get(endpoint,{headers:headers()})).json();
+   expect(pending.items).toContainEqual({uploadId:result.uploadId,title:intent.title,mimeType:intent.mimeType,byteSize:bytes.length,sha256:intent.sha256});
+   expect(JSON.stringify(pending)).not.toContain("object_key");
+   expect(await (await request.get(endpoint,{headers:headers(1)})).json()).toEqual({items:[],nextCursor:null});
+   expect((await request.get(endpoint+"?after=bad",{headers:headers()})).status()).toBe(400);
+
    expect(await (await request.get(path,{headers:headers()})).json()).toMatchObject({state:"pending",mediaId:null});
    expect((await request.get(path,{headers:headers(1)})).status()).toBe(403);
    expect((await request.get(path+"&uploadId="+result.uploadId,{headers:headers()})).status()).toBe(400);
@@ -43,9 +49,19 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    const binary=(await owner.query("SELECT object_key FROM app_internal.binary_objects WHERE resource_id=$1",[completed.mediaId])).rows[0];
    const stored=await request.get("http://127.0.0.1:55435/object/media/"+binary.object_key,{headers:storageHeaders});
    expect(await stored.body()).toEqual(bytes);
+   expect((await (await request.get(endpoint,{headers:headers()})).json()).items).toEqual([]);
+
   }
+  const extra=(await owner.query("SELECT app_internal.begin_media_upload($1,gen_random_uuid(),'Synthetic page '||n,'image/png',3,repeat('a',64)) AS id FROM generate_series(1,52) n",[createHash("sha256").update(tokens[0]).digest("hex")])).rows.map(row=>row.id);
+  uploads.push(...extra);
+  const page1=await (await request.get(endpoint,{headers:headers()})).json();
+  expect(page1.items).toHaveLength(50);expect(page1.nextCursor).toBeTruthy();
+  const page2=await (await request.get(endpoint+"?after="+page1.nextCursor,{headers:headers()})).json();
+  expect(page2.items).toHaveLength(2);expect(page2.nextCursor).toBeNull();
+  expect(new Set([...page1.items,...page2.items].map((row:{uploadId:string})=>row.uploadId))).toEqual(new Set(extra));
   await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[sessions[0]]);
   expect((await request.get(endpoint+"?uploadId="+uploads[0],{headers:headers()})).status()).toBe(401);
+  expect((await request.get(endpoint,{headers:headers()})).status()).toBe(401);
  } finally {
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(r=>r.object_key);
   if(keys.length) expect((await request.delete("http://127.0.0.1:55435/object/media",{headers:storageHeaders,data:{prefixes:keys}})).status()).toBe(200);
