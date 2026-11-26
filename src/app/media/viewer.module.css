@@ -1,0 +1,8 @@
+.dialog { width: min(94vw, 1100px); max-width: 94vw; max-height: 94dvh; padding: 16px; border: 1px solid #888; border-radius: 12px; overflow: auto; }
+.dialog::backdrop { background: #000b; }
+.dialog h2 { overflow-wrap: anywhere; font-size: 1.2rem; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 8px; }
+.controls button { min-height: 44px; }
+.viewport { max-height: 65dvh; overflow: auto; touch-action: pan-x pan-y; }
+.image { display: block; max-width: none; height: auto; }
+.dialog:fullscreen { width: 100vw; max-width: 100vw; max-height: 100dvh; }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./gallery.module.css";
+import Viewer from "./viewer";
 
 type Media = { id: string; title: string; mimeType: string; byteSize: number; createdAt: string };
 
@@ -18,18 +19,23 @@ function Preview({ item }: { item: Media }) {
 
 export default function Gallery() {
   const [items, setItems] = useState<Media[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [ended, setEnded] = useState(false);
   const request = useRef<AbortController | null>(null);
+  const viewerDenied = useCallback(() => {
+    setSelected(null); setItems([]); setCursor(null);
+    setError("Media không còn khả dụng hoặc phiên đăng nhập đã kết thúc. Hãy làm mới thư viện.");
+  }, []);
 
   const load = useCallback(async (after: string | null = null) => {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
     setBusy(true); setError(""); setEnded(false);
-    if (!after) { setItems([]); setCursor(null); }
+    if (!after) { setSelected(null); setItems([]); setCursor(null); }
     try {
       const response = await fetch(`/api/media/list${after ? `?after=${encodeURIComponent(after)}` : ""}`, {
         cache: "no-store", credentials: "same-origin", signal: controller.signal,
@@ -55,7 +61,7 @@ export default function Gallery() {
     const initialLoad = window.setTimeout(() => void load(), 0);
     const visibility = () => {
       if (document.visibilityState === "hidden") {
-        request.current?.abort(); setItems([]); setCursor(null); setBusy(true);
+        request.current?.abort(); setSelected(null); setItems([]); setCursor(null); setBusy(true);
       } else void load();
     };
     window.addEventListener("pageshow", visibility);
@@ -75,12 +81,13 @@ export default function Gallery() {
     {!busy && !error && items.length === 0 && <p>Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm.</p>}
     <ul className={styles.grid}>
       {items.map(item => <li key={item.id} className={styles.card}>
-        <Preview item={item} />
+        <button type="button" onClick={() => setSelected(item.id)} aria-label={`Xem ${item.title}`} style={{width:"100%"}}><Preview item={item} /></button>
         <h2>{item.title}</h2>
         <p>{item.mimeType} · {item.byteSize.toLocaleString("vi-VN")} byte</p>
         <p>Ngày tải lên: <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("vi-VN")}</time></p>
       </li>)}
     </ul>
+    {selected && items.some(item => item.id === selected) && <Viewer items={items} selected={selected} select={setSelected} close={() => setSelected(null)} denied={viewerDenied} />}
     {busy && <p role="status">Đang tải thư viện…</p>}
     {cursor && !error && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Xem thêm media</button>}
   </section>;

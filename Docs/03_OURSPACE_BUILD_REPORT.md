@@ -1758,3 +1758,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Added /api/media/view/{mediaId} with independent explicit MEDIA_VIEWER_MAX_EDGE. Reuses live source ACL before/after decoding, metadata stripping, no-store/same-origin response and shared media_preview budget. No original download or Storage URL. Existing thumbnail configuration and behavior preserved.
 - Lint/typecheck/build and 31 unit tests PASS. Actual PostgreSQL/Supabase Storage Next HTTP1/1 PASS14.8s: same source yields thumbnail8x7 vs viewer12x10 under viewer64px bound, WebP/no EXIF/ICC, foreign404, unauthenticated401 and revoked401. Secret scan/diff check clean.
 - Increment of ML-07/D01/D02; viewer UI, navigation/zoom/touch/info and video remain incomplete. Next: connect gallery to viewer UI.
+
+- Viewer rendition commit0844938345957e87fe443755bc8b4204cda11287 PUSHED; origin/master exact SHA verified. Knowns OS-4BMRE8 done.
+
+## Task04.33 - Gallery image viewer (Knowns OS-769EVJ)
+- Gallery cards open a native modal dialog with current loaded-list previous/next context, keyboard arrows/Escape/focus return, zoom controls, fullscreen action with unsupported-browser status, and image information panel. Fetches no-store authorized large rendition; title/info shown only after successful read. Object URLs are revoked on navigation/unmount. Denied/missing access clears modal and gallery; hidden-document transitions clear selection.
+- Lint/typecheck/build PASS. Actual local PostgreSQL/Supabase Storage browser suites desktop+Pixel7 2/2 PASS31.8s: original uploaded image decoded in viewer, zoom100/150, previous/next, Escape focus restoration, session revoked before open clears private content. Existing gallery/upload regression coverage retained. Secret/diff scan clean.
+- Increment of ML-07 AC-M02-29/35/60/61, not full acceptance. Pinch/swipe handlers and fullscreen action implemented but real-device multipoint gestures/fullscreen not yet verified. Native browser Back integration, context pagination beyond loaded items, rich metadata, actions, video and remaining M02 P0 still pending.
