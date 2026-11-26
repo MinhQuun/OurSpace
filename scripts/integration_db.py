@@ -20,6 +20,45 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_upload_keep_separate_decision(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        def begin():
+            return sql(f"SELECT app_internal.begin_media_upload(repeat('a',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('a',64));",self.database)
+        def finish(item):
+            return sql(f"SELECT app_internal.finalize_media_upload(repeat('a',64),'{item}','image/png',3,repeat('a',64));",self.database)
+        def separate(item,token='a',confirmed='true'):
+            return sql(f"SELECT app_internal.keep_upload_separate(repeat('{token}',64),'{item}',{confirmed});",self.database)
+        original=finish(begin()); item=begin()
+        for args in [(item,'b','true'),(item,'a','false')]:
+            with self.assertRaises(subprocess.CalledProcessError): separate(*args)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(lambda _:separate(item),range(2)))
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE resource_id='{item}' AND action='upload.keep_separate';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError):
+            sql(f"SELECT app_internal.reuse_media_upload(repeat('a',64),'{item}','{original}',true);",self.database)
+        created=finish(item)
+        self.assertNotEqual(created,original)
+        self.assertEqual(finish(item),created)
+        separate(item)
+        self.assertEqual(sql("SELECT count(*) FROM m02.media;",self.database),'2')
+        self.assertEqual(sql(f"SELECT count(*) FROM m10.resource_grants WHERE resource_id='{created}';",self.database),'0')
+        for query in [f"DELETE FROM m02.upload_separate_decisions WHERE upload_id='{item}';",f"UPDATE m02.upload_separate_decisions SET confirmed_at=clock_timestamp() WHERE upload_id='{item}';"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(query,self.database)
+        cancelled=begin(); separate(cancelled)
+        sql(f"SELECT app_internal.cancel_media_upload(repeat('a',64),'{cancelled}');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): separate(cancelled)
+        reused=begin()
+        sql(f"SELECT app_internal.reuse_media_upload(repeat('a',64),'{reused}','{original}',true);",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): separate(reused)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): separate(item)
+
     def test_upload_reuse_resolution(self):
         migrate(database=self.database)
         seed(self.database)
