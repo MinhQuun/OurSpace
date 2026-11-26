@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import { DatabaseUnavailableError } from "../../../server/database.server";
 import type { createDatabase } from "../../../server/database.server";
 import type { PrivateStorage } from "../../../server/private-storage.server";
 import { AuthProviderError } from "../../m10/auth/provider.server";
@@ -22,6 +23,7 @@ type Upload = {
   object_key: string;
   media_id: string | null;
   cancelled_at: Date | null;
+  reused: boolean;
 };
 const uuid = (v: unknown): v is string =>
   typeof v === "string" &&
@@ -87,7 +89,7 @@ export class MediaUploadService {
     const token = hash(session);
     if (!uuid(uploadId)) throw new AuthProviderError("invalid_input");
     const result = await this.db.query<Upload>(
-      "SELECT * FROM app_internal.read_media_upload_state($1,$2)",
+      "SELECT * FROM app_internal.read_media_upload_resolution($1,$2)",
       [token, uploadId],
     );
     if (!result.rows[0]) throw new AuthProviderError("denied");
@@ -116,8 +118,16 @@ export class MediaUploadService {
     return {
       uploadId: item.id,
       mediaId: item.media_id,
-      state: item.cancelled_at ? "cancelled" : item.media_id ? "completed" : "pending",
+      state: item.reused ? "reused" : item.cancelled_at ? "cancelled" : item.media_id ? "completed" : "pending",
     };
+  }
+  async reuse(session: string, uploadId: string, input: unknown) {
+    const token=hash(session);
+    if(!uuid(uploadId)||!input||typeof input!=="object"||Array.isArray(input)) throw new AuthProviderError("invalid_input");
+    const value=input as Record<string,unknown>;
+    if(Object.keys(value).some(k=>!["mediaId","confirmed"].includes(k))||!uuid(value.mediaId)||value.confirmed!==true) throw new AuthProviderError("invalid_input");
+    const result=await this.db.query<{id:string}>("SELECT app_internal.reuse_media_upload($1,$2,$3,$4) AS id",[token,uploadId,value.mediaId,true]);
+    return {uploadId,mediaId:result.rows[0].id,state:"reused"};
   }
   async cancel(session: string, uploadId: string) {
     const token=hash(session);
@@ -132,6 +142,7 @@ export class MediaUploadService {
     signal?: AbortSignal,
   ) {
     const { token, item } = await this.owned(session, uploadId);
+    if (item.reused) throw new DatabaseUnavailableError("conflict");
     if (item.cancelled_at) throw new AuthProviderError("denied");
     const verified = await validateImage(input, item.mime_type, this.limits);
     if (

@@ -2,15 +2,15 @@
 import { useEffect, useRef, useState } from "react";
 import RecoveryPanel from "./recovery-panel";
 import styles from "./upload.module.css";
-type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing"|"completed"|"failed"|"cancelled";progress:number;uploadId?:string;error?:string};
-const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được",cancelled:"Đã hủy"};
+type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing"|"completed"|"failed"|"cancelled"|"reused";progress:number;uploadId?:string;error?:string};
+const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được",cancelled:"Đã hủy",reused:"Đã dùng bản có sẵn"};
 class UploadError extends Error { constructor(public status:number){super("Upload failed");} }
 export default function UploadQueue(){
  const [items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false),[signedOut,setSignedOut]=useState(false),[pauseRequested,setPauseRequested]=useState(false);
  const stopAfterCurrent=useRef(false);
  const queue=useRef<Item[]>([]),running=useRef(false),alive=useRef(true),xhr=useRef<XMLHttpRequest|null>(null);
  const publish=()=>{if(alive.current)setItems(queue.current.map(i=>({...i})));};
- useEffect(()=>{alive.current=true; const warn=(event:BeforeUnloadEvent)=>{if(queue.current.some(i=>i.state!=="completed"&&i.state!=="cancelled")){event.preventDefault();event.returnValue="";}};
+ useEffect(()=>{alive.current=true; const warn=(event:BeforeUnloadEvent)=>{if(queue.current.some(i=>i.state!=="completed"&&i.state!=="reused"&&i.state!=="cancelled")){event.preventDefault();event.returnValue="";}};
  window.addEventListener("beforeunload",warn);return()=>{alive.current=false;xhr.current?.abort();window.removeEventListener("beforeunload",warn);};},[]);
  async function json(url:string,options?:RequestInit){
   const response=await fetch(url,{...options,cache:"no-store"});if(!response.ok)throw new UploadError(response.status);return response.json();
@@ -26,10 +26,10 @@ export default function UploadQueue(){
   if(running.current)return;running.current=true;stopAfterCurrent.current=false;setPauseRequested(false);setBusy(true);
   try {for(const item of queue.current){
    if(!alive.current||stopAfterCurrent.current)break;
-   if(item.state==="completed" || item.state==="cancelled" || (only?item.id!==only:item.state!=="queued"))continue;
+   if(item.state==="completed" || item.state==="reused" || item.state==="cancelled" || (only?item.id!==only:item.state!=="queued"))continue;
    item.error=undefined;item.state="checking";publish();
    try {
-    if(item.uploadId){const status=await json("/api/media/upload?uploadId="+item.uploadId);if(status.state==="cancelled"){item.state="cancelled";publish();continue;}if(status.state==="completed"){item.state="completed";item.progress=100;publish();continue;}}
+    if(item.uploadId){const status=await json("/api/media/upload?uploadId="+item.uploadId);if(status.state==="cancelled"){item.state="cancelled";publish();continue;}if(status.state==="completed"||status.state==="reused"){item.state=status.state;item.progress=100;publish();continue;}}
     if(!item.uploadId){
      const buffer=await item.file.arrayBuffer();
      const sha256=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",buffer)),b=>b.toString(16).padStart(2,"0")).join("");
@@ -67,7 +67,7 @@ export default function UploadQueue(){
   <button disabled={busy||!items.some(i=>i.state==="queued")} onClick={()=>void run()}>Tải các ảnh đang chờ</button>
   <button disabled={!busy||pauseRequested||!items.some(i=>["checking","uploading","processing"].includes(i.state))} onClick={()=>{stopAfterCurrent.current=true;setPauseRequested(true);}}>Tạm dừng sau file hiện tại</button>
   {pauseRequested&&<p>{busy?"Đang hoàn tất file hiện tại trước khi dừng.":"Đã dừng hàng đợi. Chọn tải các ảnh đang chờ để tiếp tục."}</p>}
-  <p role="status">{items.filter(i=>i.state==="completed").length} đã lưu · {items.filter(i=>i.state==="failed").length} lỗi · {items.filter(i=>i.state==="queued").length} đang chờ</p>
+  <p role="status">{items.filter(i=>i.state==="completed"||i.state==="reused").length} đã lưu · {items.filter(i=>i.state==="failed").length} lỗi · {items.filter(i=>i.state==="queued").length} đang chờ</p>
   <ul>{items.map(item=><li key={item.id}>
    <strong>{item.file.name}</strong><span>{labels[item.state]}</span>
    <progress value={item.progress} max={100} aria-label={"Tiến độ "+item.file.name}/>

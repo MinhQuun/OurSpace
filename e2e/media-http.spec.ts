@@ -57,6 +57,23 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    expect(foreign.status()).toBe(200);const foreignId=(await foreign.json()).uploadId;uploads.push(foreignId);
    expect(await (await request.get(endpoint+"?uploadId="+foreignId+"&duplicates=true",{headers:headers(1)})).json()).toEqual({items:[],nextCursor:null});
    expect((await request.delete(endpoint+"?uploadId="+foreignId,{headers:headers(1)})).status()).toBe(200);
+   const reuseStart=await request.post(endpoint,{headers:headers(),data:{...intent,commandId:randomUUID()}});
+   expect(reuseStart.status()).toBe(200);const reuseId=(await reuseStart.json()).uploadId;uploads.push(reuseId);
+   const reusePath=endpoint+"?uploadId="+reuseId;
+   const choice={mediaId:completed.mediaId,confirmed:true};
+   expect((await request.patch(reusePath,{headers:headers(),data:{...choice,confirmed:false}})).status()).toBe(400);
+   expect((await request.patch(reusePath,{headers:headers(1),data:choice})).status()).toBe(403);
+   expect((await request.patch(reusePath,{headers:{Cookie:headers().Cookie},data:choice})).status()).toBe(403);
+   for(let i=0;i<2;i++){
+    const reused=await request.patch(reusePath,{headers:headers(),data:choice});expect(reused.status()).toBe(200);
+    expect(await reused.json()).toEqual({uploadId:reuseId,mediaId:completed.mediaId,state:"reused"});
+   }
+   expect(await (await request.get(reusePath,{headers:headers()})).json()).toEqual({uploadId:reuseId,mediaId:completed.mediaId,state:"reused"});
+   expect((await request.put(reusePath,{headers:{...headers(),"Content-Type":"application/octet-stream"},data:bytes})).status()).toBe(409);
+   const unused=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=$1",[reuseId])).rows[0];
+   const missing=await request.get("http://127.0.0.1:55435/object/media/"+unused.object_key,{headers:storageHeaders});
+   expect(missing.ok()).toBe(false);
+   expect((await owner.query("SELECT count(*)::int AS n FROM m02.media WHERE uploaded_by=$1 AND mime_type=$2",[users[0],intent.mimeType])).rows[0].n).toBe(1);
    const binary=(await owner.query("SELECT object_key FROM app_internal.binary_objects WHERE resource_id=$1",[completed.mediaId])).rows[0];
    const stored=await request.get("http://127.0.0.1:55435/object/media/"+binary.object_key,{headers:storageHeaders});
    expect(await stored.body()).toEqual(bytes);

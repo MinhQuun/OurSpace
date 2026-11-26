@@ -19,7 +19,7 @@ export default function RecoveryPanel({disabled,onRecover,onSignedOut}:{disabled
    if(response.status===401){setItems([]);onSignedOut();return;}if(!response.ok)throw new Error();
    const state=(await response.json()).state;
    if(state==="cancelled"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Phiên này đã bị hủy.");return;}
-   if(state==="completed"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Ảnh này đã được lưu; không cần tải lại.");return;}
+   if(state==="completed"||state==="reused"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Ảnh này đã được lưu; không cần tải lại.");return;}
    if(file.size!==item.byteSize){setMessage("File đã chọn không khớp bản đang phục hồi.");return;}
    const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())),b=>b.toString(16).padStart(2,"0")).join("");
    if(digest!==item.sha256){setMessage("File đã chọn không khớp bản đang phục hồi.");return;}
