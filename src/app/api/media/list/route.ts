@@ -22,9 +22,8 @@ export const GET = async (request: NextRequest) => {
       (origin !== null && origin !== auth.origin)
     )
       return json({ error: "forbidden" }, 403);
-    const match = /^[0-9a-f-]{36}:([A-Za-z0-9_-]{43})$/.exec(
-      request.cookies.get("ourspace_session")?.value ?? "",
-    );
+    const cookies=(request.headers.get("cookie")??"").split(";").map(value=>value.trim()).filter(value=>value.startsWith("ourspace_session="));
+    const match=cookies.length===1 ? /^ourspace_session=[0-9a-f-]{36}:([A-Za-z0-9_-]{43})$/.exec(cookies[0]) : null;
     if (!match || !(await auth.sessions.actor(match[1])))
       return json({ error: "unauthenticated" }, 401);
     const budget = await auth.pairing.consumeRequest(match[1], "media_list");
@@ -37,17 +36,8 @@ export const GET = async (request: NextRequest) => {
       return response;
     }
     const params = request.nextUrl.searchParams;
-    const keys = [...params.keys()];
-    if (keys.some((key) => key !== "limit"))
-      return json({ error: "invalid_input" }, 400);
-    const limit = params.get("limit");
-    if (limit !== null && !/^[1-9][0-9]{0,2}$/.test(limit))
-      return json({ error: "invalid_input" }, 400);
-    const media = await auth.media.list(
-      match[1],
-      limit ? Number(limit) : 50,
-    );
-    return json({ media });
+    if([...params.keys()].some(key=>key!=="after")||params.getAll("after").length>1) return json({error:"invalid_input"},400);
+    return json(await auth.media.page(match[1],params.get("after")??undefined));
   } catch (error) {
     const reason =
       error instanceof AuthProviderError
