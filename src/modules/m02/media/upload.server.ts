@@ -21,6 +21,7 @@ type Upload = {
   bucket: string;
   object_key: string;
   media_id: string | null;
+  cancelled_at: Date | null;
 };
 const uuid = (v: unknown): v is string =>
   typeof v === "string" &&
@@ -86,7 +87,7 @@ export class MediaUploadService {
     const token = hash(session);
     if (!uuid(uploadId)) throw new AuthProviderError("invalid_input");
     const result = await this.db.query<Upload>(
-      "SELECT * FROM app_internal.read_media_upload($1,$2)",
+      "SELECT * FROM app_internal.read_media_upload_state($1,$2)",
       [token, uploadId],
     );
     if (!result.rows[0]) throw new AuthProviderError("denied");
@@ -106,8 +107,14 @@ export class MediaUploadService {
     return {
       uploadId: item.id,
       mediaId: item.media_id,
-      state: item.media_id ? "completed" : "pending",
+      state: item.cancelled_at ? "cancelled" : item.media_id ? "completed" : "pending",
     };
+  }
+  async cancel(session: string, uploadId: string) {
+    const token=hash(session);
+    if (!uuid(uploadId)) throw new AuthProviderError("invalid_input");
+    await this.db.query("SELECT app_internal.cancel_media_upload($1,$2)",[token,uploadId]);
+    return {uploadId,state:"cancelled"};
   }
   async upload(
     session: string,
@@ -116,6 +123,7 @@ export class MediaUploadService {
     signal?: AbortSignal,
   ) {
     const { token, item } = await this.owned(session, uploadId);
+    if (item.cancelled_at) throw new AuthProviderError("denied");
     const verified = await validateImage(input, item.mime_type, this.limits);
     if (
       verified.byteSize !== Number(item.byte_size) ||

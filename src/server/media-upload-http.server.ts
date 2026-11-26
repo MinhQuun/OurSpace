@@ -13,13 +13,13 @@ export function mediaUploadHandler(d: { origin: string; maxBytes: number; upload
   const json = (value: unknown,status=200) => Response.json(value,{status,headers});
   try {
    const method=request.method;
-   if (!["POST","GET","PUT"].includes(method)) { headers.set("Allow","GET, POST, PUT"); return json({error:"method_not_allowed"},405); }
+   if (!["POST","GET","PUT","DELETE"].includes(method)) { headers.set("Allow","GET, POST, PUT, DELETE"); return json({error:"method_not_allowed"},405); }
    const origin=request.headers.get("origin");
    if (request.headers.get("sec-fetch-site")==="cross-site" || (method!=="GET" ? origin!==d.origin : origin!==null && origin!==d.origin)) return json({error:"forbidden"},403);
    const cookies=(request.headers.get("cookie")??"").split(";").map(s=>s.trim()).filter(s=>s.startsWith("ourspace_session="));
    const match=cookies.length===1 ? /^ourspace_session=[0-9a-f-]{36}:([A-Za-z0-9_-]{43})$/.exec(cookies[0]) : null;
    if (!match || !(await d.sessions.actor(match[1]))) return json({error:"unauthenticated"},401);
-   const action=method==="POST" ? "media_upload_begin" : method==="GET" ? "media_upload_status" : "media_upload_bytes";
+   const action=method==="POST" ? "media_upload_begin" : method==="GET" ? "media_upload_status" : method==="DELETE" ? "media_upload_cancel" : "media_upload_bytes";
    const budget=await d.budgets.consumeRequest(match[1],action);
    if (!budget.allowed) { headers.set("Retry-After",String(budget.retry_after)); return json({error:"rate_limited"},429); }
    const url=new URL(request.url), ids=url.searchParams.getAll("uploadId");
@@ -30,8 +30,18 @@ export function mediaUploadHandler(d: { origin: string; maxBytes: number; upload
    }
    if (method==="POST" ? !!url.search : ids.length!==1 || [...url.searchParams.keys()].some(k=>k!=="uploadId")) return json({error:"invalid_input"},400);
    if (method==="GET") return json(await d.uploads.status(match[1],ids[0]));
+   if (method==="DELETE") {
+    const reader=request.body?.getReader();
+    if (reader) {
+     try { for (;;) { const part=await reader.read(); if(part.done)break;
+      if(part.value.byteLength){await reader.cancel();return json({error:"invalid_input"},400);}
+     }} finally {reader.releaseLock();}
+    }
+    return json(await d.uploads.cancel(match[1],ids[0]));
+   }
+
    if (request.headers.get("content-type")?.split(";")[0].trim() !== (method==="POST" ? "application/json" : "application/octet-stream")) return json({error:"invalid_input"},400);
-   if (method==="PUT") await d.uploads.status(match[1],ids[0]);
+   if (method==="PUT" && (await d.uploads.status(match[1],ids[0])).state==="cancelled") return json({error:"denied"},403);
    const limit=method==="POST" ? 4096 : d.maxBytes;
    const length=request.headers.get("content-length");
    if (length!==null && (!/^\d+$/.test(length) || Number(length)>limit)) return json({error:"too_large"},413);

@@ -7,3 +7,5 @@ async function handle(request: Request) {
 export const POST=handle;
 export const GET=handle;
 export const PUT=handle;
+
+export const DELETE=handle;

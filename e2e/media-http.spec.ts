@@ -52,6 +52,17 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    expect((await (await request.get(endpoint,{headers:headers()})).json()).items).toEqual([]);
 
   }
+  const cancelled=await request.post(endpoint,{headers:headers(),data:{commandId:randomUUID(),title:"Cancel synthetic",mimeType:"image/png",byteSize:3,sha256:"a".repeat(64)}});
+  const cancelId=(await cancelled.json()).uploadId;uploads.push(cancelId);
+  const cancelPath=endpoint+"?uploadId="+cancelId;
+  expect((await request.delete(cancelPath,{headers:headers(1)})).status()).toBe(403);
+  expect((await request.delete(cancelPath,{headers:{Cookie:headers().Cookie}})).status()).toBe(403);
+  expect((await request.delete(cancelPath,{headers:headers(),data:{confirm:true}})).status()).toBe(400);
+  for(let i=0;i<2;i++) expect((await request.delete(cancelPath,{headers:headers()})).status()).toBe(200);
+  expect(await (await request.get(cancelPath,{headers:headers()})).json()).toEqual({uploadId:cancelId,mediaId:null,state:"cancelled"});
+  expect((await request.put(cancelPath,{headers:{...headers(),"Content-Type":"application/octet-stream"},data:Buffer.from("bad")})).status()).toBe(403);
+  expect((await request.delete(endpoint+"?uploadId="+uploads[0],{headers:headers()})).status()).toBe(409);
+  expect((await (await request.get(endpoint,{headers:headers()})).json()).items).toEqual([]);
   const extra=(await owner.query("SELECT app_internal.begin_media_upload($1,gen_random_uuid(),'Synthetic page '||n,'image/png',3,repeat('a',64)) AS id FROM generate_series(1,52) n",[createHash("sha256").update(tokens[0]).digest("hex")])).rows.map(row=>row.id);
   uploads.push(...extra);
   const page1=await (await request.get(endpoint,{headers:headers()})).json();
