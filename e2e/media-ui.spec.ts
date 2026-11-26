@@ -26,6 +26,24 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   expect(rows).toHaveLength(2);
   for(const row of rows){const stored=await request.get("http://127.0.0.1:55435/object/media/"+row.object_key,{headers});expect(await stored.body()).toEqual(row.title==="first.png"?png:jpg);}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  const intent={commandId:randomUUID(),title:"recover.png",mimeType:"image/png",byteSize:png.length,sha256:createHash("sha256").update(png).digest("hex")};
+  const reserved=await context.request.post("/api/media/upload",{headers:{Origin:"http://127.0.0.1:3103"},data:intent});
+  expect(reserved.status()).toBe(200);const uploadId=(await reserved.json()).uploadId;
+  page.on("dialog",dialog=>dialog.accept());
+  await page.reload();
+  await page.getByRole("button",{name:"Tìm upload chưa hoàn tất"}).click();
+  const recovery=page.getByRole("region",{name:"Phục hồi upload"});
+  await expect(recovery.getByText("first.png",{exact:true})).toHaveCount(0);
+  const wrong=Buffer.from(png);wrong[wrong.length-1]^=1;
+  await page.getByLabel("Chọn lại recover.png",{exact:true}).setInputFiles({name:"wrong.png",mimeType:"image/png",buffer:wrong});
+  await expect(recovery.getByRole("status")).toHaveText("File đã chọn không khớp bản đang phục hồi.");
+  await page.getByLabel("Chọn lại recover.png",{exact:true}).setInputFiles({name:"recover.png",mimeType:"image/png",buffer:png});
+  await expect(recovery.getByRole("status")).toContainText("Đã thêm vào hàng đợi");
+  await page.getByRole("button",{name:"Tải các ảnh đang chờ"}).click();
+  await expect(page.getByText("1 đã lưu · 0 lỗi · 0 đang chờ",{exact:true})).toBeVisible();
+  const completed=(await owner.query("SELECT media_id FROM m02.upload_items WHERE id=$1",[uploadId])).rows[0].media_id;
+  expect(completed).toBeTruthy();
+  expect((await owner.query("SELECT count(*)::integer n FROM m02.media WHERE uploaded_by=$1",[user])).rows[0].n).toBe(3);
   await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[session]);
   await page.getByLabel("Chọn ảnh").setInputFiles({name:"again.png",mimeType:"image/png",buffer:png});
   await page.getByRole("button",{name:"Tải các ảnh đang chờ"}).click();

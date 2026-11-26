@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import RecoveryPanel from "./recovery-panel";
 import styles from "./upload.module.css";
 type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing"|"completed"|"failed";progress:number;uploadId?:string;error?:string};
 const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được"};
@@ -45,7 +46,10 @@ export default function UploadQueue(){
  if(signedOut)return <p role="alert">Phiên đăng nhập đã kết thúc. <a href="/account">Đăng nhập lại</a></p>;
  return <section aria-label="Hàng đợi tải ảnh" className={styles.queue}>
   <p>Ảnh được lưu riêng tư. Chọn nhiều ảnh JPEG, PNG hoặc WebP; từng file được xử lý độc lập.</p>
-  <p>HEIC và video chưa có trong luồng tải này. Giữ trang mở trong khi tải; hàng đợi hiện chưa được giữ lại sau khi tải lại trang.</p>
+  <p>HEIC và video chưa có trong luồng tải này. Sau khi tải lại trang, bạn có thể phục hồi các phiên đã tạo trên server bằng cách chọn lại file.</p>
+  <RecoveryPanel disabled={busy} onSignedOut={()=>{queue.current=[];setSignedOut(true);publish();}} onRecover={(id,file)=>{
+   if(!queue.current.some(item=>item.uploadId===id))queue.current.push({id:crypto.randomUUID(),file,uploadId:id,state:"queued",progress:0});publish();
+  }}/>
   <label>Chọn ảnh<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event=>{
    queue.current.push(...Array.from(event.target.files??[]).map(file=>({id:crypto.randomUUID(),file,state:"queued" as const,progress:0})));publish();event.target.value="";
   }}/></label>
