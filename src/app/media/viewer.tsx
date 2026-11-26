@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "./viewer.module.css";
+import MetadataEditor, { type MediaDetail } from "./metadata-editor";
 
 export type ViewerItem = { id: string; title: string; mimeType: string; byteSize: number; createdAt: string };
 
-function ImageView({ item, move, denied }: {
-  item: ViewerItem; move: (step: number) => void; denied: () => void;
+function ImageView({ item, move, denied, updated }: {
+  item: ViewerItem; move: (step: number) => void; denied: () => void; updated: (item: ViewerItem) => void;
 }) {
   const [source, setSource] = useState("");
-  const [detail, setDetail] = useState<(ViewerItem & { description: string | null; updatedAt: string; version: string }) | null>(null);
+  const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [error, setError] = useState("");
   const [zoom, setZoom] = useState(1);
   const gesture = useRef<{ x: number; distance: number; zoom: number } | null>(null);
@@ -78,13 +79,14 @@ function ImageView({ item, move, denied }: {
         <p>Đang xem bản preview WebP. File gốc: {detail.mimeType} · {detail.byteSize.toLocaleString("vi-VN")} byte.</p>
         <p>Ngày tải lên: <time dateTime={detail.createdAt}>{new Date(detail.createdAt).toLocaleString("vi-VN")}</time></p>
         <p>Cập nhật: <time dateTime={detail.updatedAt}>{new Date(detail.updatedAt).toLocaleString("vi-VN")}</time></p>
+        <MetadataEditor key={detail.version} detail={detail} denied={denied} saved={current => { setDetail(current); updated(current); }} />
       </details>
     </>}
   </>;
 }
 
-export default function Viewer({ items, selected, select, close, denied }: {
-  items: ViewerItem[]; selected: string; select: (id: string) => void; close: () => void; denied: () => void;
+export default function Viewer({ items, selected, select, close, denied, updated }: {
+  items: ViewerItem[]; selected: string; select: (id: string) => void; close: () => void; denied: () => void; updated: (item: ViewerItem) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const historyMarker = useRef<string | null>(null);
@@ -119,6 +121,8 @@ export default function Viewer({ items, selected, select, close, denied }: {
   const move = (step: number) => { const next = items[index + step]; if (next) select(next.id); };
   return <dialog ref={dialog} className={styles.dialog} aria-label="Xem ảnh" onCancel={event => { event.preventDefault(); dismiss(); }}
     onKeyDown={event => {
+      const target = event.target as HTMLElement;
+      if (target.closest("input, textarea, select") || target.isContentEditable) return;
       if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
       if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
     }}>
@@ -135,6 +139,6 @@ export default function Viewer({ items, selected, select, close, denied }: {
       }}>Toàn màn hình</button>
     </div>
     {fullscreenError && <p role="status">{fullscreenError}</p>}
-    {item && <ImageView key={item.id} item={item} move={move} denied={denied} />}
+    {item && <ImageView key={item.id} item={item} move={move} denied={denied} updated={updated} />}
   </dialog>;
 }

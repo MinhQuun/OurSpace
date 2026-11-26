@@ -1814,3 +1814,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0108 exposes media_metadata_edit_context: private owner gets null-space choice; active shared owner/editor gets matching Space; viewer/frozen/foreign/revoked get no choice. Detail response adds edit object or null in the same SQL snapshot as safe metadata. No account/profile/grant listing disclosed. UI hint only; PATCH command always rechecks locks/ACL/version.
 - Lint/typecheck/migration checksum/provision/build PASS. PostgreSQL lifecycle1/1 PASS13.010s verifies private/foreign/viewer/editor/owner/revocation/frozen contexts; Next real backend HTTP1/1 PASS22.3s verifies private edit context and existing metadata mutation/denials. Fixed test fixture single-column JSON aggregation; production function unchanged. Diff/secret scan clean.
 - Next: metadata edit form consuming detail.edit, preserving pending command on uncertain network outcome and reporting conflicts. Stage04/full P0 incomplete.
+
+- Edit context commit85ed690335f4bf35c1c5c8d15002e507051f1d4d PUSHED; origin/master exact SHA verified. Knowns OS-Z3FCDZ done.
+
+## Task04.41 - Viewer metadata editor (Knowns OS-XQ93CD)
+- Title/description form appears only with server edit context, sends exact version/Space and a retained command payload. Uncertain network outcome locks fields for identical retry; 409 preserves draft and offers explicitly destructive reload of current metadata. Successful reread updates viewer and gallery. Form content is not persisted locally; unmount aborts requests. Arrow keys inside form fields no longer navigate viewer.
+- Lint/typecheck/build PASS. Actual local PostgreSQL/Supabase Storage desktop+Pixel7 suites2/2 PASS42.0s: title/description saves, response aborted after actual PATCH commit then identical retry with one audit event, stale version conflict and explicit reload, cursor arrow behavior, previous gallery/viewer/upload regressions. Initial test locator ambiguity with textarea fixed. Secret/diff scan clean.
+- Previous execution interruption was automatic approval review credit exhaustion; resumed successfully on2026-11-27. No blocked action was bypassed.
+- Remaining: unsaved-draft exit handling and shared-editor UI lifecycle tests, captured/memory dates/tags, broader ML-07 and full Stage04 P0. No claim of completed M02.
