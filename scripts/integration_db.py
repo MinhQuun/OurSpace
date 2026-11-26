@@ -432,8 +432,10 @@ COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
         with self.assertRaises(subprocess.CalledProcessError): read('c')
         sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError): read()
-        sql(f"UPDATE m10.sessions SET expires_at=now()-interval '1 second' WHERE account_id='{b}';",self.database)
-        with self.assertRaises(subprocess.CalledProcessError): read('b')
+        # A historical session must still satisfy expires_at > created_at.
+        sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,created_at,expires_at) VALUES ('{uuid.uuid4()}','{b}',repeat('d',64),now()-interval '2 hours',now()-interval '1 hour');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): read('d')
+        self.assertEqual(read('b')['account_id'],b)
         self.assertEqual(sql("SELECT count(*) FROM m10.export_jobs;",self.database),'0')
         self.assertEqual(sql("SELECT count(*) FROM app_internal.command_receipts;",self.database),'0')
 

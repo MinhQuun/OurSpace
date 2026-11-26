@@ -1728,3 +1728,15 @@ Updated: 2026-10-29 (Asia/Saigon)
 - GET /api/media/preview/{mediaId} binds authenticated session/origin checks to preview service; private no-store, same-origin CORP, nosniff/CSP and inline WebP response. Invalid query/ID rejected, Range unsupported, inaccessible/missing source404. Migration0105 adds dedicated120/min preview budget. Runtime requires explicit MEDIA_PREVIEW_MAX_EDGE plus existing decode/storage limits; example contains no secrets and local operation docs updated.
 - Local migration/provisioning/lint/typecheck/build PASS. Actual Next HTTP1/1 PASS9.2s: PNG/JPEG/WebP uploads produce decodable WebP within8px test bound with no EXIF; foreign owner404, no session401, foreign Origin403, Range416, unknown query400, revoked session401. Existing upload/duplicate/gallery checks retained. No signed URL or storage coordinates returned.
 - Next: gallery UI with authenticated previews, empty/error/pagination states and desktop/mobile verification. This is still-image thumbnail delivery, not full media viewer/video playback/HEIC support. Stage04/full P0 incomplete.
+
+## Task04.30 - Authenticated inline thumbnail endpoint
+
+- Added GET /api/media/preview?mediaId= for private, metadata-free WebP thumbnails with a maximum edge of 512 pixels. It uses the existing live session and logical source authorization before and after image processing, with same-origin/no-store responses and an independent local 120/min request budget. Missing and unreadable sources return the same 404; no storage coordinates or credentials are returned.
+- Fixed two regressions found while verifying the checkpoint: a test-only expired session fixture now obeys the existing DB constraint; concurrent retries on the same upload can recognize their own finalized media without weakening duplicate enforcement for different intents.
+- Local lint/typecheck/build and 31 unit tests PASS. Production Next HTTP suite PASS against real PostgreSQL 17 and a local Storage HTTP test double: authorized WebP bytes, private-vs-missing response parity, wrong-origin/unauthenticated/revoked denials, and concurrent upload retries. This run was not against the production Supabase Storage service.
+- Next: desktop/mobile gallery using the secured image endpoint, then full viewer/search and the remaining M02 P0 flows. Stage04/full P0 remain in progress. Remote verification is reported separately.
+
+
+## Authorized merge reconciliation
+- User authorized normal merge on2026-11-26. Preserve both histories and remote concurrent-retry/expired-session fixes. Both preview URL forms share one strict handler; configured edge limit retained. Migration0105 SQL is identical on both sides except final blank line; retain already-applied local bytes/checksum. No migration history rewritten. Remote environments that applied its alternate checksum require explicit reconciliation before migrating.
+- Prior handoff blocker is resolved by this authorization; validation/push pending. Original uncommitted handoff checkpoint retained in git stash as backup; unrelated WIP untouched.
