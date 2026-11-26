@@ -44,3 +44,14 @@ succeeds only when the stored bytes match exactly; conflicting bytes never repla
 an existing object. It snapshots payload and location before asynchronous work.
 The caller must supply an authorized upload reservation and perform media format
 validation; this transport alone does not make the M02 upload flow complete.
+
+
+Upload HTTP: POST /api/media/upload accepts commandId/title/mimeType/byteSize/sha256;
+GET ?uploadId= reads owner-only status; PUT ?uploadId= accepts application/octet-stream.
+Writes require matching Origin and a live session cookie. Configure server-only
+SUPABASE_STORAGE_URL, SUPABASE_STORAGE_SERVER_TOKEN and explicit positive integer
+MEDIA_MAX_UPLOAD_BYTES, MEDIA_MAX_IMAGE_PIXELS, MEDIA_DECODE_TIMEOUT_SECONDS.
+These are deployment limits, not approved business quotas. No runtime fallback
+credentials or limits are assumed. Provision a private media bucket before use.
+Never expose the Storage server token with NEXT_PUBLIC. The current validator
+accepts JPEG/PNG/WebP; HEIC and video support is still required before M02 acceptance.

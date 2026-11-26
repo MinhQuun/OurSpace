@@ -1,3 +1,4 @@
+import { mediaUploadHandler } from "../src/server/media-upload-http.server";
 import sharp from "sharp";
 import { MediaUploadService } from "../src/modules/m02/media/upload.server";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
@@ -493,13 +494,39 @@ test("upload service persists real private bytes and rechecks ownership after I/
     const bytes = await sharp({create:{width:8,height:8,channels:3,background:"red"}}).png().toBuffer();
     const intent = { commandId:randomUUID(),title:"Synthetic upload",mimeType:"image/png",byteSize:bytes.length,
       sha256:createHash("sha256").update(bytes).digest("hex") };
-    const started = await service.begin(tokens[0],intent); uploads.push(started.uploadId);
+    const handler=mediaUploadHandler({origin:"http://127.0.0.1:3102",maxBytes:limits.maxBytes,uploads:service,
+      sessions:new SessionService(db,new AuthProvider("http://127.0.0.1:55433")),budgets:new PairingService(db)});
+    const call=(method:string,path="",body?:BodyInit,i=0,extra:Record<string,string>={})=>handler(new Request("http://127.0.0.1:3102/api/media/upload"+path,{
+      method,headers:{Cookie:`ourspace_session=${users[i]}:${tokens[i]}`,Origin:"http://127.0.0.1:3102",
+      "Content-Type":method==="POST" ? "application/json" : "application/octet-stream",...extra},body}));
+    expect((await call("POST","",JSON.stringify(intent),0,{Origin:"https://foreign.invalid"})).status).toBe(403);
+    expect((await call("POST","",JSON.stringify(intent),0,{Cookie:""})).status).toBe(401);
+    expect((await call("POST","",JSON.stringify({...intent,objectKey:randomUUID()}))).status).toBe(400);
+    expect((await call("POST","","{" )).status).toBe(400);
+    expect((await call("POST","","x".repeat(5000))).status).toBe(413);
+    const begun=await call("POST","",JSON.stringify(intent)); expect(begun.status).toBe(200);
+    const started=await begun.json(); uploads.push(started.uploadId);
+    const path="?uploadId="+started.uploadId;
+    expect((await call("GET",path,undefined,1)).status).toBe(403);
+    expect((await call("GET",path+"&uploadId="+started.uploadId)).status).toBe(400);
+    expect((await call("PUT",path,bytes,1)).status).toBe(403);
+    expect((await call("PUT",path,Buffer.alloc(limits.maxBytes+1))).status).toBe(413);
+    const posted=await call("PUT",path,bytes); expect(posted.status).toBe(200);
+    expect(posted.headers.get("cache-control")).toBe("no-store");
+    expect(await (await call("PUT",path,bytes)).json()).toEqual(await posted.json());
+    expect(await (await call("GET",path)).json()).toMatchObject({state:"completed"});
+    await owner.query("UPDATE app_internal.pairing_request_budgets SET requests=10000,window_started_at=clock_timestamp() WHERE account_id=$1 AND action='media_upload_bytes'",[users[0]]);
+    const limited=await call("PUT",path,bytes); expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await call("GET",path)).status).toBe(200);
+
+
     expect(await service.begin(tokens[0],intent)).toEqual(started);
-    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"pending",mediaId:null});
+    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"completed"});
     await expect(service.upload(tokens[1],started.uploadId,bytes)).rejects.toThrow();
     await expect(service.status(tokens[1],started.uploadId)).rejects.toThrow();
     await expect(service.upload(tokens[0],started.uploadId,Buffer.from("corrupt"))).rejects.toThrow();
-    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"pending"});
+    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"completed"});
     const results = await Promise.all([service.upload(tokens[0],started.uploadId,bytes),service.upload(tokens[0],started.uploadId,bytes)]);
     expect(results[0]).toEqual(results[1]);
     expect(await service.upload(tokens[0],started.uploadId,bytes)).toEqual(results[0]);
