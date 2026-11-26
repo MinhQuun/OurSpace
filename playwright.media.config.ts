@@ -8,6 +8,6 @@ export default defineConfig({
  webServer:{command:"npm run start -- --port 3103",url:"http://127.0.0.1:3103/api/health",reuseExistingServer:false,timeout:60000,
  env:{APP_ORIGIN:"http://127.0.0.1:3103",RECOVERY_COOKIE_KEY:randomBytes(32).toString("base64url"),
  SUPABASE_AUTH_URL:"http://127.0.0.1:55433",SUPABASE_STORAGE_URL:"http://127.0.0.1:55435",
- SUPABASE_STORAGE_SERVER_TOKEN:localStorageToken(),MEDIA_MAX_UPLOAD_BYTES:"100000",MEDIA_MAX_IMAGE_PIXELS:"10000",MEDIA_DECODE_TIMEOUT_SECONDS:"5",MEDIA_PREVIEW_MAX_EDGE:"8",
+ SUPABASE_STORAGE_SERVER_TOKEN:localStorageToken(),MEDIA_MAX_UPLOAD_BYTES:"100000",MEDIA_MAX_IMAGE_PIXELS:"10000",MEDIA_DECODE_TIMEOUT_SECONDS:"5",MEDIA_PREVIEW_MAX_EDGE:"8",MEDIA_VIEWER_MAX_EDGE:"64",
  DATABASE_URL:`postgresql://ourspace_runtime:${readFileSync(".local/runtime-db-password","utf8").trim()}@127.0.0.1:55432/ourspace`}}
 });

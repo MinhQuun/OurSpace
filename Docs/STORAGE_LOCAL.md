@@ -63,3 +63,10 @@ The runtime uses the same upload byte/pixel/decode limits. Output strips metadat
 auto-orients and uses the first frame; it is not an original download or video
 stream. Private/missing/domain-denied sources return404; no signed Storage URL is
 returned. Run provisioning after migration0105 for the dedicated preview budget.
+
+Viewer rendition: GET /api/media/view/{mediaId} uses the same authorization,
+metadata stripping and shared preview request budget. Set MEDIA_VIEWER_MAX_EDGE
+explicitly (positive integer, at most4096) independently of thumbnail size.
+Choose a larger viewer bound appropriate to the deployment; images are never
+upscaled. It returns a first-frame WebP preview, not original bytes, and does not
+grant Download permission. This endpoint does not implement video playback.

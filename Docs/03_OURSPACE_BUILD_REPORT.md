@@ -1751,3 +1751,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Added /media with newest-uploaded cards, native authenticated previews, upload navigation, explicit load-more, loading/empty/error/retry and unavailable-preview states. No private data embedded in static HTML or passed through image optimization. Session denial clears cards; hidden-document transitions abort requests and clear data, visible/pageshow reloads current ACL list.
 - Covers the incremental gallery foundation of M02 D01/D02, ML-01/ML-02, AC-M02-11/31/48/49; does not claim those full ACs complete. Lint/typecheck/build PASS. Desktop and Pixel7 browser flows 2/2 PASS21.9s against real local PostgreSQL/Supabase Storage: empty state, actual uploaded image previews, no horizontal overflow, network failure/retry, 50+4 pagination, unavailable-preview fallback, revoked-session data clearing. Pagination fixtures are synthetic metadata only, not evidence of video ingestion/playback. Diff/secret scan clean.
 - Remaining: viewer, filtering/search, date grouping, multi-select/actions, albums/favorites, metadata, video/HEIC and remaining Stage04 P0. Live permission invalidation while continuously visible is not yet implemented. Next task: media viewer backed by current source authorization.
+
+- Gallery commit dfd8a889d491dde7be73f1e832f6de72b1bb5dc4 PUSHED; origin/master exact SHA verified. Knowns OS-D8VE8Y done.
+
+## Task04.32 - Large authorized viewer rendition (Knowns OS-4BMRE8)
+- Added /api/media/view/{mediaId} with independent explicit MEDIA_VIEWER_MAX_EDGE. Reuses live source ACL before/after decoding, metadata stripping, no-store/same-origin response and shared media_preview budget. No original download or Storage URL. Existing thumbnail configuration and behavior preserved.
+- Lint/typecheck/build and 31 unit tests PASS. Actual PostgreSQL/Supabase Storage Next HTTP1/1 PASS14.8s: same source yields thumbnail8x7 vs viewer12x10 under viewer64px bound, WebP/no EXIF/ICC, foreign404, unauthenticated401 and revoked401. Secret scan/diff check clean.
+- Increment of ML-07/D01/D02; viewer UI, navigation/zoom/touch/info and video remain incomplete. Next: connect gallery to viewer UI.

@@ -5,10 +5,11 @@ import { createDatabase } from "./database.server";
 import { mediaPreviewHandler } from "./media-preview-http.server";
 import { PrivateStorage } from "./private-storage.server";
 
-let handler: ReturnType<typeof mediaPreviewHandler> | undefined;
+const handlers: Partial<Record<"thumbnail" | "viewer", ReturnType<typeof mediaPreviewHandler>>> = {};
 
-export function previewRuntime() {
-  if (handler) return handler;
+export function previewRuntime(kind: "thumbnail" | "viewer" = "thumbnail") {
+  const cached = handlers[kind];
+  if (cached) return cached;
   const auth = authRuntime();
   const limits = {
     maxBytes: Number(process.env.MEDIA_MAX_UPLOAD_BYTES),
@@ -20,11 +21,12 @@ export function previewRuntime() {
     async () => process.env.SUPABASE_STORAGE_SERVER_TOKEN ?? "",
     limits.maxBytes,
   );
-  handler = mediaPreviewHandler({
+  const handler = mediaPreviewHandler({
     origin: auth.origin,
     sessions: auth.sessions,
     budgets: auth.pairing,
-    previews: new MediaPreviewService(createDatabase(process.env.DATABASE_URL ?? ""), storage, limits, Number(process.env.MEDIA_PREVIEW_MAX_EDGE)),
+    previews: new MediaPreviewService(createDatabase(process.env.DATABASE_URL ?? ""), storage, limits, Number(kind === "viewer" ? process.env.MEDIA_VIEWER_MAX_EDGE : process.env.MEDIA_PREVIEW_MAX_EDGE)),
   });
+  handlers[kind] = handler;
   return handler;
 }
