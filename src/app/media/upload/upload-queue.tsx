@@ -6,7 +6,8 @@ type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing
 const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được",cancelled:"Đã hủy"};
 class UploadError extends Error { constructor(public status:number){super("Upload failed");} }
 export default function UploadQueue(){
- const [items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false),[signedOut,setSignedOut]=useState(false);
+ const [items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false),[signedOut,setSignedOut]=useState(false),[pauseRequested,setPauseRequested]=useState(false);
+ const stopAfterCurrent=useRef(false);
  const queue=useRef<Item[]>([]),running=useRef(false),alive=useRef(true),xhr=useRef<XMLHttpRequest|null>(null);
  const publish=()=>{if(alive.current)setItems(queue.current.map(i=>({...i})));};
  useEffect(()=>{alive.current=true; const warn=(event:BeforeUnloadEvent)=>{if(queue.current.some(i=>i.state!=="completed"&&i.state!=="cancelled")){event.preventDefault();event.returnValue="";}};
@@ -22,9 +23,9 @@ export default function UploadQueue(){
   request.onerror=()=>reject(new UploadError(0));request.onabort=()=>reject(new UploadError(0));request.send(item.file);
  });}
  async function run(only?:string){
-  if(running.current)return;running.current=true;setBusy(true);
+  if(running.current)return;running.current=true;stopAfterCurrent.current=false;setPauseRequested(false);setBusy(true);
   try {for(const item of queue.current){
-   if(!alive.current)break;
+   if(!alive.current||stopAfterCurrent.current)break;
    if(item.state==="completed" || item.state==="cancelled" || (only?item.id!==only:item.state!=="queued"))continue;
    item.error=undefined;item.state="checking";publish();
    try {
@@ -64,6 +65,8 @@ export default function UploadQueue(){
    queue.current.push(...Array.from(event.target.files??[]).map(file=>({id:crypto.randomUUID(),file,state:"queued" as const,progress:0})));publish();event.target.value="";
   }}/></label>
   <button disabled={busy||!items.some(i=>i.state==="queued")} onClick={()=>void run()}>Tải các ảnh đang chờ</button>
+  <button disabled={!busy||pauseRequested||!items.some(i=>["checking","uploading","processing"].includes(i.state))} onClick={()=>{stopAfterCurrent.current=true;setPauseRequested(true);}}>Tạm dừng sau file hiện tại</button>
+  {pauseRequested&&<p>{busy?"Đang hoàn tất file hiện tại trước khi dừng.":"Đã dừng hàng đợi. Chọn tải các ảnh đang chờ để tiếp tục."}</p>}
   <p role="status">{items.filter(i=>i.state==="completed").length} đã lưu · {items.filter(i=>i.state==="failed").length} lỗi · {items.filter(i=>i.state==="queued").length} đang chờ</p>
   <ul>{items.map(item=><li key={item.id}>
    <strong>{item.file.name}</strong><span>{labels[item.state]}</span>

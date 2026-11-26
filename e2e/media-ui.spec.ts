@@ -17,6 +17,20 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   const png=await sharp({create:{width:10,height:8,channels:3,background:"red"}}).png().toBuffer();
   const jpg=await sharp({create:{width:9,height:7,channels:3,background:"blue"}}).jpeg().toBuffer();
   await page.getByLabel("Chọn ảnh").setInputFiles([{name:"first.png",mimeType:"image/png",buffer:png},{name:"broken.png",mimeType:"image/png",buffer:Buffer.from("bad")},{name:"last.jpg",mimeType:"image/jpeg",buffer:jpg}]);
+  let releaseFirst!:()=>void,firstReached!:()=>void;
+  const held=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  const reached=new Promise<void>(resolve=>{firstReached=resolve;});
+  let first=true;
+  await page.route("**/api/media/upload?uploadId=*",async route=>{
+   if(route.request().method()==="PUT"&&first){first=false;firstReached();await held;}
+   await route.continue();
+  });
+  await page.getByRole("button",{name:"Tải các ảnh đang chờ"}).click();
+  await reached;
+  try{await page.getByRole("button",{name:"Tạm dừng sau file hiện tại"}).click();}finally{releaseFirst();}
+  await expect(page.getByText("Đã dừng hàng đợi. Chọn tải các ảnh đang chờ để tiếp tục.",{exact:true})).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("1 đã lưu · 0 lỗi · 2 đang chờ");
+  expect((await owner.query("SELECT count(*)::int AS n FROM m02.upload_items WHERE owner_id=$1",[user])).rows[0].n).toBe(1);
   await page.getByRole("button",{name:"Tải các ảnh đang chờ"}).click();
   await expect(page.getByRole("status")).toHaveText("2 đã lưu · 1 lỗi · 0 đang chờ");
   await page.getByRole("button",{name:"Thử lại"}).click();
