@@ -116,6 +116,23 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(await (await request.get("/api/media/list",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   for(const query of ["?after=bad","?after=","?after=a&after=b","?limit=100"]){expect((await request.get("/api/media/list"+query,{headers:headers()})).status()).toBe(400);}
   expect((await request.get("/api/media/list",{headers:{...headers(),Cookie:headers().Cookie+"; "+headers().Cookie}})).status()).toBe(401);
+  const detailPath="/api/media/detail/"+galleryData.media[0].id;
+  const detail=await request.get(detailPath,{headers:headers()});
+  expect(detail.status()).toBe(200);
+  expect(detail.headers()["cache-control"]).toBe("no-store");
+  const detailMedia=(await detail.json()).media;
+  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize"].sort());
+  expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize});
+  expect(new Date(detailMedia.createdAt).toISOString()).toBe(detailMedia.createdAt);
+  const foreignDetail=await request.get(detailPath,{headers:headers(1)});
+  const missingDetail=await request.get("/api/media/detail/"+randomUUID(),{headers:headers(1)});
+  expect(foreignDetail.status()).toBe(404);expect(missingDetail.status()).toBe(404);
+  expect(await foreignDetail.json()).toEqual(await missingDetail.json());
+  expect((await request.get(detailPath)).status()).toBe(401);
+  expect((await request.get(detailPath+"?raw=true",{headers:headers()})).status()).toBe(400);
+  expect((await request.get("/api/media/detail/bad",{headers:headers()})).status()).toBe(400);
+  expect((await request.get(detailPath,{headers:{...headers(),Origin:"https://else.example"}})).status()).toBe(403);
+  expect((await request.get(detailPath,{headers:{...headers(),Cookie:headers().Cookie+"; "+headers().Cookie}})).status()).toBe(401);
   const previewPath="/api/media/preview?mediaId="+galleryData.media[0].id;
   const preview=await request.get(previewPath,{headers:headers()});
   expect(preview.status()).toBe(200);
@@ -169,6 +186,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect((await request.get("/api/media/preview/"+galleryData.media[0].id,{headers:headers()})).status()).toBe(401);
   expect((await request.get(previewPath,{headers:headers()})).status()).toBe(401);
   expect((await request.get(viewerPath,{headers:headers()})).status()).toBe(401);
+  expect((await request.get(detailPath,{headers:headers()})).status()).toBe(401);
  } finally {
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(r=>r.object_key);
   if(keys.length) expect((await request.delete("http://127.0.0.1:55435/object/media",{headers:storageHeaders,data:{prefixes:keys}})).status()).toBe(200);

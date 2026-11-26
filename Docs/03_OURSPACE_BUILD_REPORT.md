@@ -1779,3 +1779,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0106 adds read_media_detail(session hash, media ID), returning only ID/title/description/MIME/upload/update dates/media version/original byte size. Fixed search_path, PUBLIC execute revoked and explicit runtime grant; current logical-object ACL required. Storage coordinates, copy source identity, EXIF/GPS/account fields are excluded.
 - Lint/typecheck/migration checksums/runtime provisioning PASS. Actual PostgreSQL sharing lifecycle test1/1 PASS24.483s: private/missing empty parity, safe field allowlist, shared copy description/version independent from original changes, copy still readable after source trash, revoked grant/session return no detail. Diff/secret scan clean.
 - Foundation for M02 D09/ML-07 metadata; not complete metadata support. API/UI, authorized metadata updates, captured/memory dates, tags/GPS-specific policy remain pending. Next: detail HTTP endpoint and viewer info binding.
+
+- Metadata reader commit6b2e643469b7be3fbb463801d0502cab53fb0e9e PUSHED; origin/master exact SHA verified. Knowns OS-1TSXNB done.
+
+## Task04.36 - Media detail HTTP (Knowns OS-SQR69G)
+- Added GET /api/media/detail/{mediaId} and MediaService.detail. Safe field allowlist, ISO dates and exact bigint version string; no storage/source/profile fields. Strict live session, single cookie, origin/site, path/query checks; no-store and same-origin headers. Shares media_list120/min budget. Missing/private return identical404.
+- Lint/typecheck/build PASS. Actual local PostgreSQL/Supabase Storage Next HTTP1/1 PASS18.2s: valid uploaded media details/field allowlist/version/date/size, private-vs-missing parity, no session, duplicate cookie, foreign origin, invalid ID/query and revoked session. Diff/secret scan clean.
+- Next: viewer info panel uses current detail response; metadata updates/dates/tags remain pending. Stage04/full P0 incomplete.

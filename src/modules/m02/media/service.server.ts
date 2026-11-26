@@ -95,6 +95,21 @@ export class MediaService {
     if (!result.rows[0]?.id) throw new AuthProviderError("denied");
     return { id: result.rows[0].id };
   }
+  async detail(session: string, mediaId: string) {
+    const hash = digest(session);
+    if (!uuid(mediaId)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{
+      id: string; title: string; description: string | null; mime_type: string;
+      created_at: Date; updated_at: Date; version: string; byte_size: string;
+    }>("SELECT * FROM app_internal.read_media_detail($1,$2)", [hash, mediaId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id, title: row.title, description: row.description, mimeType: row.mime_type,
+      createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
+      version: row.version, byteSize: Number(row.byte_size),
+    };
+  }
   async page(session: string, after?: string) {
     const hash=digest(session);
     let beforeTime:string|null=null,beforeId:string|null=null;
