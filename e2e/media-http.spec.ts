@@ -121,8 +121,8 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(detail.status()).toBe(200);
   expect(detail.headers()["cache-control"]).toBe("no-store");
   const detailMedia=(await detail.json()).media;
-  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize"].sort());
-  expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize});
+  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit"].sort());
+  expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize,edit:{spaceId:null}});
   expect(new Date(detailMedia.createdAt).toISOString()).toBe(detailMedia.createdAt);
   const foreignDetail=await request.get(detailPath,{headers:headers(1)});
   const missingDetail=await request.get("/api/media/detail/"+randomUUID(),{headers:headers(1)});

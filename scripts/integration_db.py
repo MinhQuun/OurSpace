@@ -31,6 +31,11 @@ class MigrationIntegrationTests(unittest.TestCase):
         role='metadata_'+uuid.uuid4().hex
         sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_media_metadata(text,uuid,uuid,uuid,bigint,text,text) TO {role};",self.database)
         self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        sql(f"GRANT EXECUTE ON FUNCTION app_internal.media_metadata_edit_context(text,uuid) TO {role};",self.database)
+        def context(token='a'):
+            return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(json_build_object('space_id',c.space_id)),'[]') FROM app_internal.media_metadata_edit_context(repeat('{token}',64),'{media}') c;",self.database))
+        self.assertEqual(context(),[{'space_id':None}])
+        self.assertEqual(context('b'),[])
         binary=sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database)
         def update(version=1,title='After',token='a',command=None,space=None):
             context=f"'{space}'" if space else 'NULL'
@@ -62,17 +67,22 @@ INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','
 COMMIT;""",self.database)
         grant=str(uuid.uuid4())
         sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{media}','{a}','{b}','{space}','viewer');",self.database)
+        self.assertEqual(context(),[{'space_id':space}])
+        self.assertEqual(context('b'),[])
         with self.assertRaises(subprocess.CalledProcessError): update(version=3)
         with self.assertRaises(subprocess.CalledProcessError): update(version=3,token='b',space=space)
         sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}'; INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor');",self.database)
+        self.assertEqual(context('b'),[{'space_id':space}])
         editor_command=str(uuid.uuid4())
         self.assertEqual(update(version=3,title='Editor title',token='b',space=space,command=editor_command),media)
         self.assertEqual(update(version=3,title='Editor title',token='b',space=space,command=editor_command),media)
         self.assertEqual(update(version=4,title='Shared owner title',space=space),media)
         sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND role='editor';",self.database)
+        self.assertEqual(context('b'),[])
         with self.assertRaises(subprocess.CalledProcessError): update(version=3,title='Editor title',token='b',space=space,command=editor_command)
         sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
         for token in ['a','b']:
+            self.assertEqual(context(token),[])
             with self.assertRaises(subprocess.CalledProcessError): update(version=5,token=token,space=space)
         with self.assertRaises(subprocess.CalledProcessError): update(version=5)
         self.assertEqual(sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database),binary)

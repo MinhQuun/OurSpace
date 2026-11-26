@@ -1807,3 +1807,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - PATCH /api/media/detail/{mediaId} validates exact command fields, canonical bigint version string, nullable Space context, title/description types. Requires matching Origin/live unique session cookie; bounded16KiB streaming UTF8 JSON. Shares media_share20/min write budget; DB remains authority for edit/version/lifecycle. Returns mediaId; clients reread current metadata.
 - Lint/typecheck/build PASS. Real PostgreSQL/Supabase Storage Next HTTP1/1 PASS22.0s: successful update+same-command retry keeps version2; stale409, changed-command400, numeric version/extra field400, oversized413, foreign403, no Origin403/no session401. Existing original-image decode/integrity checks retained. Diff/secret scan clean.
 - Next: permission-aware metadata editing UI, including obtaining proper active Space context; captured/memory dates/tags remain pending. Stage04/full P0 incomplete.
+
+- Metadata PATCH commitf4b2fd0fb97f0d7734cc4f433185157a80b192af PUSHED; origin/master exact SHA verified. Knowns OS-NA47SN done.
+
+## Task04.40 - Advisory metadata edit context (Knowns OS-Z3FCDZ)
+- Migration0108 exposes media_metadata_edit_context: private owner gets null-space choice; active shared owner/editor gets matching Space; viewer/frozen/foreign/revoked get no choice. Detail response adds edit object or null in the same SQL snapshot as safe metadata. No account/profile/grant listing disclosed. UI hint only; PATCH command always rechecks locks/ACL/version.
+- Lint/typecheck/migration checksum/provision/build PASS. PostgreSQL lifecycle1/1 PASS13.010s verifies private/foreign/viewer/editor/owner/revocation/frozen contexts; Next real backend HTTP1/1 PASS22.3s verifies private edit context and existing metadata mutation/denials. Fixed test fixture single-column JSON aggregation; production function unchanged. Diff/secret scan clean.
+- Next: metadata edit form consuming detail.edit, preserving pending command on uncertain network outcome and reporting conflicts. Stage04/full P0 incomplete.
