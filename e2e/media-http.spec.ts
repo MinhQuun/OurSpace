@@ -106,6 +106,19 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(await (await request.get("/api/media/list",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   for(const query of ["?after=bad","?after=","?after=a&after=b","?limit=100"]){expect((await request.get("/api/media/list"+query,{headers:headers()})).status()).toBe(400);}
   expect((await request.get("/api/media/list",{headers:{...headers(),Cookie:headers().Cookie+"; "+headers().Cookie}})).status()).toBe(401);
+  const previewPath="/api/media/preview?mediaId="+galleryData.media[0].id;
+  const preview=await request.get(previewPath,{headers:headers()});
+  expect(preview.status()).toBe(200);
+  expect(preview.headers()).toMatchObject({"cache-control":"no-store","content-type":"image/webp","cross-origin-resource-policy":"same-origin"});
+  const thumbnail=await sharp(await preview.body()).metadata();
+  expect(thumbnail).toMatchObject({format:"webp",width:12,height:10});
+  expect(thumbnail.exif).toBeUndefined();
+  const foreignPreview=await request.get(previewPath,{headers:headers(1)});
+  const missingPreview=await request.get("/api/media/preview?mediaId="+randomUUID(),{headers:headers(1)});
+  expect(foreignPreview.status()).toBe(404);expect(missingPreview.status()).toBe(404);
+  expect(await foreignPreview.json()).toEqual(await missingPreview.json());
+  expect((await request.get(previewPath,{headers:{...headers(),Origin:"https://else.example"}})).status()).toBe(403);
+  expect((await request.get(previewPath)).status()).toBe(401);
   const additional=(await owner.query("SELECT app_internal.register_media($1,gen_random_uuid(),'Synthetic page','image/png','media',gen_random_uuid(),3,repeat('b',64)) AS id FROM generate_series(1,52)",[createHash("sha256").update(tokens[0]).digest("hex")])).rows.map(row=>row.id);
   const galleryFirst=await (await request.get("/api/media/list",{headers:headers()})).json();expect(galleryFirst.media).toHaveLength(50);
   const galleryLast=await (await request.get("/api/media/list?after="+galleryFirst.nextCursor,{headers:headers()})).json();expect(galleryLast.media).toHaveLength(8);expect(galleryLast.nextCursor).toBeNull();
@@ -133,6 +146,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect((await request.get(endpoint+"?uploadId="+uploads[0]+"&duplicates=true",{headers:headers()})).status()).toBe(401);
   expect((await request.get(endpoint,{headers:headers()})).status()).toBe(401);
   expect((await request.get("/api/media/list",{headers:headers()})).status()).toBe(401);
+  expect((await request.get(previewPath,{headers:headers()})).status()).toBe(401);
  } finally {
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(r=>r.object_key);
   if(keys.length) expect((await request.delete("http://127.0.0.1:55435/object/media",{headers:storageHeaders,data:{prefixes:keys}})).status()).toBe(200);
