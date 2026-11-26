@@ -1822,3 +1822,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Lint/typecheck/build PASS. Actual local PostgreSQL/Supabase Storage desktop+Pixel7 suites2/2 PASS42.0s: title/description saves, response aborted after actual PATCH commit then identical retry with one audit event, stale version conflict and explicit reload, cursor arrow behavior, previous gallery/viewer/upload regressions. Initial test locator ambiguity with textarea fixed. Secret/diff scan clean.
 - Previous execution interruption was automatic approval review credit exhaustion; resumed successfully on2026-11-27. No blocked action was bypassed.
 - Remaining: unsaved-draft exit handling and shared-editor UI lifecycle tests, captured/memory dates/tags, broader ML-07 and full Stage04 P0. No claim of completed M02.
+
+- Metadata editor commite301722c398c006194713755d49a8098aa2776f9 PUSHED; origin/master exact SHA verified. Knowns OS-XQ93CD done.
+
+## Task04.42 - Shared editor browser lifecycle (Knowns OS-0Y6HP5)
+- Added two-account real-backend browser scenario and included it in desktop/mobile media suite. Actual PNG upload, live sessions and ACL grants; no mock image/storage/permission responses. Private partner list empty; Viewer sees preview but no form; Editor saves title/description in active Space; revoke/freeze after form opens denies write and preserves description/version2.
+- Lint/typecheck PASS. Desktop+Pixel7 scenario2/2 PASS19.4s. Uses current production build e301722 (application code unchanged). Secret/diff scan clean. This expands M02 permission UI evidence; does not replace remaining P0 work.
+- Next: protect unsaved metadata draft on viewer navigation/close; then continue metadata dates/tags and remaining media workflows.

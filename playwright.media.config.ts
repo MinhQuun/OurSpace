@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { localStorageToken } from "./e2e/support/local-storage";
 export default defineConfig({
- testDir:"./e2e",projects:[{name:"http",testMatch:"media-http.spec.ts"},{name:"desktop",testMatch:"media-ui.spec.ts",use:{...devices["Desktop Chrome"]}},{name:"mobile",testMatch:"media-ui.spec.ts",use:{...devices["Pixel 7"]}}],workers:1,forbidOnly:Boolean(process.env.CI),retries:0,
+ testDir:"./e2e",projects:[{name:"http",testMatch:"media-http.spec.ts"},{name:"desktop",testMatch:["media-ui.spec.ts","media-sharing-ui.spec.ts"],use:{...devices["Desktop Chrome"]}},{name:"mobile",testMatch:["media-ui.spec.ts","media-sharing-ui.spec.ts"],use:{...devices["Pixel 7"]}}],workers:1,forbidOnly:Boolean(process.env.CI),retries:0,
  use:{baseURL:"http://127.0.0.1:3103",trace:"off"},
  webServer:{command:"npm run start -- --port 3103",url:"http://127.0.0.1:3103/api/health",reuseExistingServer:false,timeout:60000,
  env:{APP_ORIGIN:"http://127.0.0.1:3103",RECOVERY_COOKIE_KEY:randomBytes(32).toString("base64url"),
