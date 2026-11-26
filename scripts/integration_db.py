@@ -20,6 +20,43 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_upload_cancel_serializes_with_finalize(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        def begin():
+            return sql(f"SELECT app_internal.begin_media_upload(repeat('a',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('a',64));",self.database)
+        def cancel(item,token='a'):
+            return sql(f"SELECT app_internal.cancel_media_upload(repeat('{token}',64),'{item}');",self.database)
+        def finish(item):
+            return sql(f"SELECT app_internal.finalize_media_upload(repeat('a',64),'{item}','image/png',3,repeat('a',64));",self.database)
+        item=begin()
+        with self.assertRaises(subprocess.CalledProcessError): cancel(item,'b')
+        cancel(item); cancel(item)
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE resource_id='{item}' AND action='upload.cancel';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError): finish(item)
+        self.assertEqual(sql("SELECT count(*) FROM app_internal.list_pending_media_uploads(repeat('a',64),NULL);",self.database),'0')
+        with self.assertRaises(subprocess.CalledProcessError): sql(f"UPDATE m02.upload_items SET cancelled_at=NULL WHERE id='{item}';",self.database)
+        completed=begin(); media=finish(completed)
+        with self.assertRaises(subprocess.CalledProcessError): cancel(completed)
+        self.assertEqual(sql(f"SELECT count(*) FROM m02.media WHERE id='{media}';",self.database),'1')
+        def attempt(fn,item):
+            try: fn(item); return True
+            except subprocess.CalledProcessError: return False
+        for _ in range(3):
+            racing=begin()
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures=[pool.submit(attempt,fn,racing) for fn in [cancel,finish]]
+                outcomes=[f.result() for f in futures]
+            self.assertEqual(sum(outcomes),1)
+            self.assertEqual(sql(f"SELECT ((media_id IS NOT NULL)::integer+(cancelled_at IS NOT NULL)::integer) FROM m02.upload_items WHERE id='{racing}';",self.database),'1')
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): cancel(item)
+
     def test_owned_upload_reservation_and_atomic_finalize(self):
         migrate(database=self.database)
         seed(self.database)
