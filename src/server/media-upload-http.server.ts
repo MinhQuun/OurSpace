@@ -28,6 +28,11 @@ export function mediaUploadHandler(d: { origin: string; maxBytes: number; upload
     if (cursors.length>1 || [...url.searchParams.keys()].some(k=>k!=="after")) return json({error:"invalid_input"},400);
     return json(await d.uploads.pending(match[1],cursors[0]));
    }
+   if (method==="GET" && url.searchParams.has("duplicates")) {
+    const modes=url.searchParams.getAll("duplicates"),cursors=url.searchParams.getAll("after");
+    if(ids.length!==1||modes.length!==1||modes[0]!=="true"||cursors.length>1||[...url.searchParams.keys()].some(k=>!["uploadId","duplicates","after"].includes(k))) return json({error:"invalid_input"},400);
+    return json(await d.uploads.duplicates(match[1],ids[0],cursors[0]));
+   }
    if (method==="POST" ? !!url.search : ids.length!==1 || [...url.searchParams.keys()].some(k=>k!=="uploadId")) return json({error:"invalid_input"},400);
    if (method==="GET") return json(await d.uploads.status(match[1],ids[0]));
    if (method==="DELETE") {

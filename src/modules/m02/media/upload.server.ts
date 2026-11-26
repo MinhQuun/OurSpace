@@ -102,6 +102,15 @@ export class MediaUploadService {
       byteSize:Number(row.byte_size),sha256:row.sha256}));
     return {items,nextCursor:result.rows.length>50 ? items[49].uploadId : null};
   }
+  async duplicates(session: string, uploadId: string, after?: string) {
+    if (after !== undefined && !uuid(after)) throw new AuthProviderError("invalid_input");
+    const { token, item } = await this.owned(session, uploadId);
+    const result = await this.db.query<{id:string;title:string;mime_type:string}>(
+      "SELECT * FROM app_internal.find_media_duplicates($1,$2,$3,$4)",
+      [token,item.sha256,item.byte_size,after ?? null]);
+    const items=result.rows.slice(0,50).map(row=>({mediaId:row.id,title:row.title,mimeType:row.mime_type}));
+    return {items,nextCursor:result.rows.length>50 ? items[49].mediaId : null};
+  }
   async status(session: string, uploadId: string) {
     const { item } = await this.owned(session, uploadId);
     return {

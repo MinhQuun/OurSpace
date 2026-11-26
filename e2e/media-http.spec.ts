@@ -46,6 +46,17 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    const completed=await responses[0].json();expect(await responses[1].json()).toEqual(completed);
    const status=await request.get(path,{headers:headers()});expect(status.headers()["cache-control"]).toBe("no-store");
    expect(await status.json()).toEqual({uploadId:result.uploadId,mediaId:completed.mediaId,state:"completed"});
+   const duplicatePath=path+"&duplicates=true";
+   const candidates=await request.get(duplicatePath,{headers:headers()});
+   expect(candidates.status()).toBe(200);expect(candidates.headers()["cache-control"]).toBe("no-store");
+   expect(await candidates.json()).toEqual({items:[{mediaId:completed.mediaId,title:intent.title,mimeType:intent.mimeType}],nextCursor:null});
+   expect((await request.get(duplicatePath,{headers:headers(1)})).status()).toBe(403);
+   for(const suffix of ["&after=bad","&duplicates=true","&unknown=x"]) expect((await request.get(duplicatePath+suffix,{headers:headers()})).status()).toBe(400);
+   expect(await (await request.get(duplicatePath+"&after="+completed.mediaId,{headers:headers()})).json()).toEqual({items:[],nextCursor:null});
+   const foreign=await request.post(endpoint,{headers:headers(1),data:{...intent,commandId:randomUUID()}});
+   expect(foreign.status()).toBe(200);const foreignId=(await foreign.json()).uploadId;uploads.push(foreignId);
+   expect(await (await request.get(endpoint+"?uploadId="+foreignId+"&duplicates=true",{headers:headers(1)})).json()).toEqual({items:[],nextCursor:null});
+   expect((await request.delete(endpoint+"?uploadId="+foreignId,{headers:headers(1)})).status()).toBe(200);
    const binary=(await owner.query("SELECT object_key FROM app_internal.binary_objects WHERE resource_id=$1",[completed.mediaId])).rows[0];
    const stored=await request.get("http://127.0.0.1:55435/object/media/"+binary.object_key,{headers:storageHeaders});
    expect(await stored.body()).toEqual(bytes);
@@ -72,6 +83,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(new Set([...page1.items,...page2.items].map((row:{uploadId:string})=>row.uploadId))).toEqual(new Set(extra));
   await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[sessions[0]]);
   expect((await request.get(endpoint+"?uploadId="+uploads[0],{headers:headers()})).status()).toBe(401);
+  expect((await request.get(endpoint+"?uploadId="+uploads[0]+"&duplicates=true",{headers:headers()})).status()).toBe(401);
   expect((await request.get(endpoint,{headers:headers()})).status()).toBe(401);
  } finally {
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(r=>r.object_key);
