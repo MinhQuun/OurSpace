@@ -20,6 +20,48 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_upload_reuse_resolution(self):
+        migrate(database=self.database)
+        seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        def begin(token='a',digest='a'):
+            return sql(f"SELECT app_internal.begin_media_upload(repeat('{token}',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('{digest}',64));",self.database)
+        original=begin()
+        media=sql(f"SELECT app_internal.finalize_media_upload(repeat('a',64),'{original}','image/png',3,repeat('a',64));",self.database)
+        def reuse(item,token='a',confirmed='true'):
+            return sql(f"SELECT app_internal.reuse_media_upload(repeat('{token}',64),'{item}','{media}',{confirmed});",self.database)
+        item=begin()
+        for args in [(item,'a','false'),(item,'b','true'),(begin('b'),'b','true'),(begin(digest='b'),'a','true')]:
+            with self.assertRaises(subprocess.CalledProcessError): reuse(*args)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(lambda _:reuse(item),range(2))),[media,media])
+        self.assertEqual(reuse(begin()),media)
+        self.assertEqual(sql("SELECT count(*) FROM m02.media;",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE command_id=(SELECT finalize_command FROM m02.upload_items WHERE id='{item}');",self.database),'1')
+        self.assertEqual(sql(f"SELECT reused FROM m02.upload_items WHERE id='{item}';",self.database),'t')
+        for query in [f"UPDATE m02.upload_items SET reused=false WHERE id='{item}';",f"SELECT app_internal.cancel_media_upload(repeat('a',64),'{item}');",f"SELECT app_internal.finalize_media_upload(repeat('a',64),'{item}','image/png',3,repeat('a',64));"]:
+            with self.assertRaises(subprocess.CalledProcessError): sql(query,self.database)
+        def attempt(query):
+            try: sql(query,self.database); return True
+            except subprocess.CalledProcessError: return False
+        for competing in ['cancel','finalize']:
+            racing=begin()
+            other=(f"SELECT app_internal.cancel_media_upload(repeat('a',64),'{racing}');" if competing=='cancel' else f"SELECT app_internal.finalize_media_upload(repeat('a',64),'{racing}','image/png',3,repeat('a',64));")
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                outcomes=list(pool.map(attempt,[f"SELECT app_internal.reuse_media_upload(repeat('a',64),'{racing}','{media}',true);",other]))
+            self.assertEqual(sum(outcomes),1)
+        cancelled=begin()
+        sql(f"SELECT app_internal.cancel_media_upload(repeat('a',64),'{cancelled}');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): reuse(cancelled)
+        sql(f"UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id='{media}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): reuse(item)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): reuse(item)
+
     def test_upload_cancel_serializes_with_finalize(self):
         migrate(database=self.database)
         seed(self.database)
