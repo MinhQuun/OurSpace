@@ -46,6 +46,16 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    const completed=await responses[0].json();expect(await responses[1].json()).toEqual(completed);
    const status=await request.get(path,{headers:headers()});expect(status.headers()["cache-control"]).toBe("no-store");
    expect(await status.json()).toEqual({uploadId:result.uploadId,mediaId:completed.mediaId,state:"completed"});
+   const previewPath="/api/media/preview/"+completed.mediaId;
+   const preview=await request.get(previewPath,{headers:headers()});expect(preview.status()).toBe(200);
+   expect(preview.headers()["content-type"]).toBe("image/webp");expect(preview.headers()["cache-control"]).toContain("no-store");
+   expect(preview.headers()["cross-origin-resource-policy"]).toBe("same-origin");
+   const metadata=await sharp(await preview.body()).metadata();expect(metadata.format).toBe("webp");expect(metadata.width).toBeLessThanOrEqual(8);expect(metadata.height).toBeLessThanOrEqual(8);expect(metadata.exif).toBeUndefined();
+   expect((await request.get(previewPath,{headers:headers(1)})).status()).toBe(404);
+   expect((await request.get(previewPath)).status()).toBe(401);
+   expect((await request.get(previewPath,{headers:{...headers(),Origin:"https://foreign.invalid"}})).status()).toBe(403);
+   expect((await request.get(previewPath,{headers:{...headers(),Range:"bytes=0-1"}})).status()).toBe(416);
+   expect((await request.get(previewPath+"?raw=true",{headers:headers()})).status()).toBe(400);
    const duplicatePath=path+"&duplicates=true";
    const candidates=await request.get(duplicatePath,{headers:headers()});
    expect(candidates.status()).toBe(200);expect(candidates.headers()["cache-control"]).toBe("no-store");
@@ -133,6 +143,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect((await request.get(endpoint+"?uploadId="+uploads[0]+"&duplicates=true",{headers:headers()})).status()).toBe(401);
   expect((await request.get(endpoint,{headers:headers()})).status()).toBe(401);
   expect((await request.get("/api/media/list",{headers:headers()})).status()).toBe(401);
+  expect((await request.get("/api/media/preview/"+galleryData.media[0].id,{headers:headers()})).status()).toBe(401);
  } finally {
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(r=>r.object_key);
   if(keys.length) expect((await request.delete("http://127.0.0.1:55435/object/media",{headers:storageHeaders,data:{prefixes:keys}})).status()).toBe(200);

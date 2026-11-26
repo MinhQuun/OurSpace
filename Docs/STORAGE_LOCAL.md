@@ -55,3 +55,11 @@ These are deployment limits, not approved business quotas. No runtime fallback
 credentials or limits are assumed. Provision a private media bucket before use.
 Never expose the Storage server token with NEXT_PUBLIC. The current validator
 accepts JPEG/PNG/WebP; HEIC and video support is still required before M02 acceptance.
+
+Preview HTTP: GET /api/media/preview/{mediaId} returns an authenticated, no-store
+WebP thumbnail for supported images. Set MEDIA_PREVIEW_MAX_EDGE explicitly to a
+positive integer at most4096 (technical allocation bound, not a business quota).
+The runtime uses the same upload byte/pixel/decode limits. Output strips metadata,
+auto-orients and uses the first frame; it is not an original download or video
+stream. Private/missing/domain-denied sources return404; no signed Storage URL is
+returned. Run provisioning after migration0105 for the dedicated preview budget.

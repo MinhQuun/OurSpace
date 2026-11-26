@@ -128,7 +128,7 @@ VALUES ('create',10,60),('inspect',30,60),('list',60,60),
 ('trash_list',60,60),('trash_restore',20,60),('trash_purge',20,60),('trash_purge_expired',30,60),
 ('export_account_create',10,60),('export_account_download',30,60),
 ('media_share',20,60),
-('media_list',120,60),('media_upload_reuse',30,60),('media_upload_cancel',30,60),('media_upload_begin',30,60),('media_upload_status',120,60),('media_upload_bytes',30,60),
+('media_preview',120,60),('media_list',120,60),('media_upload_reuse',30,60),('media_upload_cancel',30,60),('media_upload_begin',30,60),('media_upload_status',120,60),('media_upload_bytes',30,60),
 ('export_jobs_create',20,60),('export_jobs_list',60,60),
 ('backup_jobs_create',20,60),('backup_jobs_list',60,60),('restore_jobs_create',20,60),('restore_jobs_list',60,60)
 ON CONFLICT(action) DO NOTHING;""")
