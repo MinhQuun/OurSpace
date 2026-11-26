@@ -1772,3 +1772,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Viewer pushes an opaque modal history marker preserving Next router state, with no media ID/title in history. Browser Back closes modal and retains loaded gallery. Close/Escape consume the current modal entry; denial/unmount cleans its own entry without backing out of unrelated navigation. Deferred push is cancelled on effect cleanup.
 - Lint/typecheck/build PASS. Real PostgreSQL/Supabase Storage desktop+Pixel7 browser suites 2/2 PASS34.1s: Back keeps /media and 3 loaded cards, repeated open/close, Escape focus return, no current modal marker after explicit close, revoked-session denial retained. Diff/secret scan clean.
 - Browser Forward does not restore a closed viewer; no private media context is persisted in history. Full ML-07 still incomplete: rich metadata/actions, video, context beyond loaded page, device gesture/fullscreen validation. Next: media metadata/detail permissions and update flow.
+
+- Browser Back commitc57f646896ae44b24828875c696b6c120efa9f74 PUSHED; origin/master exact SHA verified. Knowns OS-0R2F1T done.
+
+## Task04.35 - Logical media metadata reader (Knowns OS-1TSXNB)
+- Migration0106 adds read_media_detail(session hash, media ID), returning only ID/title/description/MIME/upload/update dates/media version/original byte size. Fixed search_path, PUBLIC execute revoked and explicit runtime grant; current logical-object ACL required. Storage coordinates, copy source identity, EXIF/GPS/account fields are excluded.
+- Lint/typecheck/migration checksums/runtime provisioning PASS. Actual PostgreSQL sharing lifecycle test1/1 PASS24.483s: private/missing empty parity, safe field allowlist, shared copy description/version independent from original changes, copy still readable after source trash, revoked grant/session return no detail. Diff/secret scan clean.
+- Foundation for M02 D09/ML-07 metadata; not complete metadata support. API/UI, authorized metadata updates, captured/memory dates, tags/GPS-specific policy remain pending. Next: detail HTTP endpoint and viewer info binding.
