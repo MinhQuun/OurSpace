@@ -20,6 +20,7 @@ function Preview({ item }: { item: Media }) {
 export default function Gallery() {
   const [items, setItems] = useState<Media[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const closeViewer = useCallback(() => setSelected(null), []);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -87,7 +88,7 @@ export default function Gallery() {
         <p>Ngày tải lên: <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("vi-VN")}</time></p>
       </li>)}
     </ul>
-    {selected && items.some(item => item.id === selected) && <Viewer items={items} selected={selected} select={setSelected} close={() => setSelected(null)} denied={viewerDenied} />}
+    {selected && items.some(item => item.id === selected) && <Viewer items={items} selected={selected} select={setSelected} close={closeViewer} denied={viewerDenied} />}
     {busy && <p role="status">Đang tải thư viện…</p>}
     {cursor && !error && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Xem thêm media</button>}
   </section>;

@@ -107,6 +107,17 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
   await expect(openFirst).toBeFocused();
+  await openFirst.click();
+  await expect(viewer.getByRole("heading",{name:"first.png",exact:true})).toBeVisible();
+  await page.goBack();
+  await expect(viewer).toHaveCount(0);
+  await expect(page).toHaveURL(/\/media$/);
+  await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
+  await openFirst.click();
+  await expect(viewer.getByRole("heading",{name:"first.png",exact:true})).toBeVisible();
+  await viewer.getByRole("button",{name:"Đóng ảnh",exact:true}).click();
+  await expect(viewer).toHaveCount(0);
+  expect(await page.evaluate(()=>Boolean(window.history.state?.ourspaceViewer))).toBe(false);
   await page.route("**/api/media/list",route=>route.abort());
   await page.getByRole("button",{name:"Làm mới thư viện"}).click();
   await expect(page.locator("main").getByRole("alert")).toContainText("Không tải được thư viện");

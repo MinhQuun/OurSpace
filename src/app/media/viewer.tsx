@@ -77,23 +77,43 @@ export default function Viewer({ items, selected, select, close, denied }: {
   items: ViewerItem[]; selected: string; select: (id: string) => void; close: () => void; denied: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const historyMarker = useRef<string | null>(null);
   const [fullscreenError, setFullscreenError] = useState("");
   const index = items.findIndex(item => item.id === selected);
   const item = items[index];
   useEffect(() => {
     const node = dialog.current;
     const previous = document.activeElement as HTMLElement | null;
+    const marker = crypto.randomUUID();
+    historyMarker.current = marker;
+    // Keep Next's router state; never put media IDs or private titles into browser history.
+    // Defer history mutation so Strict Mode effect setup/cleanup does not enqueue a stray back navigation.
+    const push = window.setTimeout(() => {
+      window.history.pushState({ ...window.history.state, ourspaceViewer: marker }, "", window.location.href);
+    }, 0);
+    const back = () => close();
+    window.addEventListener("popstate", back);
     node?.showModal();
-    return () => { node?.close(); previous?.focus(); };
-  }, []);
+    return () => {
+      window.clearTimeout(push);
+      window.removeEventListener("popstate", back);
+      if (window.history.state?.ourspaceViewer === marker) window.history.back();
+      historyMarker.current = null;
+      node?.close(); previous?.focus();
+    };
+  }, [close]);
+  const dismiss = () => {
+    if (historyMarker.current && window.history.state?.ourspaceViewer === historyMarker.current) window.history.back();
+    else close();
+  };
   const move = (step: number) => { const next = items[index + step]; if (next) select(next.id); };
-  return <dialog ref={dialog} className={styles.dialog} aria-label="Xem ảnh" onCancel={close}
+  return <dialog ref={dialog} className={styles.dialog} aria-label="Xem ảnh" onCancel={event => { event.preventDefault(); dismiss(); }}
     onKeyDown={event => {
       if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
       if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
     }}>
     <div className={styles.controls}>
-      <button type="button" onClick={close}>Đóng ảnh</button>
+      <button type="button" onClick={dismiss}>Đóng ảnh</button>
       <button type="button" disabled={index <= 0} onClick={() => move(-1)}>Ảnh trước</button>
       <button type="button" disabled={index >= items.length - 1} onClick={() => move(1)}>Ảnh tiếp</button>
       <button type="button" onClick={async () => {
