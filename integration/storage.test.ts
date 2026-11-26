@@ -1,3 +1,5 @@
+import sharp from "sharp";
+import { MediaUploadService } from "../src/modules/m02/media/upload.server";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
@@ -464,5 +466,60 @@ test("immutable upload verifies real storage, retries and rejects replacement", 
     expect((await fetch(base + "/bucket/" + bucket + "/empty", {
       method: "POST", headers, body: "{}" })).status).toBe(200);
     expect((await fetch(base + "/bucket/" + bucket, { method: "DELETE", headers })).status).toBe(200);
+  }
+});
+
+
+test("upload service persists real private bytes and rechecks ownership after I/O", async () => {
+  const owner = new Pool({ host: "127.0.0.1", port: 55432, database: "ourspace", user: "ourspace_owner",
+    password: readFileSync(".local/db-password","utf8").trim(), max: 1 });
+  const db = createDatabase(`postgresql://ourspace_runtime:${readFileSync(".local/runtime-db-password","utf8").trim()}@127.0.0.1:55432/ourspace`);
+  const users = [randomUUID(),randomUUID()], tokens = users.map(() => randomBytes(32).toString("base64url"));
+  const headers = { Authorization: `Bearer ${credential()}`, "Content-Type": "application/json" };
+  const limits = { maxBytes: 100000, maxPixels: 10000, timeoutSeconds: 5 };
+  const storage = new PrivateStorage(base,async () => credential(),limits.maxBytes);
+  const service = new MediaUploadService(db,storage,limits);
+  const uploads: string[] = [];
+  try {
+    await fetch(base+"/bucket",{method:"POST",headers,body:JSON.stringify({id:"media",name:"media",public:false})});
+    const bucket = await fetch(base+"/bucket/media",{headers});
+    expect(bucket.status).toBe(200);
+    expect((await bucket.json()).public).toBe(false);
+    for (let i=0;i<2;i++) {
+      await owner.query("INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",[users[i]]);
+      await owner.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
+        [randomUUID(),users[i],createHash("sha256").update(tokens[i]).digest("hex")]);
+    }
+    const bytes = await sharp({create:{width:8,height:8,channels:3,background:"red"}}).png().toBuffer();
+    const intent = { commandId:randomUUID(),title:"Synthetic upload",mimeType:"image/png",byteSize:bytes.length,
+      sha256:createHash("sha256").update(bytes).digest("hex") };
+    const started = await service.begin(tokens[0],intent); uploads.push(started.uploadId);
+    expect(await service.begin(tokens[0],intent)).toEqual(started);
+    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"pending",mediaId:null});
+    await expect(service.upload(tokens[1],started.uploadId,bytes)).rejects.toThrow();
+    await expect(service.status(tokens[1],started.uploadId)).rejects.toThrow();
+    await expect(service.upload(tokens[0],started.uploadId,Buffer.from("corrupt"))).rejects.toThrow();
+    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"pending"});
+    const results = await Promise.all([service.upload(tokens[0],started.uploadId,bytes),service.upload(tokens[0],started.uploadId,bytes)]);
+    expect(results[0]).toEqual(results[1]);
+    expect(await service.upload(tokens[0],started.uploadId,bytes)).toEqual(results[0]);
+    expect(await service.status(tokens[0],started.uploadId)).toMatchObject({state:"completed",mediaId:results[0].mediaId});
+    const binary = (await owner.query("SELECT bucket,object_key,byte_size::integer,sha256 FROM app_internal.binary_objects WHERE resource_id=$1",[results[0].mediaId])).rows[0];
+    expect(await storage.read(binary)).toEqual(bytes);
+    expect((await owner.query("SELECT count(*)::integer n FROM m02.media WHERE uploaded_by=$1",[users[0]])).rows[0].n).toBe(1);
+    const second = await service.begin(tokens[0],{...intent,commandId:randomUUID()}); uploads.push(second.uploadId);
+    const revokingStorage = new PrivateStorage(base,async () => {
+      await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=$1 AND revoked_at IS NULL",[users[0]]);
+      return credential();
+    },limits.maxBytes);
+    await expect(new MediaUploadService(db,revokingStorage,limits).upload(tokens[0],second.uploadId,bytes)).rejects.toThrow();
+    expect((await owner.query("SELECT media_id FROM m02.upload_items WHERE id=$1",[second.uploadId])).rows[0].media_id).toBeNull();
+    expect((await owner.query("SELECT count(*)::integer n FROM m02.media WHERE uploaded_by=$1",[users[0]])).rows[0].n).toBe(1);
+    await expect(db.query("SELECT * FROM m02.upload_items")).rejects.toMatchObject({reason:"denied"});
+  } finally {
+    const keys = (await owner.query("SELECT object_key FROM m02.upload_items WHERE id=ANY($1::uuid[])",[uploads])).rows.map(row=>row.object_key);
+    if (keys.length) expect((await fetch(base+"/object/media",{method:"DELETE",headers,body:JSON.stringify({prefixes:keys})})).status).toBe(200);
+    await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=ANY($1::uuid[]) AND revoked_at IS NULL",[users]);
+    await db.close(); await owner.end();
   }
 });
