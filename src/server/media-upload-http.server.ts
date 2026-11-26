@@ -59,7 +59,7 @@ export function mediaUploadHandler(d: { origin: string; maxBytes: number; upload
    const bytes=Buffer.concat(chunks,size);
    if (method==="PUT") return json(await d.uploads.upload(match[1],ids[0],bytes,request.signal));
    let input: unknown; try { input=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)); } catch { return json({error:"invalid_input"},400); }
-   if(method==="PATCH") return json(await d.uploads.reuse(match[1],ids[0],input));
+   if(method==="PATCH") return json(await d.uploads.resolve(match[1],ids[0],input));
    return json(await d.uploads.begin(match[1],input as Parameters<MediaUploadService["begin"]>[1]));
   } catch (error) {
    const reason=error instanceof InvalidMediaError ? "invalid_input" : error instanceof AuthProviderError ? error.kind : error instanceof DatabaseUnavailableError ? error.reason : "unavailable";

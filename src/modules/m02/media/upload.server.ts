@@ -24,6 +24,7 @@ type Upload = {
   media_id: string | null;
   cancelled_at: Date | null;
   reused: boolean;
+  separate: boolean;
 };
 const uuid = (v: unknown): v is string =>
   typeof v === "string" &&
@@ -89,7 +90,7 @@ export class MediaUploadService {
     const token = hash(session);
     if (!uuid(uploadId)) throw new AuthProviderError("invalid_input");
     const result = await this.db.query<Upload>(
-      "SELECT * FROM app_internal.read_media_upload_resolution($1,$2)",
+      "SELECT * FROM app_internal.read_media_upload_decision($1,$2)",
       [token, uploadId],
     );
     if (!result.rows[0]) throw new AuthProviderError("denied");
@@ -117,14 +118,20 @@ export class MediaUploadService {
     const { item } = await this.owned(session, uploadId);
     return {
       uploadId: item.id,
+      ...(item.separate ? {separate:true} : {}),
       mediaId: item.media_id,
       state: item.reused ? "reused" : item.cancelled_at ? "cancelled" : item.media_id ? "completed" : "pending",
     };
   }
-  async reuse(session: string, uploadId: string, input: unknown) {
+  async resolve(session: string, uploadId: string, input: unknown) {
     const token=hash(session);
     if(!uuid(uploadId)||!input||typeof input!=="object"||Array.isArray(input)) throw new AuthProviderError("invalid_input");
     const value=input as Record<string,unknown>;
+    if(value.mode==="separate") {
+      if(Object.keys(value).some(k=>!["mode","confirmed"].includes(k))||value.confirmed!==true) throw new AuthProviderError("invalid_input");
+      await this.db.query("SELECT app_internal.keep_upload_separate($1,$2,$3)",[token,uploadId,true]);
+      return this.status(session,uploadId);
+    }
     if(Object.keys(value).some(k=>!["mediaId","confirmed"].includes(k))||!uuid(value.mediaId)||value.confirmed!==true) throw new AuthProviderError("invalid_input");
     const result=await this.db.query<{id:string}>("SELECT app_internal.reuse_media_upload($1,$2,$3,$4) AS id",[token,uploadId,value.mediaId,true]);
     return {uploadId,mediaId:result.rows[0].id,state:"reused"};
