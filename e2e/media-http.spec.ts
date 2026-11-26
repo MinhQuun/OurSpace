@@ -121,7 +121,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(preview.status()).toBe(200);
   expect(preview.headers()).toMatchObject({"cache-control":"no-store","content-type":"image/webp","cross-origin-resource-policy":"same-origin"});
   const thumbnail=await sharp(await preview.body()).metadata();
-  expect(thumbnail).toMatchObject({format:"webp",width:12,height:10});
+  expect(thumbnail).toMatchObject({format:"webp",width:8,height:7});
   expect(thumbnail.exif).toBeUndefined();
   const foreignPreview=await request.get(previewPath,{headers:headers(1)});
   const missingPreview=await request.get("/api/media/preview?mediaId="+randomUUID(),{headers:headers(1)});

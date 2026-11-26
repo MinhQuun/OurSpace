@@ -1740,3 +1740,8 @@ Updated: 2026-10-29 (Asia/Saigon)
 ## Authorized merge reconciliation
 - User authorized normal merge on2026-11-26. Preserve both histories and remote concurrent-retry/expired-session fixes. Both preview URL forms share one strict handler; configured edge limit retained. Migration0105 SQL is identical on both sides except final blank line; retain already-applied local bytes/checksum. No migration history rewritten. Remote environments that applied its alternate checksum require explicit reconciliation before migrating.
 - Prior handoff blocker is resolved by this authorization; validation/push pending. Original uncommitted handoff checkpoint retained in git stash as backup; unrelated WIP untouched.
+
+## Post-merge validation and handoff
+- User confirmed the other writer stopped and Codex takes over on 2026-11-26. Merge 59d6eb882e6064b1da5fd3c8917a343954258c3c verified on origin/master. Previous pending merge/handoff status is superseded.
+- Correct thumbnail assertion to 8x7 for configured MEDIA_PREVIEW_MAX_EDGE=8; runtime retains explicit configuration (the earlier 512px statement describes the remote pre-merge implementation). Lint/typecheck PASS; actual Next HTTP 1/1 PASS 11.3s on local PostgreSQL and Supabase Storage. Earlier merged validation: 31 unit tests, 5 storage tests, desktop/mobile tests and build PASS.
+- Only test assertion and this checkpoint included; unrelated WIP and stash preserved. Next: authenticated gallery UI. Stage04 and full P0 remain incomplete.
