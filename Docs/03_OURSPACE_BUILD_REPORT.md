@@ -1786,3 +1786,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Added GET /api/media/detail/{mediaId} and MediaService.detail. Safe field allowlist, ISO dates and exact bigint version string; no storage/source/profile fields. Strict live session, single cookie, origin/site, path/query checks; no-store and same-origin headers. Shares media_list120/min budget. Missing/private return identical404.
 - Lint/typecheck/build PASS. Actual local PostgreSQL/Supabase Storage Next HTTP1/1 PASS18.2s: valid uploaded media details/field allowlist/version/date/size, private-vs-missing parity, no session, duplicate cookie, foreign origin, invalid ID/query and revoked session. Diff/secret scan clean.
 - Next: viewer info panel uses current detail response; metadata updates/dates/tags remain pending. Stage04/full P0 incomplete.
+
+- Detail HTTP commit8e4fa2dfd06ceff06409322d39b947eb97b2b7ab PUSHED; origin/master SHA verified equal. Knowns OS-SQR69G done.
+
+## Task04.37 - Current viewer metadata panel (Knowns OS-PQEV2D)
+- Viewer fetches current detail before rendition; shows title/description/upload/update dates and original format/size only after both requests succeed. Does not fall back to stale gallery metadata on network failure. Description rendered as plain text, preview/original distinction retained.
+- Lint/typecheck/build PASS. Actual PostgreSQL/Supabase Storage desktop+Pixel7 browser suites2/2 PASS36.0s: metadata changed after gallery load is displayed, HTML-looking description stays text, both dates present, detail network failure shows error without image/title; revoked access and earlier viewer/gallery/upload regressions retained. Diff/secret scan clean.
+- Metadata editing/captured/memory dates/tags and broader ML-07 remain pending. Next: versioned authorized metadata update command.

@@ -9,6 +9,7 @@ function ImageView({ item, move, denied }: {
   item: ViewerItem; move: (step: number) => void; denied: () => void;
 }) {
   const [source, setSource] = useState("");
+  const [detail, setDetail] = useState<(ViewerItem & { description: string | null; updatedAt: string; version: string }) | null>(null);
   const [error, setError] = useState("");
   const [zoom, setZoom] = useState(1);
   const gesture = useRef<{ x: number; distance: number; zoom: number } | null>(null);
@@ -17,6 +18,13 @@ function ImageView({ item, move, denied }: {
     let objectUrl = "";
     void (async () => {
       try {
+        const metadata = await fetch(`/api/media/detail/${item.id}`, {
+          cache: "no-store", credentials: "same-origin", signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if ([401, 403, 404].includes(metadata.status)) { denied(); return; }
+        if (!metadata.ok) throw new Error();
+        const current = await metadata.json();
         const response = await fetch(`/api/media/view/${item.id}`, {
           cache: "no-store", credentials: "same-origin", signal: controller.signal,
         });
@@ -25,7 +33,7 @@ function ImageView({ item, move, denied }: {
         if (!response.ok) throw new Error();
         const blob = await response.blob();
         if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob); setSource(objectUrl);
+        objectUrl = URL.createObjectURL(blob); setDetail(current.media); setSource(objectUrl);
       } catch {
         if (!controller.signal.aborted) setError("Không tải được bản xem trước. Đóng và mở lại để thử lại.");
       }
@@ -36,8 +44,8 @@ function ImageView({ item, move, denied }: {
   return <>
     {error && <p role="alert">{error}</p>}
     {!source && !error && <p role="status">Đang tải ảnh…</p>}
-    {source && <>
-      <h2>{item.title}</h2>
+    {source && detail && <>
+      <h2>{detail.title}</h2>
       <div className={styles.controls}>
         <button type="button" disabled={zoom <= 1} onClick={() => setZoom(value => Math.max(1, value - .5))}>Thu nhỏ</button>
         <output aria-label="Mức thu phóng">{Math.round(zoom * 100)}%</output>
@@ -62,12 +70,14 @@ function ImageView({ item, move, denied }: {
       }}>
         {/* Private decoded bytes stay in a short-lived object URL, never in an image optimizer. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={source} alt={item.title} className={styles.image} style={{ width: `${zoom * 100}%` }}
+        <img src={source} alt={detail.title} className={styles.image} style={{ width: `${zoom * 100}%` }}
           onError={() => { setSource(""); setError("Không thể hiển thị bản xem trước."); }} />
       </div>
       <details><summary>Thông tin ảnh</summary>
-        <p>Đang xem bản preview WebP. File gốc: {item.mimeType} · {item.byteSize.toLocaleString("vi-VN")} byte.</p>
-        <p>Ngày tải lên: <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("vi-VN")}</time></p>
+        <p>{detail.description || "Chưa có mô tả."}</p>
+        <p>Đang xem bản preview WebP. File gốc: {detail.mimeType} · {detail.byteSize.toLocaleString("vi-VN")} byte.</p>
+        <p>Ngày tải lên: <time dateTime={detail.createdAt}>{new Date(detail.createdAt).toLocaleString("vi-VN")}</time></p>
+        <p>Cập nhật: <time dateTime={detail.updatedAt}>{new Date(detail.updatedAt).toLocaleString("vi-VN")}</time></p>
       </details>
     </>}
   </>;
