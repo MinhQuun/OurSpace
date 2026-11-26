@@ -2,14 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import RecoveryPanel from "./recovery-panel";
 import styles from "./upload.module.css";
-type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing"|"completed"|"failed";progress:number;uploadId?:string;error?:string};
-const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được"};
+type Item={id:string;file:File;state:"queued"|"checking"|"uploading"|"processing"|"completed"|"failed"|"cancelled";progress:number;uploadId?:string;error?:string};
+const labels={queued:"Đang chờ",checking:"Đang kiểm tra",uploading:"Đang tải",processing:"Đang xác minh",completed:"Đã lưu riêng tư",failed:"Chưa tải được",cancelled:"Đã hủy"};
 class UploadError extends Error { constructor(public status:number){super("Upload failed");} }
 export default function UploadQueue(){
  const [items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false),[signedOut,setSignedOut]=useState(false);
  const queue=useRef<Item[]>([]),running=useRef(false),alive=useRef(true),xhr=useRef<XMLHttpRequest|null>(null);
  const publish=()=>{if(alive.current)setItems(queue.current.map(i=>({...i})));};
- useEffect(()=>{alive.current=true; const warn=(event:BeforeUnloadEvent)=>{if(queue.current.some(i=>i.state!=="completed")){event.preventDefault();event.returnValue="";}};
+ useEffect(()=>{alive.current=true; const warn=(event:BeforeUnloadEvent)=>{if(queue.current.some(i=>i.state!=="completed"&&i.state!=="cancelled")){event.preventDefault();event.returnValue="";}};
  window.addEventListener("beforeunload",warn);return()=>{alive.current=false;xhr.current?.abort();window.removeEventListener("beforeunload",warn);};},[]);
  async function json(url:string,options?:RequestInit){
   const response=await fetch(url,{...options,cache:"no-store"});if(!response.ok)throw new UploadError(response.status);return response.json();
@@ -25,10 +25,10 @@ export default function UploadQueue(){
   if(running.current)return;running.current=true;setBusy(true);
   try {for(const item of queue.current){
    if(!alive.current)break;
-   if(item.state==="completed" || (only?item.id!==only:item.state!=="queued"))continue;
+   if(item.state==="completed" || item.state==="cancelled" || (only?item.id!==only:item.state!=="queued"))continue;
    item.error=undefined;item.state="checking";publish();
    try {
-    if(item.uploadId){const status=await json("/api/media/upload?uploadId="+item.uploadId);if(status.state==="completed"){item.state="completed";item.progress=100;publish();continue;}}
+    if(item.uploadId){const status=await json("/api/media/upload?uploadId="+item.uploadId);if(status.state==="cancelled"){item.state="cancelled";publish();continue;}if(status.state==="completed"){item.state="completed";item.progress=100;publish();continue;}}
     if(!item.uploadId){
      const buffer=await item.file.arrayBuffer();
      const sha256=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",buffer)),b=>b.toString(16).padStart(2,"0")).join("");
@@ -42,6 +42,16 @@ export default function UploadQueue(){
     item.state="failed";item.error=status===400?"File không hợp lệ hoặc định dạng chưa được hỗ trợ.":status===413?"File vượt giới hạn tải lên.":status===429?"Đã đạt giới hạn yêu cầu. Hãy thử lại sau.":"Không thể hoàn tất. Thử lại sẽ kiểm tra bản đã lưu trước.";
    }publish();
   }}finally{running.current=false;xhr.current=null;if(alive.current)setBusy(false);}
+ }
+ async function cancel(id:string){
+  const item=queue.current.find(entry=>entry.id===id);if(!item)return;
+  if(running.current)return;running.current=true;setBusy(true);item.error=undefined;
+  try{if(item.uploadId)await json("/api/media/upload?uploadId="+item.uploadId,{method:"DELETE"});item.state="cancelled";}
+  catch(error){const status=error instanceof UploadError?error.status:0;
+   if(status===401){queue.current=[];setSignedOut(true);}
+   else if(status===409){item.state="completed";item.progress=100;}
+   else item.error="Chưa hủy được. Hãy thử lại; file đã lưu không bị xóa.";
+  }finally{running.current=false;setBusy(false);publish();}
  }
  if(signedOut)return <p role="alert">Phiên đăng nhập đã kết thúc. <a href="/account">Đăng nhập lại</a></p>;
  return <section aria-label="Hàng đợi tải ảnh" className={styles.queue}>
@@ -60,7 +70,7 @@ export default function UploadQueue(){
    <progress value={item.progress} max={100} aria-label={"Tiến độ "+item.file.name}/>
    {item.error&&<p>{item.error}</p>}
    {item.state==="failed"&&<button disabled={busy} onClick={()=>void run(item.id)}>Thử lại</button>}
-   {item.state==="queued"&&<button disabled={busy} onClick={()=>{queue.current=queue.current.filter(i=>i.id!==item.id);publish();}}>Bỏ khỏi hàng đợi</button>}
+   {(item.state==="queued"||item.state==="failed")&&<button disabled={busy} onClick={()=>void cancel(item.id)}>Hủy upload</button>}
   </li>)}</ul>
  </section>;
 }

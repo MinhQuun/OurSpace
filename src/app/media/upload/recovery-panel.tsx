@@ -17,12 +17,23 @@ export default function RecoveryPanel({disabled,onRecover,onSignedOut}:{disabled
   try{
    const response=await fetch("/api/media/upload?uploadId="+item.uploadId,{cache:"no-store"});
    if(response.status===401){setItems([]);onSignedOut();return;}if(!response.ok)throw new Error();
-   if((await response.json()).state==="completed"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Ảnh này đã được lưu; không cần tải lại.");return;}
+   const state=(await response.json()).state;
+   if(state==="cancelled"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Phiên này đã bị hủy.");return;}
+   if(state==="completed"){setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Ảnh này đã được lưu; không cần tải lại.");return;}
    if(file.size!==item.byteSize){setMessage("File đã chọn không khớp bản đang phục hồi.");return;}
    const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())),b=>b.toString(16).padStart(2,"0")).join("");
    if(digest!==item.sha256){setMessage("File đã chọn không khớp bản đang phục hồi.");return;}
    onRecover(item.uploadId,file);setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));setMessage("Đã thêm vào hàng đợi. Bạn có thể tiếp tục tải.");
   }catch{setMessage("Chưa phục hồi được file. Hãy thử lại.");}finally{locked.current=false;setBusy(false);}
+ }
+ async function cancel(item:Pending){
+  if(locked.current)return;locked.current=true;setBusy(true);setMessage("");
+  try{const response=await fetch("/api/media/upload?uploadId="+item.uploadId,{method:"DELETE",cache:"no-store"});
+   if(response.status===401){setItems([]);onSignedOut();return;}
+   if(!response.ok&&response.status!==409)throw new Error();
+   setItems(old=>old.filter(i=>i.uploadId!==item.uploadId));
+   setMessage(response.status===409?"Ảnh đã hoàn tất; dữ liệu được giữ nguyên.":"Đã hủy phiên upload.");
+  }catch{setMessage("Chưa hủy được phiên upload. Hãy thử lại.");}finally{locked.current=false;setBusy(false);}
  }
  return <section aria-label="Phục hồi upload">
   <h2>Tiếp tục upload trước đó</h2>
@@ -30,6 +41,7 @@ export default function RecoveryPanel({disabled,onRecover,onSignedOut}:{disabled
   <button disabled={disabled||busy} onClick={()=>void load()}>Tìm upload chưa hoàn tất</button>
   {message&&<p role="status">{message}</p>}
   <ul>{items.map(item=><li key={item.uploadId}><strong>{item.title}</strong>
+   <button disabled={disabled||busy} onClick={()=>void cancel(item)}>Hủy phiên {item.title}</button>
    <label>Chọn lại {item.title}<input type="file" disabled={disabled||busy} onChange={event=>{const file=event.target.files?.[0];event.target.value="";void choose(item,file);}}/></label>
   </li>)}</ul>
   {cursor&&<button disabled={disabled||busy} onClick={()=>void load(cursor)}>Xem thêm phiên upload</button>}

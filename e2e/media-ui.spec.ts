@@ -22,6 +22,9 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await page.getByRole("button",{name:"Thử lại"}).click();
   await expect(page.getByRole("button",{name:"Thử lại"})).toBeEnabled();
   await expect(page.getByRole("status")).toHaveText("2 đã lưu · 1 lỗi · 0 đang chờ");
+  await page.getByRole("button",{name:"Hủy upload",exact:true}).click();
+  await expect(page.getByText("Đã hủy",{exact:true})).toBeVisible();
+  expect((await owner.query("SELECT cancelled_at FROM m02.upload_items WHERE owner_id=$1 AND title='broken.png'",[user])).rows[0].cancelled_at).toBeTruthy();
   const rows=(await owner.query("SELECT m.title,b.object_key FROM m02.media m JOIN app_internal.binary_objects b ON b.resource_id=m.id WHERE m.uploaded_by=$1",[user])).rows;
   expect(rows).toHaveLength(2);
   for(const row of rows){const stored=await request.get("http://127.0.0.1:55435/object/media/"+row.object_key,{headers});expect(await stored.body()).toEqual(row.title==="first.png"?png:jpg);}
@@ -29,10 +32,18 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   const intent={commandId:randomUUID(),title:"recover.png",mimeType:"image/png",byteSize:png.length,sha256:createHash("sha256").update(png).digest("hex")};
   const reserved=await context.request.post("/api/media/upload",{headers:{Origin:"http://127.0.0.1:3103"},data:intent});
   expect(reserved.status()).toBe(200);const uploadId=(await reserved.json()).uploadId;
+  const discard=await context.request.post("/api/media/upload",{headers:{Origin:"http://127.0.0.1:3103"},data:{...intent,commandId:randomUUID(),title:"discard.png"}});
+  const discardId=(await discard.json()).uploadId;
+
   page.on("dialog",dialog=>dialog.accept());
   await page.reload();
   await page.getByRole("button",{name:"Tìm upload chưa hoàn tất"}).click();
   const recovery=page.getByRole("region",{name:"Phục hồi upload"});
+  await page.getByRole("button",{name:"Hủy phiên discard.png",exact:true}).click();
+  await expect(recovery.getByRole("status")).toHaveText("Đã hủy phiên upload.");
+  expect((await owner.query("SELECT cancelled_at FROM m02.upload_items WHERE id=$1",[discardId])).rows[0].cancelled_at).toBeTruthy();
+  await expect(page.getByLabel("Chọn lại discard.png",{exact:true})).toHaveCount(0);
+
   await expect(recovery.getByText("first.png",{exact:true})).toHaveCount(0);
   const wrong=Buffer.from(png);wrong[wrong.length-1]^=1;
   await page.getByLabel("Chọn lại recover.png",{exact:true}).setInputFiles({name:"wrong.png",mimeType:"image/png",buffer:wrong});
