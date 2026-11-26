@@ -70,3 +70,10 @@ explicitly (positive integer, at most4096) independently of thumbnail size.
 Choose a larger viewer bound appropriate to the deployment; images are never
 upscaled. It returns a first-frame WebP preview, not original bytes, and does not
 grant Download permission. This endpoint does not implement video playback.
+
+Metadata HTTP: PATCH /api/media/detail/{mediaId} accepts exactly commandId,
+spaceId (UUID or null for private), version (canonical positive bigint string),
+title and description (string or null). Requires session and matching Origin.
+JSON UTF-8 body has a 16384-byte transport allocation bound. Metadata writes share
+the media_share20/min budget. Retry the identical command after uncertain outcome;
+409 means reload current metadata before making a new decision/command.

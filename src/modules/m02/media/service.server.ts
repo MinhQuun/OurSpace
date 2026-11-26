@@ -95,6 +95,23 @@ export class MediaService {
     if (!result.rows[0]?.id) throw new AuthProviderError("denied");
     return { id: result.rows[0].id };
   }
+  async updateMetadata(session: string, mediaId: string, input: unknown) {
+    const hash = digest(session);
+    if (!uuid(mediaId) || !input || typeof input !== "object" || Array.isArray(input))
+      throw new AuthProviderError("invalid_input");
+    const value = input as Record<string, unknown>;
+    if (Object.keys(value).sort().join(",") !== "commandId,description,spaceId,title,version" ||
+      !uuid(value.commandId) || (value.spaceId !== null && !uuid(value.spaceId)) ||
+      typeof value.version !== "string" || !/^[1-9][0-9]{0,18}$/.test(value.version) ||
+      BigInt(value.version) >= 9223372036854775807n ||
+      typeof value.title !== "string" || !value.title.trim() || Array.from(value.title.trim()).length > 200 ||
+      (value.description !== null && typeof value.description !== "string"))
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.update_media_metadata($1,$2,$3,$4,$5,$6,$7) AS id",
+      [hash, value.commandId, mediaId, value.spaceId, value.version, value.title, value.description]);
+    return { mediaId: result.rows[0].id };
+  }
   async detail(session: string, mediaId: string) {
     const hash = digest(session);
     if (!uuid(mediaId)) throw new AuthProviderError("invalid_input");
