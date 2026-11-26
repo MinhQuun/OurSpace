@@ -1,3 +1,4 @@
+import { MediaPreviewService } from "../src/modules/m02/media/preview.server";
 import { mediaUploadHandler } from "../src/server/media-upload-http.server";
 import sharp from "sharp";
 import { MediaUploadService } from "../src/modules/m02/media/upload.server";
@@ -491,7 +492,7 @@ test("upload service persists real private bytes and rechecks ownership after I/
       await owner.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",
         [randomUUID(),users[i],createHash("sha256").update(tokens[i]).digest("hex")]);
     }
-    const bytes = await sharp({create:{width:8,height:8,channels:3,background:"red"}}).png().toBuffer();
+    const bytes = await sharp({create:{width:8,height:8,channels:3,background:"red"}}).withMetadata().png().toBuffer();
     const intent = { commandId:randomUUID(),title:"Synthetic upload",mimeType:"image/png",byteSize:bytes.length,
       sha256:createHash("sha256").update(bytes).digest("hex") };
     const handler=mediaUploadHandler({origin:"http://127.0.0.1:3102",maxBytes:limits.maxBytes,uploads:service,
@@ -534,7 +535,21 @@ test("upload service persists real private bytes and rechecks ownership after I/
     const binary = (await owner.query("SELECT bucket,object_key,byte_size::integer,sha256 FROM app_internal.binary_objects WHERE resource_id=$1",[results[0].mediaId])).rows[0];
     expect(await storage.read(binary)).toEqual(bytes);
     expect((await owner.query("SELECT count(*)::integer n FROM m02.media WHERE uploaded_by=$1",[users[0]])).rows[0].n).toBe(1);
+    const previewService=new MediaPreviewService(db,storage,limits,4);
+    expect((await sharp(bytes).metadata()).exif).toBeTruthy();
+    const preview=await previewService.read(tokens[0],results[0].mediaId);expect(preview).toBeTruthy();
+    const previewMetadata=await sharp(preview!).metadata();
+    expect(previewMetadata.format).toBe("webp");expect(previewMetadata.width).toBe(4);expect(previewMetadata.height).toBe(4);
+    expect(previewMetadata.exif).toBeUndefined();expect(previewMetadata.icc).toBeUndefined();expect(previewMetadata.xmp).toBeUndefined();
+    expect(await previewService.read(tokens[1],results[0].mediaId)).toBeNull();
+    const previewToken=randomBytes(32).toString("base64url"),previewHash=createHash("sha256").update(previewToken).digest("hex");
+    await owner.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",[randomUUID(),users[0],previewHash]);
+    const revokingPreviewStorage=new PrivateStorage(base,async()=>{
+      await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE token_hash=$1",[previewHash]);return credential();
+    },limits.maxBytes);
+    expect(await new MediaPreviewService(db,revokingPreviewStorage,limits,4).read(previewToken,results[0].mediaId)).toBeNull();
     const second = await service.begin(tokens[0],{...intent,commandId:randomUUID()}); uploads.push(second.uploadId);
+    await service.resolve(tokens[0],second.uploadId,{mode:"separate",confirmed:true});
     const revokingStorage = new PrivateStorage(base,async () => {
       await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id=$1 AND revoked_at IS NULL",[users[0]]);
       return credential();
