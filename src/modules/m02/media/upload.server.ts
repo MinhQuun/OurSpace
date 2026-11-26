@@ -148,7 +148,9 @@ export class MediaUploadService {
     input: Uint8Array,
     signal?: AbortSignal,
   ) {
-    const { token, item } = await this.owned(session, uploadId);
+    const owned = await this.owned(session, uploadId);
+    const token = owned.token;
+    let item = owned.item;
     if (item.reused) throw new DatabaseUnavailableError("conflict");
     if (item.cancelled_at) throw new AuthProviderError("denied");
     const verified = await validateImage(input, item.mime_type, this.limits);
@@ -157,8 +159,14 @@ export class MediaUploadService {
       verified.sha256 !== item.sha256
     )
       throw new AuthProviderError("invalid_input");
-    if (!item.media_id && !item.separate && (await this.duplicates(session,uploadId)).items.length)
-      throw new DatabaseUnavailableError("conflict");
+    if (!item.media_id && !item.separate && (await this.duplicates(session, uploadId)).items.length) {
+      // A concurrent retry may have just finalized this same upload. Its media
+      // can appear in the duplicate list even though the initial item was pending.
+      item = (await this.owned(session, uploadId)).item;
+      if (item.reused) throw new DatabaseUnavailableError("conflict");
+      if (item.cancelled_at) throw new AuthProviderError("denied");
+      if (!item.media_id && !item.separate) throw new DatabaseUnavailableError("conflict");
+    }
     if (signal?.aborted) throw new AuthProviderError("unavailable");
     if (!item.media_id)
       await this.storage.write(
