@@ -20,6 +20,67 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_media_metadata_versioned_command(self):
+        migrate(database=self.database); seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        media=sql(f"SELECT app_internal.register_media(repeat('a',64),'{uuid.uuid4()}','Before','image/png','media','{uuid.uuid4()}',3,repeat('a',64));",self.database)
+        role='metadata_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_media_metadata(text,uuid,uuid,uuid,bigint,text,text) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        binary=sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database)
+        def update(version=1,title='After',token='a',command=None,space=None):
+            context=f"'{space}'" if space else 'NULL'
+            return sql(f"SET ROLE {role}; SELECT app_internal.update_media_metadata(repeat('{token}',64),'{command or uuid.uuid4()}','{media}',{context},{version},'{title}','Synthetic description');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(token='b')
+        with self.assertRaises(subprocess.CalledProcessError): update(title=' ')
+        command=str(uuid.uuid4())
+        self.assertEqual(update(command=command),media)
+        self.assertEqual(update(command=command),media)
+        self.assertEqual(sql(f"SELECT title||':'||version FROM m02.media WHERE id='{media}';",self.database),'After:2')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE command_id='{command}';",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.outbox WHERE command_id='{command}';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command,title='Different')
+        with self.assertRaises(subprocess.CalledProcessError): update(version=1,title='Stale')
+        def race(title):
+            try: return update(version=2,title=title)
+            except subprocess.CalledProcessError: return None
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes=list(pool.map(race,['Writer one','Writer two']))
+        self.assertEqual(outcomes.count(media),1)
+        self.assertEqual(sql(f"SELECT version FROM m02.media WHERE id='{media}';",self.database),'3')
+        invitation,space=[str(uuid.uuid4()) for _ in range(2)]
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('c',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        grant=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{media}','{a}','{b}','{space}','viewer');",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3,token='b',space=space)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}'; INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor');",self.database)
+        editor_command=str(uuid.uuid4())
+        self.assertEqual(update(version=3,title='Editor title',token='b',space=space,command=editor_command),media)
+        self.assertEqual(update(version=3,title='Editor title',token='b',space=space,command=editor_command),media)
+        self.assertEqual(update(version=4,title='Shared owner title',space=space),media)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND role='editor';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3,title='Editor title',token='b',space=space,command=editor_command)
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        for token in ['a','b']:
+            with self.assertRaises(subprocess.CalledProcessError): update(version=5,token=token,space=space)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=5)
+        self.assertEqual(sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database),binary)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND revoked_at IS NULL; UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id='{media}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=5)
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command)
+
     def test_duplicate_completion_requires_resolution(self):
         migrate(database=self.database); seed(self.database)
         users=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002']

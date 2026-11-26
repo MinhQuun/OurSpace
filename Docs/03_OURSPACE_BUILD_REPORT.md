@@ -1793,3 +1793,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Viewer fetches current detail before rendition; shows title/description/upload/update dates and original format/size only after both requests succeed. Does not fall back to stale gallery metadata on network failure. Description rendered as plain text, preview/original distinction retained.
 - Lint/typecheck/build PASS. Actual PostgreSQL/Supabase Storage desktop+Pixel7 browser suites2/2 PASS36.0s: metadata changed after gallery load is displayed, HTML-looking description stays text, both dates present, detail network failure shows error without image/title; revoked access and earlier viewer/gallery/upload regressions retained. Diff/secret scan clean.
 - Metadata editing/captured/memory dates/tags and broader ML-07 remain pending. Next: versioned authorized metadata update command.
+
+- Viewer metadata commit30a0e5787c97625c0c23893ba7130dca4b170a59 PUSHED; origin/master exact SHA verified. Knowns OS-PQEV2D done.
+
+## Task04.38 - Versioned metadata update command (Knowns OS-TTA9Y3)
+- Migration0107 update_media_metadata permits title/description changes only. Private owner path locks active account/session/resource; shared owner/editor uses active Space edit guard and matching live grant context. Private path cannot bypass shared/frozen restrictions. Current authorization precedes retry receipt lookup; expected m02.media.version prevents lost updates. Original/storage bindings untouched. Atomic receipt/audit/outbox with incremented resource revision. Explicit runtime grant, PUBLIC revoked.
+- Lint/typecheck/migration checksum/provision PASS. Actual PostgreSQL test1/1 PASS11.188s covers private foreign denial, title validation, duplicate retry exactly-one audit/outbox, command mismatch, stale version, two-writer race one winner, viewer denial/editor+shared owner success, revoked editor retry denial, frozen owner/editor and private bypass denial, trash/session denial and binary record unchanged. Secret/diff scan clean.
+- Increment of M02 D09/edit permissions; HTTP/UI editing and captured/memory dates/tags remain pending. Next: expose bounded metadata PATCH with exact version and active shared context.
