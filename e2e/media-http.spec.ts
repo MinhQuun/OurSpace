@@ -78,6 +78,9 @@ test("Next upload HTTP stores real images and preserves private ownership",async
    expect(separateStart.status()).toBe(200);const separateId=(await separateStart.json()).uploadId;uploads.push(separateId);
    const separatePath=endpoint+"?uploadId="+separateId;
    const separateChoice={mode:"separate",confirmed:true};
+   expect((await request.put(separatePath,{headers:{...headers(),"Content-Type":"application/octet-stream"},data:bytes})).status()).toBe(409);
+   const blockedKey=(await owner.query("SELECT object_key FROM m02.upload_items WHERE id=$1",[separateId])).rows[0].object_key;
+   expect((await request.get("http://127.0.0.1:55435/object/media/"+blockedKey,{headers:storageHeaders})).ok()).toBe(false);
    expect((await request.patch(separatePath,{headers:headers(1),data:separateChoice})).status()).toBe(403);
    expect((await request.patch(separatePath,{headers:headers(),data:{mode:"separate"}})).status()).toBe(400);
    for(let i=0;i<2;i++) expect(await (await request.patch(separatePath,{headers:headers(),data:separateChoice})).json()).toEqual({uploadId:separateId,mediaId:null,state:"pending",separate:true});

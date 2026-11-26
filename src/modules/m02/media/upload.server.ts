@@ -157,6 +157,8 @@ export class MediaUploadService {
       verified.sha256 !== item.sha256
     )
       throw new AuthProviderError("invalid_input");
+    if (!item.media_id && !item.separate && (await this.duplicates(session,uploadId)).items.length)
+      throw new DatabaseUnavailableError("conflict");
     if (signal?.aborted) throw new AuthProviderError("unavailable");
     if (!item.media_id)
       await this.storage.write(

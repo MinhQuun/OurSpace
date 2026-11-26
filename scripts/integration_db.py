@@ -20,6 +20,32 @@ from seed_local import seed
 
 
 class MigrationIntegrationTests(unittest.TestCase):
+    def test_duplicate_completion_requires_resolution(self):
+        migrate(database=self.database); seed(self.database)
+        users=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002']
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in zip(users,['a','b']):
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        def begin(token='a'):
+            return sql(f"SELECT app_internal.begin_media_upload(repeat('{token}',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('a',64));",self.database)
+        def finish(item,token='a'):
+            return sql(f"SELECT app_internal.finalize_media_upload(repeat('{token}',64),'{item}','image/png',3,repeat('a',64));",self.database)
+        items=[begin(),begin()]
+        def attempt(item):
+            try: return finish(item)
+            except subprocess.CalledProcessError: return None
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes=list(pool.map(attempt,items))
+        self.assertEqual(sum(value is not None for value in outcomes),1)
+        winner=next(i for i,value in enumerate(outcomes) if value)
+        self.assertEqual(finish(items[winner]),outcomes[winner])
+        loser=items[1-winner]
+        with self.assertRaises(subprocess.CalledProcessError): finish(loser)
+        sql(f"SELECT app_internal.keep_upload_separate(repeat('a',64),'{loser}',true);",self.database)
+        separate=finish(loser); self.assertNotEqual(separate,outcomes[winner])
+        self.assertEqual(finish(loser),separate)
+        self.assertNotIn(finish(begin('b'),'b'),[separate,outcomes[winner]])
+
     def test_upload_keep_separate_decision(self):
         migrate(database=self.database)
         seed(self.database)
@@ -110,7 +136,9 @@ class MigrationIntegrationTests(unittest.TestCase):
         for actor,token in [(a,'a'),(b,'b')]:
             sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
         def begin():
-            return sql(f"SELECT app_internal.begin_media_upload(repeat('a',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('a',64));",self.database)
+            item=sql(f"SELECT app_internal.begin_media_upload(repeat('a',64),'{uuid.uuid4()}','Synthetic','image/png',3,repeat('a',64));",self.database)
+            sql(f"SELECT app_internal.keep_upload_separate(repeat('a',64),'{item}',true);",self.database)
+            return item
         def cancel(item,token='a'):
             return sql(f"SELECT app_internal.cancel_media_upload(repeat('{token}',64),'{item}');",self.database)
         def finish(item):
