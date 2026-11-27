@@ -1919,3 +1919,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Extended real two-account browser scenario: viewer without metadata edit rights can favorite, only B's row changes, external preference update produces conflict/current-state refresh, populated Favorites opens viewer, unfavorite then close yields empty gallery, and revoked media disappears despite retained favorite state.
 - Lint/typecheck PASS; desktop+Pixel7 actual backend tests2/2 PASS32.2s on unchanged production build. Existing shared editor/revoke/frozen flow still passes. Diff/secret scan clean.
 - Closes browser evidence gaps noted in Task04.52/04.53 for shared-viewer favorite, conflict and return-after-unfavorite. No production code change needed. Remaining Stage04 P0 includes metadata tags/captured-time provenance, broader search, albums, video, editing, exports and related integration.
+
+- Shared favorite lifecycle commit1f38234b51def6dcfffa184f2dc1eb21e2e45767 PUSHED; origin/master exact SHA verified. Knowns OS-7CVRDB done.
+
+## Task04.55 - Media tag storage and private projection (Knowns OS-ENM7AK)
+- M02 ENT06/07 D09/D10 foundation: owner-scoped reusable tags and many-to-many media membership with RLS; runtime has no table grants. Trimmed nonempty exact values unique per owner. ACL projection exposes tags only on readable media, no global suggestions/counts. Shared copy snapshots independent membership.
+- Lint/typecheck/migrate/provision PASS; real PostgreSQL sharing lifecycle PASS32.108s in preceding turn verifies private hiding, own read, duplicate/empty rejection, table denial, copy independence and revoked grant/session hiding. Code unchanged on recovery. Diff/secret scan clean.
+- Previous commit command was not executed because automatic approval review hit usage limit; resumed from unchanged worktree. Storage/read only; versioned edit command, HTTP/UI/search and remaining Stage04 P0 pending.
