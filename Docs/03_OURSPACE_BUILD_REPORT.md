@@ -1961,3 +1961,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - List API accepts q (literal text across title/description/tags) and tag (exact value), AND with favorites. Rejects repeated/blank/NUL filters; serialized filter data uses16KiB transport bound, not business tag quota. Cursor hashes query/tag/favorite scope and rejects changed filters; normal/all and favorite-only existing cursor formats retained.
 - Lint/typecheck/production build PASS; actual HTTP2/2 PASS40.3s verifies50+2 search pages, query/favorite scope mismatch rejection, malformed filters, private no-results, literal percent, tag/text combination and favorites intersection; upload/storage regression passed. Diff/secret scan clean.
 - Next search/filter UI, then remaining dates/album/uploader/type/related-resource filters and sort modes. Stage04/full P0 incomplete.
+
+- Search API commit6f6777f84fb84967467b8b88fe286758790fc144 PUSHED; origin/master exact SHA verified. Knowns OS-KDZV37 done.
+
+## Task04.61 - Gallery text and exact tag search controls (Knowns OS-TDBME5)
+- Added explicit apply controls for literal title/description/tag text and exact tag, combined with favorites. Individual and all-filter clearing resets keyset results; existing abort handling prevents stale request writes. Filter controls lock while viewer is open; closing viewer refreshes filtered results after metadata/tag/favorite changes.
+- Lint/typecheck/production build PASS. Actual owner upload/gallery desktop and mobile 2/2 PASS (1.4m), shared permission desktop/mobile 2/2 PASS in preceding run. Tests verify title case-insensitive search, description match, missing exact tag AND predicate, favorite intersection, individual/all clearing and no horizontal overflow.
+- Initial owner tests failed before search: trace proved final upload HTTP200 took the chained operation beyond the old5s assertion timeout. Upload completion assertions now wait15s; full expanded scenario allows120s. No business assertion weakened. Diff/secret scan clean.
+- Exact positive tag and filtered-after-edit browser scenarios remain to extend (SQL/HTTP matching already covered). Wider date/album/uploader/type/related filters and sorting remain pending; Stage04/full P0 incomplete.
