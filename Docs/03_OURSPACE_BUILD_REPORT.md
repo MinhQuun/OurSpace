@@ -1926,3 +1926,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - M02 ENT06/07 D09/D10 foundation: owner-scoped reusable tags and many-to-many media membership with RLS; runtime has no table grants. Trimmed nonempty exact values unique per owner. ACL projection exposes tags only on readable media, no global suggestions/counts. Shared copy snapshots independent membership.
 - Lint/typecheck/migrate/provision PASS; real PostgreSQL sharing lifecycle PASS32.108s in preceding turn verifies private hiding, own read, duplicate/empty rejection, table denial, copy independence and revoked grant/session hiding. Code unchanged on recovery. Diff/secret scan clean.
 - Previous commit command was not executed because automatic approval review hit usage limit; resumed from unchanged worktree. Storage/read only; versioned edit command, HTTP/UI/search and remaining Stage04 P0 pending.
+
+- Media tags storage commit38495846e6dc59def7af5802017e50ba788251f7 PUSHED; origin/master exact SHA verified. Knowns OS-ENM7AK done.
+
+## Task04.56 - Versioned media tag editing (Knowns OS-5WY20Q)
+- Migration0115 adds authorized tag replacement using established owner/editor active-Space locking and media version checks. Validates distinct nonempty trimmed one-dimensional text values; empty array clears. Reuses tag IDs in media owner's scope, atomically replaces membership, advances media/resource revisions and records receipt/audit/outbox. Original title/file unchanged; exact replay follows current authorization.
+- Lint/typecheck PASS. Docker Engine was stopped after session gap; restarted local Docker Desktop and database, verified pg_isready, then migration/provision PASS. Real PostgreSQL tag command integration PASS13.644s: invalid arrays, replace/clear/reuse, retry one audit/outbox, mismatched/stale requests, concurrent writers, owner/editor/viewer/revoked/frozen/trash/session enforcement and immutable binary.
+- Diff/secret scan clean. Next tag API/UI and search; Stage04/full P0 remain incomplete.
