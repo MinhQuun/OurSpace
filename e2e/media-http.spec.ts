@@ -42,6 +42,16 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(first.media).toHaveLength(50);
   const second=await (await request.get("/api/media/list?favorites=true&after="+encodeURIComponent(first.nextCursor),{headers:headers()})).json();
   expect(second.media).toHaveLength(2); expect(second.nextCursor).toBeNull();
+  const searched=await (await request.get("/api/media/list?q=PAGE&favorites=true",{headers:headers()})).json();
+  expect(searched.media).toHaveLength(50);
+  const tail=await (await request.get("/api/media/list?q=PAGE&favorites=true&after="+encodeURIComponent(searched.nextCursor),{headers:headers()})).json();
+  expect(tail.media).toHaveLength(2); expect(tail.nextCursor).toBeNull();
+  for(const filter of ["q=other&favorites=true","q=PAGE","favorites=true"])
+   expect((await request.get("/api/media/list?"+filter+"&after="+encodeURIComponent(searched.nextCursor),{headers:headers()})).status()).toBe(400);
+  for(const filter of ["q=","q=a&q=b","tag=","tag=a&tag=b","q=%00"])
+   expect((await request.get("/api/media/list?"+filter,{headers:headers()})).status()).toBe(400);
+  expect(await (await request.get("/api/media/list?q=PAGE",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
+  expect(await (await request.get("/api/media/list?q=%25",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
   expect(new Set([...first.media,...second.media].map((item:{id:string})=>item.id)).size).toBe(52);
   expect((await request.get("/api/media/list?after="+encodeURIComponent(first.nextCursor),{headers:headers()})).status()).toBe(400);
   expect((await db.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[command.commandId])).rows[0].n).toBe(1);
@@ -56,6 +66,8 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(tagged.version).toBe("2");
   expect(tagged.tags.map((tag:{value:string})=>tag.value)).toEqual(["<b>plain tag</b>","Synthetic tag"]);
   expect(Object.keys(tagged.tags[0]).sort()).toEqual(["id","value"]);
+  expect((await (await request.get("/api/media/list?q=plain&tag="+encodeURIComponent("<b>plain tag</b>"),{headers:headers()})).json()).media.map((item:{id:string})=>item.id)).toEqual([media]);
+  expect(await (await request.get("/api/media/list?q=plain&favorites=true",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
   expect((await request.patch(path,{headers:headers(),data:{...tagCommand,commandId:randomUUID()}})).status()).toBe(409);
   expect((await request.patch(path,{headers:headers(),data:{...tagCommand,commandId:randomUUID(),version:"2",tags:[]}})).status()).toBe(200);
   expect((await read()).tags).toEqual([]);

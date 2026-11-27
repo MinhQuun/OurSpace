@@ -1954,3 +1954,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0116 searches literal case-insensitive substrings across title/description/tag values; optional exact tag and personal favorite predicates combine AND. Current media ACL applies before bounded keyset result. Percent/underscore are literal characters, not wildcard operators. Safe gallery projection only, no suggestions or private counts.
 - Lint/typecheck/migration/provision PASS. Actual PostgreSQL sharing lifecycle PASS35.676s verifies title/description/tag matches, private hiding, literal wildcard characters, AND filters, copy tag independence, caller-scoped favorites and revoked grant/session hiding. Diff/secret scan clean. Resumed partial test edits after prior automatic-review usage limit; no unrun tests claimed passed.
 - Scope: database search foundation; HTTP/UI still pending. Filename, dates, album/uploader/type/related-resource filters and sorting remain separate required P0 work. Stage04/full project incomplete.
+
+- Search foundation commitfb062c85563ddca092a3ca2708921ede02e723f8 PUSHED; origin/master exact SHA verified. Knowns OS-4XM8PY done.
+
+## Task04.60 - Media search HTTP and scoped cursors (Knowns OS-KDZV37)
+- List API accepts q (literal text across title/description/tags) and tag (exact value), AND with favorites. Rejects repeated/blank/NUL filters; serialized filter data uses16KiB transport bound, not business tag quota. Cursor hashes query/tag/favorite scope and rejects changed filters; normal/all and favorite-only existing cursor formats retained.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS40.3s verifies50+2 search pages, query/favorite scope mismatch rejection, malformed filters, private no-results, literal percent, tag/text combination and favorites intersection; upload/storage regression passed. Diff/secret scan clean.
+- Next search/filter UI, then remaining dates/album/uploader/type/related-resource filters and sort modes. Stage04/full P0 incomplete.
