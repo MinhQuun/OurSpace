@@ -1912,3 +1912,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Gallery adds All/My Favorites selector, separate empty state, abort/reset when changing filter, and refreshes favorite results when viewer closes so unfavorited items can disappear. Filter control is disabled while viewer is open to protect drafts.
 - Lint/typecheck/migrate/provision/production build PASS. Actual HTTP+desktop+Pixel7 suites6/6 PASS1.6m: own/foreign favorite lists, invalid filters, set/unset projection, 52 favorites over50+2 pages without duplicate IDs, cursor scope rejection, UI empty-filter switching/reset, and existing owner/shared regressions. Diff/secret scan clean.
 - Populated favorite gallery return-after-unfavorite behavior implemented but not separately exercised in browser yet; shared revoke filtering uses the same live ACL predicate with prior database tests. Next strengthen these end-to-end scenarios and continue remaining metadata/tags/search/album/media P0. Stage04 incomplete.
+
+- Favorite gallery commiteee4a85db5a0085558208f0a6b125cd2718f2f4d PUSHED; origin/master exact SHA verified. Knowns OS-7TTTBE done.
+
+## Task04.54 - Shared viewer favorites end-to-end (Knowns OS-7CVRDB)
+- Extended real two-account browser scenario: viewer without metadata edit rights can favorite, only B's row changes, external preference update produces conflict/current-state refresh, populated Favorites opens viewer, unfavorite then close yields empty gallery, and revoked media disappears despite retained favorite state.
+- Lint/typecheck PASS; desktop+Pixel7 actual backend tests2/2 PASS32.2s on unchanged production build. Existing shared editor/revoke/frozen flow still passes. Diff/secret scan clean.
+- Closes browser evidence gaps noted in Task04.52/04.53 for shared-viewer favorite, conflict and return-after-unfavorite. No production code change needed. Remaining Stage04 P0 includes metadata tags/captured-time provenance, broader search, albums, video, editing, exports and related integration.
