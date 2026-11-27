@@ -103,6 +103,17 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(viewer.locator("details b")).toHaveCount(0);
   await expect(viewer.locator("details time")).toHaveCount(2);
   const editor=viewer.getByRole("form",{name:"Chỉnh thông tin ảnh"});
+  await expect(viewer.getByText("Ngày kỷ niệm: Chưa đặt",{exact:true})).toBeVisible();
+  await editor.getByLabel("Chỉnh sửa",{exact:true}).selectOption("date");
+  await editor.getByLabel("Ngày kỷ niệm",{exact:true}).fill("2024-02-29");
+  await expect(editor.getByLabel("Chỉnh sửa",{exact:true})).toBeDisabled();
+  await editor.getByRole("button",{name:"Lưu thông tin",exact:true}).click();
+  await expect(viewer.getByText("Ngày kỷ niệm: 29/02/2024",{exact:true})).toBeVisible();
+  expect((await owner.query("SELECT to_char(memory_date,'YYYY-MM-DD') AS day FROM m02.media WHERE uploaded_by=$1 AND title='first.png'",[user])).rows[0].day).toBe("2024-02-29");
+  await editor.getByLabel("Chỉnh sửa",{exact:true}).selectOption("date");
+  await editor.getByLabel("Ngày kỷ niệm",{exact:true}).fill("");
+  await editor.getByRole("button",{name:"Lưu thông tin",exact:true}).click();
+  await expect(viewer.getByText("Ngày kỷ niệm: Chưa đặt",{exact:true})).toBeVisible();
   await editor.getByLabel("Tiêu đề ảnh").fill("first edited.png");
   await editor.getByLabel("Tiêu đề ảnh").press("ArrowLeft");
   await expect(viewer.getByRole("heading",{name:"first.png",exact:true})).toBeVisible();

@@ -1867,3 +1867,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Existing same-origin, authenticated session, streamed16KiB body bound, shared write rate budget and no-store protections apply. Combined/unknown command keys are rejected by service validation.
 - Lint/typecheck/production build PASS. Real Next HTTP + PostgreSQL + Supabase Storage integration PASS23.3s, including initial null, invalid leap date/year/timestamp rejection, foreign write denial, assignment/exact replay, stale version conflict, clearing and existing media regression flows. Diff/secret scan clean.
 - Next: date editing and display in viewer with desktop/mobile tests. Full Stage04 P0 remains incomplete.
+
+- Memory date API commit7f1ff7393f72a61311c8f0bb0e393557b18d3e3b PUSHED; origin/master exact SHA verified. Knowns OS-ZW1X2P done.
+
+## Task04.48 - Viewer memory date editor (Knowns OS-2ZKE4R)
+- Viewer displays assigned calendar day without timezone conversion, or explicitly unknown. Existing editor offers metadata/date mode; date input supports assign and clear. One draft/command remains active, with mode switching disabled while dirty/pending to avoid losing another draft. Uses the existing exact replay, stale-version conflict, denied cleanup, exit guard and hidden-tab protection.
+- Lint/typecheck/production build PASS. Owner desktop+Pixel7 real-backend tests2/2 PASS44.4s verify unknown date, date entry, dirty mode lock, saved display/database value and clearing; existing metadata retry/conflict/visibility/exit flows still pass. Shared viewer/editor/revoke/frozen tests2/2 passed on same build. Initial JSX syntax and SQL alias errors were corrected; no failed run reported as passing.
+- Date-specific response-loss/conflict scenarios use shared implementation but were not separately exercised in browser; backend date replay/conflict/ACL tests passed in prior tasks. Stage04 remains incomplete: captured-time provenance, tags/favorites, album/gallery workflows, video and remaining P0.

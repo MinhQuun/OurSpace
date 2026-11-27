@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewerItem } from "./viewer";
 
 export type MediaDetail = ViewerItem & {
-  description: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
+  description: string | null; memoryDate: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
 };
-type Command = { commandId: string; spaceId: string | null; version: string; title: string; description: string | null };
+type Command = { commandId: string; spaceId: string | null; version: string } & ({ title: string; description: string | null } | { memoryDate: string | null });
 
 export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: {
   detail: MediaDetail; saved: (detail: MediaDetail) => void; denied: () => void; dirtyChanged: (dirty: boolean) => void;
 }) {
+  const [mode, setMode] = useState("metadata");
+  const [memoryDate, setMemoryDate] = useState(detail.memoryDate ?? "");
   const [title, setTitle] = useState(detail.title);
   const [description, setDescription] = useState(detail.description ?? "");
   const [pending, setPending] = useState<Command | null>(null);
@@ -19,7 +21,7 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
   const [conflict, setConflict] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  const dirty = title !== detail.title || description !== (detail.description ?? "") || !!pending || busy;
+  const dirty = memoryDate !== (detail.memoryDate ?? "") || title !== detail.title || description !== (detail.description ?? "") || !!pending || busy;
   useEffect(() => {
     dirtyChanged(dirty);
     return () => dirtyChanged(false);
@@ -37,7 +39,7 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
     if (busy || conflict) return;
     const command = pending ?? {
       commandId: crypto.randomUUID(), spaceId: detail.edit!.spaceId, version: detail.version,
-      title, description: description || null,
+      ...(mode === "date" ? { memoryDate: memoryDate || null } : { title, description: description || null }),
     };
     const body = JSON.stringify(command);
     if (new TextEncoder().encode(body).length > 16384) { setMessage("Nội dung quá dài để gửi. Vui lòng rút gọn mô tả."); return; }
@@ -58,11 +60,14 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
       if (!request.signal.aborted) setMessage("Chưa xác minh được kết quả lưu. Thử lưu lại sẽ gửi đúng yêu cầu cũ.");
     } finally { if (!request.signal.aborted) setBusy(false); }
   }} style={{display:"grid",gap:12,marginBlock:16}}>
+    <label>Chỉnh sửa<select aria-label="Chỉnh sửa" value={mode} disabled={dirty || conflict} onChange={event => setMode(event.target.value)}><option value="metadata">Tiêu đề và mô tả</option><option value="date">Ngày kỷ niệm</option></select></label>
+    {dirty && <p>Lưu hoặc hoàn nguyên nội dung đang nhập trước khi chuyển mục chỉnh sửa.</p>}
+    {mode === "date" ? <><label>Ngày kỷ niệm<input type="date" min="0001-01-01" max="9999-12-31" value={memoryDate} disabled={busy || !!pending} onChange={event => setMemoryDate(event.target.value)} /></label><p>Để trống để xóa ngày kỷ niệm. Ngày này do bạn chọn, độc lập với ngày tải lên.</p></> : <>
     <label style={{display:"grid",gap:4}}>Tiêu đề ảnh<input required value={title} disabled={busy || !!pending}
       onChange={event => setTitle(event.target.value)} /></label>
     <label style={{display:"grid",gap:4}}>Mô tả ảnh<textarea rows={4} value={description} disabled={busy || !!pending}
-      onChange={event => setDescription(event.target.value)} /></label>
-    <button type="submit" disabled={busy || conflict || !title.trim()}>{busy ? "Đang lưu…" : pending ? "Thử lưu lại" : "Lưu thông tin"}</button>
+      onChange={event => setDescription(event.target.value)} /></label></>}
+    <button type="submit" disabled={busy || conflict || (mode === "metadata" && !title.trim())}>{busy ? "Đang lưu…" : pending ? "Thử lưu lại" : "Lưu thông tin"}</button>
     {message && <p role="alert">{message}</p>}
     {conflict && <>
       <p>Tải bản mới sẽ bỏ nội dung đang nhập trong form này.</p>
