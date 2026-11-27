@@ -5,6 +5,42 @@ import { Pool } from "pg";
 import sharp from "sharp";
 import { localStorageToken } from "./support/local-storage";
 
+test("favorite HTTP state is personal and retries preserve newer choices",async({request})=>{
+ const db=new Pool({host:"127.0.0.1",port:55432,database:"ourspace",user:"ourspace_owner",password:readFileSync(".local/db-password","utf8").trim(),max:1});
+ const users=[randomUUID(),randomUUID()], sessions=users.map(()=>randomUUID()),tokens=users.map(()=>randomBytes(32).toString("base64url"));
+ const headers=(i=0)=>({Origin:"http://127.0.0.1:3103",Cookie:`ourspace_session=${sessions[i]}:${tokens[i]}`});
+ try {
+  for(let i=0;i<2;i++){
+   await db.query("INSERT INTO m10.accounts(id,state) VALUES ($1,'active')",[users[i]]);
+   await db.query("INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ($1,$2,$3,now()+interval '1 hour')",[sessions[i],users[i],createHash("sha256").update(tokens[i]).digest("hex")]);
+  }
+  const media=(await db.query("SELECT app_internal.register_media($1,$2,'Synthetic favorite','image/png','media',$3,3,repeat('a',64)) AS id",[createHash("sha256").update(tokens[0]).digest("hex"),randomUUID(),randomUUID()])).rows[0].id;
+  const path="/api/media/detail/"+media;
+  const read=async(i=0)=>(await (await request.get(path,{headers:headers(i)})).json()).media;
+  expect((await read()).favorite).toEqual({favorited:false,version:"0"});
+  const command={commandId:randomUUID(),favoriteVersion:"0",favorited:true};
+  expect((await request.patch(path,{headers:headers(1),data:command})).status()).toBe(403);
+  expect((await request.patch(path,{headers:{Cookie:headers().Cookie},data:command})).status()).toBe(403);
+  for(const invalid of [{...command,favorited:"true"},{...command,favoriteVersion:0},{...command,favoriteVersion:"00"},{...command,accountId:users[1]}])
+   expect((await request.patch(path,{headers:headers(),data:invalid})).status()).toBe(400);
+  for(let i=0;i<2;i++) expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(200);
+  expect((await read()).favorite).toEqual({favorited:true,version:"1"});
+  expect((await read()).version).toBe("1");
+  expect((await request.patch(path,{headers:headers(),data:{...command,commandId:randomUUID()}})).status()).toBe(409);
+  expect((await request.patch(path,{headers:headers(),data:{...command,favorited:false}})).status()).toBe(400);
+  expect((await request.patch(path,{headers:headers(),data:{commandId:randomUUID(),favoriteVersion:"1",favorited:false}})).status()).toBe(200);
+  expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(200);
+  expect((await read()).favorite).toEqual({favorited:false,version:"2"});
+  expect((await db.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[command.commandId])).rows[0].n).toBe(1);
+  expect((await db.query("SELECT count(*)::int n FROM m10.resource_grants WHERE resource_id=$1",[media])).rows[0].n).toBe(0);
+  await db.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[sessions[0]]);
+  expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(401);
+ } finally {
+  await db.query("UPDATE m10.sessions SET revoked_at=coalesce(revoked_at,clock_timestamp()) WHERE id=ANY($1::uuid[])",[sessions]);
+  await db.end();
+ }
+});
+
 test("Next upload HTTP stores real images and preserves private ownership",async({request})=>{
  const owner=new Pool({host:"127.0.0.1",port:55432,database:"ourspace",user:"ourspace_owner",password:readFileSync(".local/db-password","utf8").trim(),max:1});
  const users=[randomUUID(),randomUUID()], sessions=users.map(()=>randomUUID()),tokens=users.map(()=>randomBytes(32).toString("base64url"));
@@ -121,7 +157,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(detail.status()).toBe(200);
   expect(detail.headers()["cache-control"]).toBe("no-store");
   const detailMedia=(await detail.json()).media;
-  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit","memoryDate"].sort());
+  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit","memoryDate","favorite"].sort());
   expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize,edit:{spaceId:null}});
   expect(new Date(detailMedia.createdAt).toISOString()).toBe(detailMedia.createdAt);
   const foreignDetail=await request.get(detailPath,{headers:headers(1)});

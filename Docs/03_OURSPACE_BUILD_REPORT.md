@@ -1890,3 +1890,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Receipt and audit are atomic. Personal favorite changes do not mutate media metadata/version, grants, or emit shared activity. Viewer-level read access is sufficient for managing one's own preference; no target-account parameter exists. Runtime gets explicit function execution only.
 - Lint/typecheck/migrate/provision PASS; actual PostgreSQL integration PASS29.460s verifies owner/foreign, viewer favorite, account isolation, retry one audit, changed command/stale conflicts, concurrent writer single winner, unfavorite, old retry preserving newer state, metadata unchanged and revoked grant/session denial. Diff/secret scan clean.
 - Next: favorite HTTP projection/command, viewer/gallery control and favorites filtering. Stage04/full P0 remain incomplete.
+
+- Personal favorite command commit9949555d48a0d4ef7d0adf28168cd97dabc97280 PUSHED; origin/master exact SHA verified. Knowns OS-GD3CWD done.
+
+## Task04.51 - Favorite HTTP contract (Knowns OS-HVSH5J)
+- Authorized detail projects only session actor favorite boolean and personal version string in the same database snapshot. PATCH accepts exact commandId/favoriteVersion/favorited shape; requires boolean and canonical nonnegative bigint string. Other-account keys and mixed payloads rejected. Existing origin/session/body/rate/no-store guards apply.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS25.8s, including initial state, malformed inputs, foreign/origin denial, set/unset, exact retry, stale/mismatched command, old retry preserving new choice, metadata version unchanged, one audit, no grants created and revoked session rejection; existing real upload/storage suite passed. Shared-viewer mutation remains covered by previous PostgreSQL lifecycle test, not separately by this HTTP test. Diff/secret scan clean.
+- Recovered Knowns OS-GD3CWD done after previous usage-limit prevented that update; its commit was already pushed. Next: viewer/gallery favorite controls and favorite filtering. Stage04/full P0 remain incomplete.

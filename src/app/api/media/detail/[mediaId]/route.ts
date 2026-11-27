@@ -53,6 +53,8 @@ async function handle(request: Request, { params }: { params: Promise<{ mediaId:
       let input: unknown;
       try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size))); }
       catch { return json({ error: "invalid_input" }, 400); }
+      if (input && typeof input === "object" && Object.hasOwn(input, "favorited"))
+        return json(await auth.media.setFavorite(session, mediaId, input));
       if (input && typeof input === "object" && Object.hasOwn(input, "memoryDate"))
         return json(await auth.media.updateMemoryDate(session, mediaId, input));
       return json(await auth.media.updateMetadata(session, mediaId, input));
