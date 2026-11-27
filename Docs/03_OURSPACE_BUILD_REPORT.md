@@ -1882,3 +1882,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - read_media_favorite accepts session/media only, returns the caller's own state (default false/version0) only while media remains readable. No other-account argument or favorite counts exposed.
 - Lint/typecheck/migration/provision PASS; actual PostgreSQL sharing lifecycle PASS28.116s verifies private denial, own favorite, no direct table access, no copy/account inheritance, independent B preference, revoked grant/session hiding. Diff/secret scan clean.
 - Scope is storage/read projection only. Next: versioned favorite mutation then HTTP/UI/filter. Full favorites AC and Stage04 remain incomplete until those paths are tested.
+
+- Favorites storage commit58c9d2f4e962b9b1085945190f1b210efb194171 PUSHED; origin/master exact SHA verified. Knowns OS-A73EPK done.
+
+## Task04.50 - Versioned personal favorite command (Knowns OS-GD3CWD)
+- Migration0112 set_media_favorite derives actor from live session, checks readable M02 media under locks, and compares personal favorite version (zero when absent). Exact command replay is checked after current authorization and returns without overwriting newer choice. False rows preserve version; concurrent same-version writers cannot silently overwrite.
+- Receipt and audit are atomic. Personal favorite changes do not mutate media metadata/version, grants, or emit shared activity. Viewer-level read access is sufficient for managing one's own preference; no target-account parameter exists. Runtime gets explicit function execution only.
+- Lint/typecheck/migrate/provision PASS; actual PostgreSQL integration PASS29.460s verifies owner/foreign, viewer favorite, account isolation, retry one audit, changed command/stale conflicts, concurrent writer single winner, unfavorite, old retry preserving newer state, metadata unchanged and revoked grant/session denial. Diff/secret scan clean.
+- Next: favorite HTTP projection/command, viewer/gallery control and favorites filtering. Stage04/full P0 remain incomplete.

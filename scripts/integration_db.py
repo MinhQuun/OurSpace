@@ -426,11 +426,31 @@ COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
             return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(f),'[]') FROM app_internal.read_media_favorite(repeat('{token}',64),'{media_id}') f;",self.database))
         self.assertEqual(favorite(media),[])
         self.assertEqual(favorite(media,'a'),[{'favorited':False,'version':0}])
-        sql(f"INSERT INTO m02.media_favorites(account_id,media_id,favorited) VALUES ('{a}','{media}',true);",self.database)
+        sql(f"GRANT EXECUTE ON FUNCTION app_internal.set_media_favorite(text,uuid,uuid,bigint,boolean) TO {role};",self.database)
+        def set_favorite(media_id,version=0,value=True,token='a',command=None):
+            return sql(f"SET ROLE {role}; SELECT app_internal.set_media_favorite(repeat('{token}',64),'{command or uuid.uuid4()}','{media_id}',{version},{str(value).lower()});",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): set_favorite(media,token='b')
+        favorite_command=str(uuid.uuid4())
+        self.assertEqual(set_favorite(media,command=favorite_command),media)
+        self.assertEqual(set_favorite(media,command=favorite_command),media)
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE command_id='{favorite_command}';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError): set_favorite(media,command=favorite_command,value=False)
+        with self.assertRaises(subprocess.CalledProcessError): set_favorite(media)
+
         self.assertEqual(favorite(media,'a'),[{'favorited':True,'version':1}])
         self.assertEqual(favorite(media),[])
         with self.assertRaises(subprocess.CalledProcessError):
             sql(f"SET ROLE {role}; SELECT * FROM m02.media_favorites;",self.database)
+        before_favorite=detail(media,'a')[0]
+        def favorite_race(value):
+            try: return set_favorite(media,version=1,value=value)
+            except subprocess.CalledProcessError: return None
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(favorite_race,[True,False])).count(media),1)
+        self.assertEqual(set_favorite(media,version=2,value=False),media)
+        self.assertEqual(set_favorite(media,command=favorite_command),media)
+        self.assertEqual(favorite(media,'a'),[{'favorited':False,'version':3}])
+        self.assertEqual(detail(media,'a')[0],before_favorite)
         original_binding=preview(media,'a')[0]
         self.assertEqual(original_binding['media_id'],media)
         unsupported=sql("SELECT app_internal.register_media(repeat('a',64),gen_random_uuid(),'Synthetic unsupported','video/mp4','media',gen_random_uuid(),3,repeat('c',64));",self.database)
@@ -462,7 +482,7 @@ COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
         self.assertNotEqual(copy,media)
         self.assertEqual(favorite(copy),[{'favorited':False,'version':0}])
         self.assertEqual(favorite(copy,'a'),[{'favorited':False,'version':0}])
-        sql(f"INSERT INTO m02.media_favorites(account_id,media_id,favorited) VALUES ('{b}','{copy}',true);",self.database)
+        self.assertEqual(set_favorite(copy,token='b'),copy)
         self.assertEqual(favorite(copy),[{'favorited':True,'version':1}])
         self.assertEqual(favorite(copy,'a'),[{'favorited':False,'version':0}])
         copied_detail=detail(copy)[0]
@@ -507,6 +527,7 @@ COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
         self.assertEqual(detail(copy),[])
         self.assertEqual(memory_date(copy),[])
         self.assertEqual(favorite(copy),[])
+        with self.assertRaises(subprocess.CalledProcessError): set_favorite(copy,version=1,token='b',value=False)
         self.assertEqual(sql(f"SET ROLE {role}; SELECT count(*) FROM app_internal.resolve_readable_binary(repeat('b',64),'{copy}');",self.database),'0')
         sql("SELECT app_internal.register_media(repeat('a',64),gen_random_uuid(),'Synthetic','image/png','media',gen_random_uuid(),3,repeat('a',64)) FROM generate_series(1,52);",self.database)
         page1=duplicates('a'); page2=duplicates('a',after=page1[-1]['id'])
@@ -529,6 +550,7 @@ COMMIT; UPDATE m10.accounts SET state='active';""",self.database)
         self.assertEqual(detail(copy,'a'),[])
         self.assertEqual(memory_date(copy,'a'),[])
         self.assertEqual(favorite(copy,'a'),[])
+        with self.assertRaises(subprocess.CalledProcessError): set_favorite(media,command=favorite_command)
 
 
     def test_expired_export_cleanup_boundaries(self):
