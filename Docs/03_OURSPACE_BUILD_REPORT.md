@@ -1947,3 +1947,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Viewer renders authorized tags as plain text. Existing versioned editor adds tag mode with individual text rows, add/remove, trim and blank/duplicate validation; removing every row clears tags. Preserves existing pending payload, draft exit/visibility guard, conflict and denied cleanup. No delimiter parsing that would split a tag containing commas.
 - Lint/typecheck/production build PASS; actual desktop+Pixel7 backend suites4/4 PASS1.4m: initial empty state, blank/duplicate rejection, save HTML-looking plain tag without markup execution, clear tags, existing metadata/favorite/draft and shared permission regressions. Diff/secret scan clean.
 - Shared-editor tag-specific click/retry remains covered at database/API contract level rather than separately in browser. Next tag search and remaining metadata/gallery/album/media P0. Stage04 incomplete.
+
+- Tag viewer commit839748d8b07a202d62215f014fb06889b0ec4510 PUSHED; origin/master exact SHA verified. Knowns OS-5MGSZ4 done.
+
+## Task04.59 - ACL-filtered text and tag search foundation (Knowns OS-4XM8PY)
+- Migration0116 searches literal case-insensitive substrings across title/description/tag values; optional exact tag and personal favorite predicates combine AND. Current media ACL applies before bounded keyset result. Percent/underscore are literal characters, not wildcard operators. Safe gallery projection only, no suggestions or private counts.
+- Lint/typecheck/migration/provision PASS. Actual PostgreSQL sharing lifecycle PASS35.676s verifies title/description/tag matches, private hiding, literal wildcard characters, AND filters, copy tag independence, caller-scoped favorites and revoked grant/session hiding. Diff/secret scan clean. Resumed partial test edits after prior automatic-review usage limit; no unrun tests claimed passed.
+- Scope: database search foundation; HTTP/UI still pending. Filename, dates, album/uploader/type/related-resource filters and sorting remain separate required P0 work. Stage04/full project incomplete.
