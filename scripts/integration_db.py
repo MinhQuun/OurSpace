@@ -91,6 +91,83 @@ COMMIT;""",self.database)
         sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
         with self.assertRaises(subprocess.CalledProcessError): update(command=command)
 
+    def test_media_memory_date_versioned_command(self):
+        migrate(database=self.database); seed(self.database)
+        a='10000000-0000-4000-8000-000000000001'
+        b='10000000-0000-4000-8000-000000000002'
+        sql("UPDATE m10.accounts SET state='active';",self.database)
+        for actor,token in [(a,'a'),(b,'b')]:
+            sql(f"INSERT INTO m10.sessions(id,account_id,token_hash,expires_at) VALUES ('{uuid.uuid4()}','{actor}',repeat('{token}',64),now()+interval '1 hour');",self.database)
+        media=sql(f"SELECT app_internal.register_media(repeat('a',64),'{uuid.uuid4()}','Before','image/png','media','{uuid.uuid4()}',3,repeat('a',64));",self.database)
+        role='metadata_'+uuid.uuid4().hex
+        sql(f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA app_internal TO {role}; GRANT EXECUTE ON FUNCTION app_internal.update_media_memory_date(text,uuid,uuid,uuid,bigint,date) TO {role};",self.database)
+        self.addCleanup(lambda: sql(f'DROP ROLE {role};'))
+        sql(f"GRANT EXECUTE ON FUNCTION app_internal.media_metadata_edit_context(text,uuid) TO {role};",self.database)
+        def context(token='a'):
+            return json.loads(sql(f"SET ROLE {role}; SELECT coalesce(json_agg(json_build_object('space_id',c.space_id)),'[]') FROM app_internal.media_metadata_edit_context(repeat('{token}',64),'{media}') c;",self.database))
+        self.assertEqual(context(),[{'space_id':None}])
+        self.assertEqual(context('b'),[])
+        binary=sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database)
+        def update(version=1,day='2020-02-29',token='a',command=None,space=None):
+            context=f"'{space}'" if space else 'NULL'
+            return sql(f"SET ROLE {role}; SELECT app_internal.update_media_memory_date(repeat('{token}',64),'{command or uuid.uuid4()}','{media}',{context},{version},{'NULL' if day is None else chr(39)+day+chr(39)});",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(token='b')
+        with self.assertRaises(subprocess.CalledProcessError): update(day=' ')
+        for invalid in ['2023-02-29','infinity','10000-01-01','0001-01-01 BC']:
+            with self.assertRaises(subprocess.CalledProcessError): update(day=invalid)
+        command=str(uuid.uuid4())
+        self.assertEqual(update(command=command),media)
+        self.assertEqual(update(command=command),media)
+        self.assertEqual(sql(f"SELECT memory_date||':'||version FROM m02.media WHERE id='{media}';",self.database),'2020-02-29:2')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.audit_events WHERE command_id='{command}';",self.database),'1')
+        self.assertEqual(sql(f"SELECT count(*) FROM app_internal.outbox WHERE command_id='{command}';",self.database),'1')
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command,day='2021-01-01')
+        with self.assertRaises(subprocess.CalledProcessError): update(version=1,day='2022-01-01')
+        def race(day):
+            try: return update(version=2,day=day)
+            except subprocess.CalledProcessError: return None
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes=list(pool.map(race,['2023-01-01','2023-01-02']))
+        self.assertEqual(outcomes.count(media),1)
+        self.assertEqual(sql(f"SELECT version FROM m02.media WHERE id='{media}';",self.database),'3')
+        invitation,space=[str(uuid.uuid4()) for _ in range(2)]
+        sql(f"""BEGIN;
+INSERT INTO m10.pairing_invitations(id,creator_id,token_hash) VALUES ('{invitation}','{a}',repeat('c',64));
+UPDATE m10.pairing_invitations SET state='awaiting_confirmation',accepted_by='{b}',accepted_at=clock_timestamp() WHERE id='{invitation}';
+UPDATE m10.pairing_invitations SET state='consumed',confirmed_at=clock_timestamp(),ended_at=clock_timestamp() WHERE id='{invitation}';
+INSERT INTO m10.couple_spaces(id,invitation_id) VALUES ('{space}','{invitation}');
+INSERT INTO m10.couple_memberships(space_id,account_id,slot) VALUES ('{space}','{a}',1),('{space}','{b}',2);
+COMMIT;""",self.database)
+        grant=str(uuid.uuid4())
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES ('{grant}','{media}','{a}','{b}','{space}','viewer');",self.database)
+        self.assertEqual(context(),[{'space_id':space}])
+        self.assertEqual(context('b'),[])
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3,token='b',space=space)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE id='{grant}'; INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor');",self.database)
+        self.assertEqual(context('b'),[{'space_id':space}])
+        editor_command=str(uuid.uuid4())
+        self.assertEqual(update(version=3,day='2024-01-01',token='b',space=space,command=editor_command),media)
+        self.assertEqual(update(version=3,day='2024-01-01',token='b',space=space,command=editor_command),media)
+        self.assertEqual(sql(f"SELECT memory_date_set_by FROM m02.media WHERE id='{media}';",self.database),b)
+        self.assertEqual(update(version=4,day='2024-01-02',space=space),media)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND role='editor';",self.database)
+        self.assertEqual(context('b'),[])
+        with self.assertRaises(subprocess.CalledProcessError): update(version=3,day='2024-01-01',token='b',space=space,command=editor_command)
+        sql(f"INSERT INTO m10.resource_grants(id,resource_id,granted_by,grantee_id,space_id,role) VALUES (gen_random_uuid(),'{media}','{a}','{b}','{space}','editor'); UPDATE m10.couple_spaces SET state='disconnecting' WHERE id='{space}'; UPDATE m10.couple_spaces SET state='frozen' WHERE id='{space}';",self.database)
+        for token in ['a','b']:
+            self.assertEqual(context(token),[])
+            with self.assertRaises(subprocess.CalledProcessError): update(version=5,token=token,space=space)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=5)
+        self.assertEqual(sql(f"SELECT row_to_json(b) FROM app_internal.binary_objects b WHERE resource_id='{media}';",self.database),binary)
+        sql(f"UPDATE m10.resource_grants SET revoked_at=clock_timestamp() WHERE resource_id='{media}' AND revoked_at IS NULL; UPDATE m10.resources SET deleted_at=clock_timestamp() WHERE id='{media}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(version=5)
+        sql(f"UPDATE m10.resources SET deleted_at=NULL WHERE id='{media}';",self.database)
+        self.assertEqual(update(version=5,day=None),media)
+        self.assertEqual(sql(f"SELECT (memory_date IS NULL AND memory_date_set_by='{a}' AND memory_date_set_at IS NOT NULL)::text FROM m02.media WHERE id='{media}';",self.database),'true')
+        sql(f"UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE account_id='{a}';",self.database)
+        with self.assertRaises(subprocess.CalledProcessError): update(command=command)
+
     def test_duplicate_completion_requires_resolution(self):
         migrate(database=self.database); seed(self.database)
         users=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002']

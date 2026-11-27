@@ -1851,3 +1851,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - New logical copies snapshot date/provenance; later source edits/trash do not propagate. Copy initialization increments metadata version when assigned date provenance exists, preserving the existing update trigger contract.
 - Lint/typecheck/migration checksum/provision PASS. PostgreSQL sharing lifecycle integration PASS22.995s: unknown date, missing provenance/infinity rejection, opposite timezones, copy independence and revoked grant/session denial. Diff/secret scan clean.
 - Scope: database foundation only; authenticated versioned date command, HTTP/UI, captured-time provenance and remaining Stage04 P0 still pending. No full M02 completion claim.
+
+- Memory date commit c141c1de4af5052918d4fa01e7aca4017e8ec9a5 PUSHED; origin/master exact SHA verified. Knowns OS-86SFG5 done.
+
+## Task04.46 - Versioned memory date command (Knowns OS-DTP2X1)
+- Migration0110 exposes update_media_memory_date with live private-owner/shared-editor authorization, active Space locking, media version conflict checks and exact command replay after authorization. Assign/clear stores actor and server timestamp. Date validation rejects nonfinite/out-of-range values; PostgreSQL rejects impossible calendar dates.
+- Resource revision, receipt, audit and outbox commit atomically; retries do not emit duplicate events. Binary storage remains unchanged. Runtime receives explicit function execution only.
+- Lint/typecheck/migrate/provision PASS; actual PostgreSQL integration PASS13.182s covering assign/clear provenance, leap-day validation, stale/mismatched replay, concurrent writers (one winner), owner/editor/viewer, revoked permission/session, frozen Space and trash. Diff/secret scan clean.
+- Next: strict date HTTP contract and desktop/mobile editing. Stage04 and full P0 goal remain incomplete.
