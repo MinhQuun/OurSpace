@@ -8,8 +8,8 @@ export type MediaDetail = ViewerItem & {
 };
 type Command = { commandId: string; spaceId: string | null; version: string; title: string; description: string | null };
 
-export default function MetadataEditor({ detail, saved, denied }: {
-  detail: MediaDetail; saved: (detail: MediaDetail) => void; denied: () => void;
+export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: {
+  detail: MediaDetail; saved: (detail: MediaDetail) => void; denied: () => void; dirtyChanged: (dirty: boolean) => void;
 }) {
   const [title, setTitle] = useState(detail.title);
   const [description, setDescription] = useState(detail.description ?? "");
@@ -19,6 +19,11 @@ export default function MetadataEditor({ detail, saved, denied }: {
   const [conflict, setConflict] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
+  const dirty = title !== detail.title || description !== (detail.description ?? "") || !!pending || busy;
+  useEffect(() => {
+    dirtyChanged(dirty);
+    return () => dirtyChanged(false);
+  }, [dirty, dirtyChanged]);
   const refresh = async (signal: AbortSignal) => {
     const response = await fetch(`/api/media/detail/${detail.id}`, { cache: "no-store", signal });
     if ([401, 403, 404].includes(response.status)) { denied(); return; }

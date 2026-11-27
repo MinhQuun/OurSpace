@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./viewer.module.css";
 import MetadataEditor, { type MediaDetail } from "./metadata-editor";
 
 export type ViewerItem = { id: string; title: string; mimeType: string; byteSize: number; createdAt: string };
 
-function ImageView({ item, move, denied, updated }: {
-  item: ViewerItem; move: (step: number) => void; denied: () => void; updated: (item: ViewerItem) => void;
+function ImageView({ item, move, denied, updated, dirtyChanged }: {
+  item: ViewerItem; move: (step: number) => void; denied: () => void; updated: (item: ViewerItem) => void; dirtyChanged: (dirty: boolean) => void;
 }) {
   const [source, setSource] = useState("");
   const [detail, setDetail] = useState<MediaDetail | null>(null);
@@ -79,7 +79,7 @@ function ImageView({ item, move, denied, updated }: {
         <p>Đang xem bản preview WebP. File gốc: {detail.mimeType} · {detail.byteSize.toLocaleString("vi-VN")} byte.</p>
         <p>Ngày tải lên: <time dateTime={detail.createdAt}>{new Date(detail.createdAt).toLocaleString("vi-VN")}</time></p>
         <p>Cập nhật: <time dateTime={detail.updatedAt}>{new Date(detail.updatedAt).toLocaleString("vi-VN")}</time></p>
-        <MetadataEditor key={detail.version} detail={detail} denied={denied} saved={current => { setDetail(current); updated(current); }} />
+        <MetadataEditor key={detail.version} detail={detail} denied={denied} dirtyChanged={dirtyChanged} saved={current => { setDetail(current); updated(current); }} />
       </details>
     </>}
   </>;
@@ -90,6 +90,13 @@ export default function Viewer({ items, selected, select, close, denied, updated
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const historyMarker = useRef<string | null>(null);
+  const dirty = useRef(false);
+  const dirtyChanged = useCallback((value: boolean) => { dirty.current = value; }, []);
+  const mayLeave = useCallback(() => {
+    if (dirty.current && !window.confirm("Bỏ bản nháp chưa lưu hoặc chưa xác minh? Yêu cầu đã gửi có thể đã được lưu trên server; đóng ảnh không hoàn tác thao tác đó.")) return false;
+    dirty.current = false;
+    return true;
+  }, []);
   const [fullscreenError, setFullscreenError] = useState("");
   const index = items.findIndex(item => item.id === selected);
   const item = items[index];
@@ -103,22 +110,31 @@ export default function Viewer({ items, selected, select, close, denied, updated
     const push = window.setTimeout(() => {
       window.history.pushState({ ...window.history.state, ourspaceViewer: marker }, "", window.location.href);
     }, 0);
-    const back = () => close();
+    const back = () => {
+      if (mayLeave()) close();
+      else window.history.pushState({ ...window.history.state, ourspaceViewer: marker }, "", window.location.href);
+    };
+    const unload = (event: BeforeUnloadEvent) => {
+      if (dirty.current) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", unload);
     window.addEventListener("popstate", back);
     node?.showModal();
     return () => {
       window.clearTimeout(push);
       window.removeEventListener("popstate", back);
+      window.removeEventListener("beforeunload", unload);
       if (window.history.state?.ourspaceViewer === marker) window.history.back();
       historyMarker.current = null;
       node?.close(); previous?.focus();
     };
-  }, [close]);
+  }, [close, mayLeave]);
   const dismiss = () => {
+    if (!mayLeave()) return;
     if (historyMarker.current && window.history.state?.ourspaceViewer === historyMarker.current) window.history.back();
     else close();
   };
-  const move = (step: number) => { const next = items[index + step]; if (next) select(next.id); };
+  const move = (step: number) => { const next = items[index + step]; if (next && mayLeave()) select(next.id); };
   return <dialog ref={dialog} className={styles.dialog} aria-label="Xem ảnh" onCancel={event => { event.preventDefault(); dismiss(); }}
     onKeyDown={event => {
       const target = event.target as HTMLElement;
@@ -139,6 +155,6 @@ export default function Viewer({ items, selected, select, close, denied, updated
       }}>Toàn màn hình</button>
     </div>
     {fullscreenError && <p role="status">{fullscreenError}</p>}
-    {item && <ImageView key={item.id} item={item} move={move} denied={denied} updated={updated} />}
+    {item && <ImageView key={item.id} item={item} move={move} denied={denied} updated={updated} dirtyChanged={dirtyChanged} />}
   </dialog>;
 }

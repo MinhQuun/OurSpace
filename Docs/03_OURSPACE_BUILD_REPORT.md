@@ -1829,3 +1829,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Added two-account real-backend browser scenario and included it in desktop/mobile media suite. Actual PNG upload, live sessions and ACL grants; no mock image/storage/permission responses. Private partner list empty; Viewer sees preview but no form; Editor saves title/description in active Space; revoke/freeze after form opens denies write and preserves description/version2.
 - Lint/typecheck PASS. Desktop+Pixel7 scenario2/2 PASS19.4s. Uses current production build e301722 (application code unchanged). Secret/diff scan clean. This expands M02 permission UI evidence; does not replace remaining P0 work.
 - Next: protect unsaved metadata draft on viewer navigation/close; then continue metadata dates/tags and remaining media workflows.
+
+- Shared UI test commit314462c52ad4a782b8058dca179ef207d54f00c7 PUSHED; origin/master exact SHA verified. Knowns OS-0Y6HP5 done.
+
+## Task04.43 - Metadata draft exit guard (Knowns OS-X30AWK)
+- Metadata form reports dirty/pending state. Viewer confirms before close/Escape/prev-next and browser Back, warning that an already-sent write may have committed and closing is not rollback. Cancel keeps form; canceled Back restores modal history marker. Accepted discard returns to gallery, clean forms exit normally. beforeunload guard registered; ACL-denied cleanup bypasses draft prompt. No browser storage persistence.
+- Lint/typecheck/build PASS. Actual PostgreSQL/Supabase Storage desktop+Pixel7 suites4/4 PASS54.9s including close/change/Back cancel preserving draft, explicit discard/reopen with server text, and owner/shared-editor/revoke/frozen regression flows. Secret/diff scan clean.
+- Scope limit: document-hidden privacy cleanup still clears viewer/draft; browser-specific unload prompt and device gestures are not independently verified here. Next: reconcile hidden-tab draft behavior with fresh authorization, then metadata dates/tags and remaining Stage04 P0.
