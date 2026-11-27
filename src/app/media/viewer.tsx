@@ -98,6 +98,37 @@ export default function Viewer({ items, selected, select, close, denied, updated
     return true;
   }, []);
   const [fullscreenError, setFullscreenError] = useState("");
+  const [suspended, setSuspended] = useState(false);
+  const [checkError, setCheckError] = useState("");
+  const checkRequest = useRef<AbortController | null>(null);
+  const recheck = useCallback(async () => {
+    checkRequest.current?.abort();
+    const request = new AbortController(); checkRequest.current = request;
+    setSuspended(true); setCheckError("");
+    try {
+      const response = await fetch(`/api/media/detail/${selected}`, { cache: "no-store", signal: request.signal });
+      if (request.signal.aborted) return;
+      if ([401, 403, 404].includes(response.status)) { denied(); return; }
+      if (!response.ok) throw new Error();
+      if (document.visibilityState === "visible") setSuspended(false);
+    } catch {
+      if (!request.signal.aborted) setCheckError("Chưa kiểm tra lại được quyền truy cập. Bản nháp vẫn được giữ trong phiên này.");
+    }
+  }, [selected, denied]);
+  useEffect(() => {
+    const visibility = () => {
+      if (document.visibilityState === "hidden") {
+        checkRequest.current?.abort(); setSuspended(true);
+      } else void recheck();
+    };
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("pageshow", visibility);
+    return () => {
+      checkRequest.current?.abort();
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pageshow", visibility);
+    };
+  }, [recheck]);
   const index = items.findIndex(item => item.id === selected);
   const item = items[index];
   useEffect(() => {
@@ -137,13 +168,18 @@ export default function Viewer({ items, selected, select, close, denied, updated
   const move = (step: number) => { const next = items[index + step]; if (next && mayLeave()) select(next.id); };
   return <dialog ref={dialog} className={styles.dialog} aria-label="Xem ảnh" onCancel={event => { event.preventDefault(); dismiss(); }}
     onKeyDown={event => {
+      if (suspended) return;
       const target = event.target as HTMLElement;
       if (target.closest("input, textarea, select") || target.isContentEditable) return;
       if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
       if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
     }}>
+    <button type="button" onClick={dismiss}>Đóng ảnh</button>
+    {suspended && <div><p role="status">{checkError || "Đang kiểm tra lại quyền truy cập…"}</p>
+      {checkError && <button type="button" onClick={() => void recheck()}>Kiểm tra lại quyền</button>}
+    </div>}
+    <div hidden={suspended}>
     <div className={styles.controls}>
-      <button type="button" onClick={dismiss}>Đóng ảnh</button>
       <button type="button" disabled={index <= 0} onClick={() => move(-1)}>Ảnh trước</button>
       <button type="button" disabled={index >= items.length - 1} onClick={() => move(1)}>Ảnh tiếp</button>
       <button type="button" onClick={async () => {
@@ -156,5 +192,6 @@ export default function Viewer({ items, selected, select, close, denied, updated
     </div>
     {fullscreenError && <p role="status">{fullscreenError}</p>}
     {item && <ImageView key={item.id} item={item} move={move} denied={denied} updated={updated} dirtyChanged={dirtyChanged} />}
+    </div>
   </dialog>;
 }

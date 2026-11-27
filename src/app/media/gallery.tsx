@@ -61,7 +61,11 @@ export default function Gallery() {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
+    return () => { window.clearTimeout(initialLoad); request.current?.abort(); };
+  }, [load]);
+  useEffect(() => {
     const visibility = () => {
+      if (selected) return; // Viewer masks and revalidates itself without losing the draft.
       if (document.visibilityState === "hidden") {
         request.current?.abort(); setSelected(null); setItems([]); setCursor(null); setBusy(true);
       } else void load();
@@ -69,12 +73,10 @@ export default function Gallery() {
     window.addEventListener("pageshow", visibility);
     document.addEventListener("visibilitychange", visibility);
     return () => {
-      window.clearTimeout(initialLoad);
-      request.current?.abort();
       window.removeEventListener("pageshow", visibility);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [load]);
+  }, [load, selected]);
 
   return <section aria-label="Thư viện media" aria-busy={busy}>
     <p><button type="button" disabled={busy} onClick={() => void load()}>Làm mới thư viện</button></p>

@@ -136,6 +136,23 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(editor.getByLabel("Mô tả ảnh")).toHaveValue("Concurrent description");
   page.removeAllListeners("dialog");
   await editor.getByLabel("Mô tả ảnh").fill("Unsaved draft");
+  const visibility=async(state:"hidden"|"visible")=>page.evaluate(value=>{
+    Object.defineProperty(document,"visibilityState",{configurable:true,get:()=>value});
+    document.dispatchEvent(new Event("visibilitychange"));
+  },state);
+  await visibility("hidden");
+  await expect(viewer.locator("img")).toBeHidden();
+  await visibility("visible");
+  await expect(editor.getByLabel("Mô tả ảnh")).toBeVisible();
+  await expect(editor.getByLabel("Mô tả ảnh")).toHaveValue("Unsaved draft");
+  await page.route("**/api/media/detail/*",route=>route.abort());
+  await visibility("hidden"); await visibility("visible");
+  await expect(viewer.getByRole("status")).toContainText("Chưa kiểm tra lại được quyền");
+  await expect(viewer.locator("img")).toBeHidden();
+  await page.unroute("**/api/media/detail/*");
+  await viewer.getByRole("button",{name:"Kiểm tra lại quyền",exact:true}).click();
+  await expect(editor.getByLabel("Mô tả ảnh")).toBeVisible();
+  await expect(editor.getByLabel("Mô tả ảnh")).toHaveValue("Unsaved draft");
   page.once("dialog",dialog=>dialog.dismiss());
   await viewer.getByRole("button",{name:"Đóng ảnh",exact:true}).click();
   await expect(editor.getByLabel("Mô tả ảnh")).toHaveValue("Unsaved draft");
@@ -196,8 +213,11 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(54);
   await expect(page.getByRole("button",{name:"Xem thêm media"})).toHaveCount(0);
   await expect(page.getByText("Chưa có bản xem trước",{exact:true})).toHaveCount(51);
-  await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[session]);
   await page.getByRole("button",{name:"Xem first.png",exact:true}).click();
+  await expect(viewer.getByRole("heading",{name:"first.png",exact:true})).toBeVisible();
+  await visibility("hidden");
+  await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[session]);
+  await visibility("visible");
   await expect(page.getByRole("dialog",{name:"Xem ảnh"})).toHaveCount(0);
   await expect(page.locator("main").getByRole("alert")).toContainText("Media không còn khả dụng");
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(0);
