@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./viewer.module.css";
+import FavoriteControl from "./favorite-control";
 import MetadataEditor, { type MediaDetail } from "./metadata-editor";
 
 export type ViewerItem = { id: string; title: string; mimeType: string; byteSize: number; createdAt: string };
@@ -9,6 +10,9 @@ export type ViewerItem = { id: string; title: string; mimeType: string; byteSize
 function ImageView({ item, move, denied, updated, dirtyChanged }: {
   item: ViewerItem; move: (step: number) => void; denied: () => void; updated: (item: ViewerItem) => void; dirtyChanged: (dirty: boolean) => void;
 }) {
+  const drafts = useRef({ metadata: false, favorite: false });
+  const metadataDirty = useCallback((dirty: boolean) => { drafts.current.metadata = dirty; dirtyChanged(dirty || drafts.current.favorite); }, [dirtyChanged]);
+  const favoriteDirty = useCallback((dirty: boolean) => { drafts.current.favorite = dirty; dirtyChanged(dirty || drafts.current.metadata); }, [dirtyChanged]);
   const [source, setSource] = useState("");
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [error, setError] = useState("");
@@ -47,6 +51,7 @@ function ImageView({ item, move, denied, updated, dirtyChanged }: {
     {!source && !error && <p role="status">Đang tải ảnh…</p>}
     {source && detail && <>
       <h2>{detail.title}</h2>
+      <FavoriteControl mediaId={detail.id} initial={detail.favorite} denied={denied} dirtyChanged={favoriteDirty} />
       <div className={styles.controls}>
         <button type="button" disabled={zoom <= 1} onClick={() => setZoom(value => Math.max(1, value - .5))}>Thu nhỏ</button>
         <output aria-label="Mức thu phóng">{Math.round(zoom * 100)}%</output>
@@ -80,7 +85,7 @@ function ImageView({ item, move, denied, updated, dirtyChanged }: {
         <p>Đang xem bản preview WebP. File gốc: {detail.mimeType} · {detail.byteSize.toLocaleString("vi-VN")} byte.</p>
         <p>Ngày tải lên: <time dateTime={detail.createdAt}>{new Date(detail.createdAt).toLocaleString("vi-VN")}</time></p>
         <p>Cập nhật: <time dateTime={detail.updatedAt}>{new Date(detail.updatedAt).toLocaleString("vi-VN")}</time></p>
-        <MetadataEditor key={detail.version} detail={detail} denied={denied} dirtyChanged={dirtyChanged} saved={current => { setDetail(current); updated(current); }} />
+        <MetadataEditor key={detail.version} detail={detail} denied={denied} dirtyChanged={metadataDirty} saved={current => { setDetail(current); updated(current); }} />
       </details>
     </>}
   </>;

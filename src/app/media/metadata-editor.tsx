@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewerItem } from "./viewer";
 
 export type MediaDetail = ViewerItem & {
-  description: string | null; memoryDate: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
+  favorite: { favorited: boolean; version: string }; description: string | null; memoryDate: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
 };
 type Command = { commandId: string; spaceId: string | null; version: string } & ({ title: string; description: string | null } | { memoryDate: string | null });
 

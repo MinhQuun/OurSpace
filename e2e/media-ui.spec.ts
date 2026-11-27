@@ -115,6 +115,22 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await editor.getByRole("button",{name:"Lưu thông tin",exact:true}).click();
   await expect(viewer.getByText("Ngày kỷ niệm: Chưa đặt",{exact:true})).toBeVisible();
   await editor.getByLabel("Tiêu đề ảnh").fill("first edited.png");
+  await viewer.getByRole("button",{name:"Yêu thích",exact:true}).click();
+  await expect(viewer.getByRole("button",{name:"Bỏ yêu thích",exact:true})).toHaveAttribute("aria-pressed","true");
+  await expect(editor.getByLabel("Tiêu đề ảnh")).toHaveValue("first edited.png");
+  let favoriteCommand="";
+  await page.route("**/api/media/detail/*",async route=>{
+    if(route.request().method()!=="PATCH"){await route.continue();return;}
+    favoriteCommand=route.request().postDataJSON().commandId;
+    expect((await route.fetch()).status()).toBe(200); await route.abort();
+  });
+  await viewer.getByRole("button",{name:"Bỏ yêu thích",exact:true}).click();
+  await expect(viewer.getByText("Chưa xác minh được yêu thích. Thử lại sẽ gửi đúng lựa chọn cũ.",{exact:true})).toBeVisible();
+  await page.unroute("**/api/media/detail/*");
+  await viewer.getByRole("button",{name:"Thử lại yêu thích",exact:true}).click();
+  await expect(viewer.getByRole("button",{name:"Yêu thích",exact:true})).toHaveAttribute("aria-pressed","false");
+  await expect(editor.getByLabel("Tiêu đề ảnh")).toHaveValue("first edited.png");
+  expect((await owner.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[favoriteCommand])).rows[0].n).toBe(1);
   await editor.getByLabel("Tiêu đề ảnh").press("ArrowLeft");
   await expect(viewer.getByRole("heading",{name:"first.png",exact:true})).toBeVisible();
   await editor.getByLabel("Mô tả ảnh").fill("Saved by UI");
