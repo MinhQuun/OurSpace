@@ -81,6 +81,7 @@ function ImageView({ item, move, denied, updated, dirtyChanged }: {
       </div>
       <details><summary>Thông tin ảnh</summary>
         <p>{detail.description || "Chưa có mô tả."}</p>
+        {detail.tags.length ? <ul aria-label="Nhãn của ảnh">{detail.tags.map(tag => <li key={tag.id}>{tag.value}</li>)}</ul> : <p>Chưa có nhãn.</p>}
         <p>Ngày kỷ niệm: {detail.memoryDate ? <time dateTime={detail.memoryDate}>{detail.memoryDate.split("-").reverse().join("/")}</time> : "Chưa đặt"}</p>
         <p>Đang xem bản preview WebP. File gốc: {detail.mimeType} · {detail.byteSize.toLocaleString("vi-VN")} byte.</p>
         <p>Ngày tải lên: <time dateTime={detail.createdAt}>{new Date(detail.createdAt).toLocaleString("vi-VN")}</time></p>

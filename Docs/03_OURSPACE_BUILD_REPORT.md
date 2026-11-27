@@ -1940,3 +1940,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Authorized detail now returns sorted tag ID/value list in the same database snapshot. Strict commandId/spaceId/version/tags PATCH shape calls versioned tag command; validates array, distinct nonempty trimmed strings and canonical bigint version. Empty list clears. Existing origin/session/streamed body/rate guards retained; no tag owner/profile data exposed.
 - Lint/typecheck/production build PASS. Restored local Storage after prior Docker restart. Real HTTP2/2 PASS29.5s covers initial tags, malformed/duplicate/null rejection, foreign denial, replace/exact replay, sorted safe fields, stale409 and clear; existing upload/storage regression passed. Diff/secret scan clean.
 - Next tag editing/display UI and tag search; full Stage04 P0 remains incomplete.
+
+- Tags API commitd569448bb9664d2152573e4122c41967713cfded PUSHED; origin/master exact SHA verified. Knowns OS-339TKJ done.
+
+## Task04.58 - Media tag viewer editor (Knowns OS-5MGSZ4)
+- Viewer renders authorized tags as plain text. Existing versioned editor adds tag mode with individual text rows, add/remove, trim and blank/duplicate validation; removing every row clears tags. Preserves existing pending payload, draft exit/visibility guard, conflict and denied cleanup. No delimiter parsing that would split a tag containing commas.
+- Lint/typecheck/production build PASS; actual desktop+Pixel7 backend suites4/4 PASS1.4m: initial empty state, blank/duplicate rejection, save HTML-looking plain tag without markup execution, clear tags, existing metadata/favorite/draft and shared permission regressions. Diff/secret scan clean.
+- Shared-editor tag-specific click/retry remains covered at database/API contract level rather than separately in browser. Next tag search and remaining metadata/gallery/album/media P0. Stage04 incomplete.

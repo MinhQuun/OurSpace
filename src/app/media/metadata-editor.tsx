@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewerItem } from "./viewer";
 
 export type MediaDetail = ViewerItem & {
-  favorite: { favorited: boolean; version: string }; description: string | null; memoryDate: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
+  tags: { id: string; value: string }[]; favorite: { favorited: boolean; version: string }; description: string | null; memoryDate: string | null; updatedAt: string; version: string; edit: { spaceId: string | null } | null;
 };
-type Command = { commandId: string; spaceId: string | null; version: string } & ({ title: string; description: string | null } | { memoryDate: string | null });
+type Command = { commandId: string; spaceId: string | null; version: string } & ({ title: string; description: string | null } | { memoryDate: string | null } | { tags: string[] });
 
 export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: {
   detail: MediaDetail; saved: (detail: MediaDetail) => void; denied: () => void; dirtyChanged: (dirty: boolean) => void;
 }) {
   const [mode, setMode] = useState("metadata");
+  const [tags, setTags] = useState(detail.tags.map(tag => tag.value));
   const [memoryDate, setMemoryDate] = useState(detail.memoryDate ?? "");
   const [title, setTitle] = useState(detail.title);
   const [description, setDescription] = useState(detail.description ?? "");
@@ -21,7 +22,7 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
   const [conflict, setConflict] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  const dirty = memoryDate !== (detail.memoryDate ?? "") || title !== detail.title || description !== (detail.description ?? "") || !!pending || busy;
+  const dirty = JSON.stringify(tags) !== JSON.stringify(detail.tags.map(tag => tag.value)) || memoryDate !== (detail.memoryDate ?? "") || title !== detail.title || description !== (detail.description ?? "") || !!pending || busy;
   useEffect(() => {
     dirtyChanged(dirty);
     return () => dirtyChanged(false);
@@ -37,12 +38,16 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
   return <form aria-label="Chỉnh thông tin ảnh" onSubmit={async event => {
     event.preventDefault();
     if (busy || conflict) return;
+    const cleanTags = tags.map(tag => tag.trim());
+    if (!pending && mode === "tags" && (cleanTags.some(tag => !tag) || new Set(cleanTags).size !== cleanTags.length)) {
+      setMessage("Nhãn không được để trống hoặc trùng nhau. Hãy sửa hoặc xóa dòng đó."); return;
+    }
     const command = pending ?? {
       commandId: crypto.randomUUID(), spaceId: detail.edit!.spaceId, version: detail.version,
-      ...(mode === "date" ? { memoryDate: memoryDate || null } : { title, description: description || null }),
+      ...(mode === "tags" ? { tags: cleanTags } : mode === "date" ? { memoryDate: memoryDate || null } : { title, description: description || null }),
     };
     const body = JSON.stringify(command);
-    if (new TextEncoder().encode(body).length > 16384) { setMessage("Nội dung quá dài để gửi. Vui lòng rút gọn mô tả."); return; }
+    if (new TextEncoder().encode(body).length > 16384) { setMessage("Nội dung quá dài để gửi. Vui lòng rút gọn nội dung."); return; }
     const request = new AbortController(); controller.current = request;
     setPending(command); setBusy(true); setMessage("");
     try {
@@ -60,9 +65,13 @@ export default function MetadataEditor({ detail, saved, denied, dirtyChanged }: 
       if (!request.signal.aborted) setMessage("Chưa xác minh được kết quả lưu. Thử lưu lại sẽ gửi đúng yêu cầu cũ.");
     } finally { if (!request.signal.aborted) setBusy(false); }
   }} style={{display:"grid",gap:12,marginBlock:16}}>
-    <label>Chỉnh sửa<select aria-label="Chỉnh sửa" value={mode} disabled={dirty || conflict} onChange={event => setMode(event.target.value)}><option value="metadata">Tiêu đề và mô tả</option><option value="date">Ngày kỷ niệm</option></select></label>
+    <label>Chỉnh sửa<select aria-label="Chỉnh sửa" value={mode} disabled={dirty || conflict} onChange={event => setMode(event.target.value)}><option value="metadata">Tiêu đề và mô tả</option><option value="date">Ngày kỷ niệm</option><option value="tags">Nhãn</option></select></label>
     {dirty && <p>Lưu hoặc hoàn nguyên nội dung đang nhập trước khi chuyển mục chỉnh sửa.</p>}
-    {mode === "date" ? <><label>Ngày kỷ niệm<input type="date" min="0001-01-01" max="9999-12-31" value={memoryDate} disabled={busy || !!pending} onChange={event => setMemoryDate(event.target.value)} /></label><p>Để trống để xóa ngày kỷ niệm. Ngày này do bạn chọn, độc lập với ngày tải lên.</p></> : <>
+    {mode === "tags" ? <fieldset disabled={busy || !!pending}><legend>Nhãn của ảnh</legend>
+      {tags.map((tag, index) => <div key={index} style={{display:"grid",gap:4,marginBlock:8}}><label>Nhãn {index + 1}<textarea rows={1} value={tag} onChange={event => setTags(previous => previous.map((value, i) => i === index ? event.target.value : value))} /></label><button type="button" onClick={() => setTags(previous => previous.filter((_, i) => i !== index))}>Xóa nhãn {index + 1}</button></div>)}
+      <button type="button" onClick={() => setTags(previous => [...previous, ""])}>Thêm nhãn</button>
+      <p>Xóa các dòng rồi lưu để bỏ toàn bộ nhãn của ảnh.</p>
+    </fieldset> : mode === "date" ? <><label>Ngày kỷ niệm<input type="date" min="0001-01-01" max="9999-12-31" value={memoryDate} disabled={busy || !!pending} onChange={event => setMemoryDate(event.target.value)} /></label><p>Để trống để xóa ngày kỷ niệm. Ngày này do bạn chọn, độc lập với ngày tải lên.</p></> : <>
     <label style={{display:"grid",gap:4}}>Tiêu đề ảnh<input required value={title} disabled={busy || !!pending}
       onChange={event => setTitle(event.target.value)} /></label>
     <label style={{display:"grid",gap:4}}>Mô tả ảnh<textarea rows={4} value={description} disabled={busy || !!pending}
