@@ -1874,3 +1874,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Viewer displays assigned calendar day without timezone conversion, or explicitly unknown. Existing editor offers metadata/date mode; date input supports assign and clear. One draft/command remains active, with mode switching disabled while dirty/pending to avoid losing another draft. Uses the existing exact replay, stale-version conflict, denied cleanup, exit guard and hidden-tab protection.
 - Lint/typecheck/production build PASS. Owner desktop+Pixel7 real-backend tests2/2 PASS44.4s verify unknown date, date entry, dirty mode lock, saved display/database value and clearing; existing metadata retry/conflict/visibility/exit flows still pass. Shared viewer/editor/revoke/frozen tests2/2 passed on same build. Initial JSX syntax and SQL alias errors were corrected; no failed run reported as passing.
 - Date-specific response-loss/conflict scenarios use shared implementation but were not separately exercised in browser; backend date replay/conflict/ACL tests passed in prior tasks. Stage04 remains incomplete: captured-time provenance, tags/favorites, album/gallery workflows, video and remaining P0.
+
+- Viewer memory date commit4dbc7c07a2199061bbca15f1962a4ae61604dd4f PUSHED; origin/master exact SHA verified. Knowns OS-2ZKE4R done.
+
+## Task04.49 - Account-scoped favorites storage (Knowns OS-A73EPK)
+- BRD M02 D11, BR-M02-012, AC39/40: favorite belongs to User x Media, never grants access or inherits across accounts/copies. Migration0111 adds RLS-protected state with personal version and timestamps; false rows can retain version across unfavorite/refavorite. Runtime only receives read function execution, no table grants.
+- read_media_favorite accepts session/media only, returns the caller's own state (default false/version0) only while media remains readable. No other-account argument or favorite counts exposed.
+- Lint/typecheck/migration/provision PASS; actual PostgreSQL sharing lifecycle PASS28.116s verifies private denial, own favorite, no direct table access, no copy/account inheritance, independent B preference, revoked grant/session hiding. Diff/secret scan clean.
+- Scope is storage/read projection only. Next: versioned favorite mutation then HTTP/UI/filter. Full favorites AC and Stage04 remain incomplete until those paths are tested.
