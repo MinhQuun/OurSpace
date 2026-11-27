@@ -151,6 +151,23 @@ export class MediaService {
       [hash, value.commandId, mediaId, value.favoriteVersion, value.favorited]);
     return { mediaId: result.rows[0].id };
   }
+  async updateTags(session: string, mediaId: string, input: unknown) {
+    const hash = digest(session);
+    if (!uuid(mediaId) || !input || typeof input !== "object" || Array.isArray(input))
+      throw new AuthProviderError("invalid_input");
+    const value = input as Record<string, unknown>;
+    if (Object.keys(value).sort().join(",") !== "commandId,spaceId,tags,version" ||
+      !uuid(value.commandId) || (value.spaceId !== null && !uuid(value.spaceId)) ||
+      typeof value.version !== "string" || !/^[1-9][0-9]{0,18}$/.test(value.version) ||
+      BigInt(value.version) >= 9223372036854775807n ||
+      !Array.isArray(value.tags) || value.tags.some(tag => typeof tag !== "string" || !tag.trim() || tag !== tag.trim()) ||
+      new Set(value.tags).size !== value.tags.length)
+      throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.update_media_tags($1,$2,$3,$4,$5,$6) AS id",
+      [hash, value.commandId, mediaId, value.spaceId, value.version, value.tags]);
+    return { mediaId: result.rows[0].id };
+  }
   async detail(session: string, mediaId: string) {
     const hash = digest(session);
     if (!uuid(mediaId)) throw new AuthProviderError("invalid_input");
@@ -158,14 +175,14 @@ export class MediaService {
       id: string; title: string; description: string | null; mime_type: string;
       created_at: Date; updated_at: Date; version: string; byte_size: string;
       edit: { spaceId: string | null } | null; memory_date: string | null;
-      favorite: { favorited: boolean; version: string };
-    }>("SELECT d.*, (SELECT json_build_object('favorited',f.favorited,'version',f.version::text) FROM app_internal.read_media_favorite($1,$2) f) AS favorite, (SELECT memory_date FROM app_internal.read_media_memory_date($1,$2)) AS memory_date, (SELECT json_build_object('spaceId',e.space_id) FROM app_internal.media_metadata_edit_context($1,$2) e) AS edit FROM app_internal.read_media_detail($1,$2) d", [hash, mediaId]);
+      favorite: { favorited: boolean; version: string }; tags: { id: string; value: string }[];
+    }>("SELECT d.*, (SELECT coalesce(json_agg(t ORDER BY t.value COLLATE \"C\",t.id),'[]'::json) FROM app_internal.read_media_tags($1,$2) t) AS tags, (SELECT json_build_object('favorited',f.favorited,'version',f.version::text) FROM app_internal.read_media_favorite($1,$2) f) AS favorite, (SELECT memory_date FROM app_internal.read_media_memory_date($1,$2)) AS memory_date, (SELECT json_build_object('spaceId',e.space_id) FROM app_internal.media_metadata_edit_context($1,$2) e) AS edit FROM app_internal.read_media_detail($1,$2) d", [hash, mediaId]);
     const row = result.rows[0];
     if (!row) return null;
     return {
       id: row.id, title: row.title, description: row.description, mimeType: row.mime_type,
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
-      version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date, favorite: row.favorite,
+      version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date, favorite: row.favorite, tags: row.tags,
     };
   }
   async page(session: string, after?: string, favorites = false) {

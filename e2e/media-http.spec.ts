@@ -46,6 +46,19 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect((await request.get("/api/media/list?after="+encodeURIComponent(first.nextCursor),{headers:headers()})).status()).toBe(400);
   expect((await db.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[command.commandId])).rows[0].n).toBe(1);
   expect((await db.query("SELECT count(*)::int n FROM m10.resource_grants WHERE resource_id=$1",[media])).rows[0].n).toBe(0);
+  expect((await read()).tags).toEqual([]);
+  const tagCommand={commandId:randomUUID(),spaceId:null,version:"1",tags:["Synthetic tag","<b>plain tag</b>"]};
+  for(const tags of [[""],["duplicate","duplicate"],[null]])
+   expect((await request.patch(path,{headers:headers(),data:{...tagCommand,tags}})).status()).toBe(400);
+  expect((await request.patch(path,{headers:headers(1),data:tagCommand})).status()).toBe(403);
+  for(let i=0;i<2;i++) expect((await request.patch(path,{headers:headers(),data:tagCommand})).status()).toBe(200);
+  const tagged=await read();
+  expect(tagged.version).toBe("2");
+  expect(tagged.tags.map((tag:{value:string})=>tag.value)).toEqual(["<b>plain tag</b>","Synthetic tag"]);
+  expect(Object.keys(tagged.tags[0]).sort()).toEqual(["id","value"]);
+  expect((await request.patch(path,{headers:headers(),data:{...tagCommand,commandId:randomUUID()}})).status()).toBe(409);
+  expect((await request.patch(path,{headers:headers(),data:{...tagCommand,commandId:randomUUID(),version:"2",tags:[]}})).status()).toBe(200);
+  expect((await read()).tags).toEqual([]);
   await db.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[sessions[0]]);
   expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(401);
  } finally {
@@ -170,7 +183,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(detail.status()).toBe(200);
   expect(detail.headers()["cache-control"]).toBe("no-store");
   const detailMedia=(await detail.json()).media;
-  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit","memoryDate","favorite"].sort());
+  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit","memoryDate","favorite","tags"].sort());
   expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize,edit:{spaceId:null}});
   expect(new Date(detailMedia.createdAt).toISOString()).toBe(detailMedia.createdAt);
   const foreignDetail=await request.get(detailPath,{headers:headers(1)});

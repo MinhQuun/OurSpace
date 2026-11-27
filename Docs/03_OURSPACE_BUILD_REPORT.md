@@ -1933,3 +1933,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0115 adds authorized tag replacement using established owner/editor active-Space locking and media version checks. Validates distinct nonempty trimmed one-dimensional text values; empty array clears. Reuses tag IDs in media owner's scope, atomically replaces membership, advances media/resource revisions and records receipt/audit/outbox. Original title/file unchanged; exact replay follows current authorization.
 - Lint/typecheck PASS. Docker Engine was stopped after session gap; restarted local Docker Desktop and database, verified pg_isready, then migration/provision PASS. Real PostgreSQL tag command integration PASS13.644s: invalid arrays, replace/clear/reuse, retry one audit/outbox, mismatched/stale requests, concurrent writers, owner/editor/viewer/revoked/frozen/trash/session enforcement and immutable binary.
 - Diff/secret scan clean. Next tag API/UI and search; Stage04/full P0 remain incomplete.
+
+- Tag edit command commitc55474d18585225ad56473a6a7142c5168b01f61 PUSHED; origin/master exact SHA verified. Knowns OS-5WY20Q done.
+
+## Task04.57 - Media tags HTTP contract (Knowns OS-339TKJ)
+- Authorized detail now returns sorted tag ID/value list in the same database snapshot. Strict commandId/spaceId/version/tags PATCH shape calls versioned tag command; validates array, distinct nonempty trimmed strings and canonical bigint version. Empty list clears. Existing origin/session/streamed body/rate guards retained; no tag owner/profile data exposed.
+- Lint/typecheck/production build PASS. Restored local Storage after prior Docker restart. Real HTTP2/2 PASS29.5s covers initial tags, malformed/duplicate/null rejection, foreign denial, replace/exact replay, sorted safe fields, stale409 and clear; existing upload/storage regression passed. Diff/secret scan clean.
+- Next tag editing/display UI and tag search; full Stage04 P0 remains incomplete.
