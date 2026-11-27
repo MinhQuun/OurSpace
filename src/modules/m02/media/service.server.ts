@@ -112,20 +112,44 @@ export class MediaService {
       [hash, value.commandId, mediaId, value.spaceId, value.version, value.title, value.description]);
     return { mediaId: result.rows[0].id };
   }
+  async updateMemoryDate(session: string, mediaId: string, input: unknown) {
+    const hash = digest(session);
+    if (!uuid(mediaId) || !input || typeof input !== "object" || Array.isArray(input))
+      throw new AuthProviderError("invalid_input");
+    const value = input as Record<string, unknown>;
+    if (Object.keys(value).sort().join(",") !== "commandId,memoryDate,spaceId,version" ||
+      !uuid(value.commandId) || (value.spaceId !== null && !uuid(value.spaceId)) ||
+      typeof value.version !== "string" || !/^[1-9][0-9]{0,18}$/.test(value.version) ||
+      BigInt(value.version) >= 9223372036854775807n)
+      throw new AuthProviderError("invalid_input");
+    if (value.memoryDate !== null) {
+      if (typeof value.memoryDate !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value.memoryDate))
+        throw new AuthProviderError("invalid_input");
+      const [year, month, day] = value.memoryDate.split("-").map(Number);
+      const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1])
+        throw new AuthProviderError("invalid_input");
+    }
+    const result = await this.db.query<{ id: string }>(
+      "SELECT app_internal.update_media_memory_date($1,$2,$3,$4,$5,$6) AS id",
+      [hash, value.commandId, mediaId, value.spaceId, value.version, value.memoryDate]);
+    return { mediaId: result.rows[0].id };
+  }
   async detail(session: string, mediaId: string) {
     const hash = digest(session);
     if (!uuid(mediaId)) throw new AuthProviderError("invalid_input");
     const result = await this.db.query<{
       id: string; title: string; description: string | null; mime_type: string;
       created_at: Date; updated_at: Date; version: string; byte_size: string;
-      edit: { spaceId: string | null } | null;
-    }>("SELECT d.*, (SELECT json_build_object('spaceId',e.space_id) FROM app_internal.media_metadata_edit_context($1,$2) e) AS edit FROM app_internal.read_media_detail($1,$2) d", [hash, mediaId]);
+      edit: { spaceId: string | null } | null; memory_date: string | null;
+    }>("SELECT d.*, (SELECT memory_date FROM app_internal.read_media_memory_date($1,$2)) AS memory_date, (SELECT json_build_object('spaceId',e.space_id) FROM app_internal.media_metadata_edit_context($1,$2) e) AS edit FROM app_internal.read_media_detail($1,$2) d", [hash, mediaId]);
     const row = result.rows[0];
     if (!row) return null;
     return {
       id: row.id, title: row.title, description: row.description, mimeType: row.mime_type,
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
-      version: row.version, byteSize: Number(row.byte_size), edit: row.edit,
+      version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date,
     };
   }
   async page(session: string, after?: string) {

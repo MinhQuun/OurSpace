@@ -121,7 +121,7 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect(detail.status()).toBe(200);
   expect(detail.headers()["cache-control"]).toBe("no-store");
   const detailMedia=(await detail.json()).media;
-  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit"].sort());
+  expect(Object.keys(detailMedia).sort()).toEqual(["id","title","description","mimeType","createdAt","updatedAt","version","byteSize","edit","memoryDate"].sort());
   expect(detailMedia).toMatchObject({id:galleryData.media[0].id,title:galleryData.media[0].title,description:null,version:"1",byteSize:galleryData.media[0].byteSize,edit:{spaceId:null}});
   expect(new Date(detailMedia.createdAt).toISOString()).toBe(detailMedia.createdAt);
   const foreignDetail=await request.get(detailPath,{headers:headers(1)});
@@ -147,6 +147,16 @@ test("Next upload HTTP stores real images and preserves private ownership",async
   expect((await request.patch(detailPath,{headers:headers(1),data:{...metadataCommand,commandId:randomUUID(),version:"2"}})).status()).toBe(403);
   expect((await request.patch(detailPath,{headers:{Cookie:headers().Cookie},data:metadataCommand})).status()).toBe(403);
   expect((await request.patch(detailPath,{headers:{Origin:"http://127.0.0.1:3103"},data:metadataCommand})).status()).toBe(401);
+  expect(detailMedia.memoryDate).toBeNull();
+  const dateCommand={commandId:randomUUID(),spaceId:null,version:"2",memoryDate:"2024-02-29"};
+  for(const memoryDate of ["2023-02-29","0000-01-01","2024-02-29T00:00:00Z"])
+    expect((await request.patch(detailPath,{headers:headers(),data:{...dateCommand,memoryDate}})).status()).toBe(400);
+  expect((await request.patch(detailPath,{headers:headers(1),data:dateCommand})).status()).toBe(403);
+  for(let i=0;i<2;i++) expect((await request.patch(detailPath,{headers:headers(),data:dateCommand})).status()).toBe(200);
+  expect((await (await request.get(detailPath,{headers:headers()})).json()).media).toMatchObject({memoryDate:"2024-02-29",version:"3"});
+  expect((await request.patch(detailPath,{headers:headers(),data:{...dateCommand,commandId:randomUUID()}})).status()).toBe(409);
+  expect((await request.patch(detailPath,{headers:headers(),data:{...dateCommand,commandId:randomUUID(),version:"3",memoryDate:null}})).status()).toBe(200);
+  expect((await (await request.get(detailPath,{headers:headers()})).json()).media).toMatchObject({memoryDate:null,version:"4"});
   const previewPath="/api/media/preview?mediaId="+galleryData.media[0].id;
   const preview=await request.get(previewPath,{headers:headers()});
   expect(preview.status()).toBe(200);

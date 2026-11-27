@@ -1859,3 +1859,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Resource revision, receipt, audit and outbox commit atomically; retries do not emit duplicate events. Binary storage remains unchanged. Runtime receives explicit function execution only.
 - Lint/typecheck/migrate/provision PASS; actual PostgreSQL integration PASS13.182s covering assign/clear provenance, leap-day validation, stale/mismatched replay, concurrent writers (one winner), owner/editor/viewer, revoked permission/session, frozen Space and trash. Diff/secret scan clean.
 - Next: strict date HTTP contract and desktop/mobile editing. Stage04 and full P0 goal remain incomplete.
+
+- Memory date command commit05a5285b66ed0b2c0cc1be8db18d205fd5fb776c PUSHED; origin/master exact SHA verified. Knowns OS-DTP2X1 done.
+
+## Task04.47 - Memory date HTTP contract (Knowns OS-ZW1X2P)
+- Detail now reads nullable memoryDate in the same database snapshot as authorized metadata. PATCH accepts a separate exact commandId/spaceId/version/memoryDate shape, dispatching to the versioned date command. Date strings must be real Gregorian YYYY-MM-DD calendar values with year0001-9999; null clears. No timezone conversion or guessed date.
+- Existing same-origin, authenticated session, streamed16KiB body bound, shared write rate budget and no-store protections apply. Combined/unknown command keys are rejected by service validation.
+- Lint/typecheck/production build PASS. Real Next HTTP + PostgreSQL + Supabase Storage integration PASS23.3s, including initial null, invalid leap date/year/timestamp rejection, foreign write denial, assignment/exact replay, stale version conflict, clearing and existing media regression flows. Diff/secret scan clean.
+- Next: date editing and display in viewer with desktop/mobile tests. Full Stage04 P0 remains incomplete.
