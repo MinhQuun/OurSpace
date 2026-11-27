@@ -1843,3 +1843,11 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Open viewer retains editor/image in memory when document hides, masking content until no-store detail authorization succeeds on visible/pageshow. Network failure stays masked with retry; denied session/access clears viewer/gallery. Existing draft version retained to detect concurrent changes. Gallery handles visibility itself only without an open viewer. No local/session storage persistence.
 - Lint/typecheck/build PASS. Actual backend owner desktop+Pixel7 suites2/2 PASS46.3s verify controlled visibility events, hidden image, preserved draft, network failure mask/retry and session revoked while hidden clears content on return. Shared editor desktop/mobile2/2 passed on same app build in previous combined run. Fixture SQL placeholder lost during regex edit was fixed; production code unchanged for rerun. Diff/secret scan clean.
 - Visibility transitions are simulated browser events; real OS tab/app switching not claimed verified. Supersedes prior hidden-document draft discard limitation. Commit attempt was not executed due to automatic review usage limit; resumed after tools became available. Next: captured/memory dates and remaining metadata/media P0.
+
+- Hidden draft commitef8ef10e8e65638a4f0fafb490bd751d92ae88d8 PUSHED; origin/master exact SHA verified. Knowns OS-JJPG7E done.
+
+## Task04.45 - Memory date storage and copy preservation (Knowns OS-86SFG5)
+- Migration0109 adds nullable calendar memory_date with assignment account/time provenance, finite values and years0001-9999. Unknown dates stay null; no inference from upload time. ACL read returns a fixed YYYY-MM-DD string independent of session timezone. Runtime receives function execution only.
+- New logical copies snapshot date/provenance; later source edits/trash do not propagate. Copy initialization increments metadata version when assigned date provenance exists, preserving the existing update trigger contract.
+- Lint/typecheck/migration checksum/provision PASS. PostgreSQL sharing lifecycle integration PASS22.995s: unknown date, missing provenance/infinity rejection, opposite timezones, copy independence and revoked grant/session denial. Diff/secret scan clean.
+- Scope: database foundation only; authenticated versioned date command, HTTP/UI, captured-time provenance and remaining Stage04 P0 still pending. No full M02 completion claim.
