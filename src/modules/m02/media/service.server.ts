@@ -168,7 +168,7 @@ export class MediaService {
       version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date, favorite: row.favorite,
     };
   }
-  async page(session: string, after?: string) {
+  async page(session: string, after?: string, favorites = false) {
     const hash=digest(session);
     let beforeTime:string|null=null,beforeId:string|null=null;
     if(after!==undefined){
@@ -176,16 +176,16 @@ export class MediaService {
         if(after.length>300||!after.length||!/^[A-Za-z0-9_-]+$/.test(after))throw new Error();
         const raw=Buffer.from(after,"base64url");if(raw.toString("base64url")!==after)throw new Error();
         const cursor=JSON.parse(raw.toString("utf8"));
-        if(!Array.isArray(cursor)||cursor.length!==2||typeof cursor[0]!=="string"||!uuid(cursor[1])||
+        if(!Array.isArray(cursor)||cursor.length!==(favorites?3:2)||(favorites&&cursor[2]!=="favorites")||typeof cursor[0]!=="string"||!uuid(cursor[1])||
           !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?[+-]\d{2}(?::\d{2})?$/.test(cursor[0])||!Number.isFinite(Date.parse(cursor[0])))throw new Error();
         [beforeTime,beforeId]=cursor;
       }catch{throw new AuthProviderError("invalid_input");}
     }
     const result=await this.db.query<{id:string;title:string;mime_type:string;created_at:string;byte_size:string}>(
-      "SELECT * FROM app_internal.list_media_page($1,$2,$3)",[hash,beforeTime,beforeId]);
+      favorites ? "SELECT * FROM app_internal.list_favorite_media_page($1,$2,$3)" : "SELECT * FROM app_internal.list_media_page($1,$2,$3)",[hash,beforeTime,beforeId]);
     const rows=result.rows.slice(0,50),last=rows.at(-1);
     return {media:rows.map(row=>({id:row.id,title:row.title,mimeType:row.mime_type,createdAt:row.created_at,byteSize:Number(row.byte_size)})),
-      nextCursor:result.rows.length>50&&last?Buffer.from(JSON.stringify([last.created_at,last.id])).toString("base64url"):null};
+      nextCursor:result.rows.length>50&&last?Buffer.from(JSON.stringify(favorites?[last.created_at,last.id,"favorites"]:[last.created_at,last.id])).toString("base64url"):null};
   }
   async list(session: string, limit = 50): Promise<MediaItem[]> {
     const hash = digest(session);

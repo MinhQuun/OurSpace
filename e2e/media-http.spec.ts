@@ -25,12 +25,25 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
    expect((await request.patch(path,{headers:headers(),data:invalid})).status()).toBe(400);
   for(let i=0;i<2;i++) expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(200);
   expect((await read()).favorite).toEqual({favorited:true,version:"1"});
+  expect((await (await request.get("/api/media/list?favorites=true",{headers:headers()})).json()).media.map((item:{id:string})=>item.id)).toEqual([media]);
+  expect(await (await request.get("/api/media/list?favorites=true",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
+  for(const query of ["favorites=false","favorites=true&favorites=true","favorites="])
+   expect((await request.get("/api/media/list?"+query,{headers:headers()})).status()).toBe(400);
   expect((await read()).version).toBe("1");
   expect((await request.patch(path,{headers:headers(),data:{...command,commandId:randomUUID()}})).status()).toBe(409);
   expect((await request.patch(path,{headers:headers(),data:{...command,favorited:false}})).status()).toBe(400);
   expect((await request.patch(path,{headers:headers(),data:{commandId:randomUUID(),favoriteVersion:"1",favorited:false}})).status()).toBe(200);
   expect((await request.patch(path,{headers:headers(),data:command})).status()).toBe(200);
   expect((await read()).favorite).toEqual({favorited:false,version:"2"});
+  expect(await (await request.get("/api/media/list?favorites=true",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
+  await db.query("SELECT app_internal.register_media($1,gen_random_uuid(),'Synthetic favorite page','image/png','media',gen_random_uuid(),3,repeat('b',64)) FROM generate_series(1,52)",[createHash("sha256").update(tokens[0]).digest("hex")]);
+  await db.query("INSERT INTO m02.media_favorites(account_id,media_id,favorited) SELECT $1,id,true FROM m02.media WHERE uploaded_by=$1 AND id<>$2",[users[0],media]);
+  const first=await (await request.get("/api/media/list?favorites=true",{headers:headers()})).json();
+  expect(first.media).toHaveLength(50);
+  const second=await (await request.get("/api/media/list?favorites=true&after="+encodeURIComponent(first.nextCursor),{headers:headers()})).json();
+  expect(second.media).toHaveLength(2); expect(second.nextCursor).toBeNull();
+  expect(new Set([...first.media,...second.media].map((item:{id:string})=>item.id)).size).toBe(52);
+  expect((await request.get("/api/media/list?after="+encodeURIComponent(first.nextCursor),{headers:headers()})).status()).toBe(400);
   expect((await db.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[command.commandId])).rows[0].n).toBe(1);
   expect((await db.query("SELECT count(*)::int n FROM m10.resource_grants WHERE resource_id=$1",[media])).rows[0].n).toBe(0);
   await db.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[sessions[0]]);

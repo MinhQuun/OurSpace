@@ -93,6 +93,10 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect.poll(()=>page.locator('section[aria-label="Thư viện media"] img').evaluateAll(images=>images.every(image=>(image as HTMLImageElement).naturalWidth>0))).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await owner.query("UPDATE m02.media SET description=$1 WHERE uploaded_by=$2 AND title=$3",["Updated after gallery load <b>plain text</b>",user,"first.png"]);
+  await page.getByLabel("Hiển thị media",{exact:true}).selectOption("favorites");
+  await expect(page.getByText("Chưa có media yêu thích còn khả dụng.",{exact:true})).toBeVisible();
+  await page.getByLabel("Hiển thị media",{exact:true}).selectOption("all");
+  await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
   const openFirst=page.getByRole("button",{name:"Xem first.png",exact:true});
   await openFirst.click();
   const viewer=page.getByRole("dialog",{name:"Xem ảnh"});

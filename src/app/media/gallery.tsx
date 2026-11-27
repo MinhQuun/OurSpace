@@ -20,7 +20,7 @@ function Preview({ item }: { item: Media }) {
 export default function Gallery() {
   const [items, setItems] = useState<Media[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const closeViewer = useCallback(() => setSelected(null), []);
+  const [favorites, setFavorites] = useState(false);
   const updateItem = useCallback((item: Media) => setItems(previous => previous.map(old => old.id === item.id ? item : old)), []);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -39,7 +39,10 @@ export default function Gallery() {
     setBusy(true); setError(""); setEnded(false);
     if (!after) { setSelected(null); setItems([]); setCursor(null); }
     try {
-      const response = await fetch(`/api/media/list${after ? `?after=${encodeURIComponent(after)}` : ""}`, {
+      const query = new URLSearchParams();
+      if (after) query.set("after", after);
+      if (favorites) query.set("favorites", "true");
+      const response = await fetch(`/api/media/list${query.size ? `?${query}` : ""}`, {
         cache: "no-store", credentials: "same-origin", signal: controller.signal,
       });
       if (controller.signal.aborted) return;
@@ -57,7 +60,8 @@ export default function Gallery() {
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
-  }, []);
+  }, [favorites]);
+  const closeViewer = useCallback(() => { setSelected(null); if (favorites) void load(); }, [favorites, load]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
@@ -79,10 +83,11 @@ export default function Gallery() {
   }, [load, selected]);
 
   return <section aria-label="Thư viện media" aria-busy={busy}>
+    <label>Hiển thị<select aria-label="Hiển thị media" value={favorites ? "favorites" : "all"} disabled={!!selected} onChange={event => setFavorites(event.target.value === "favorites")}><option value="all">Tất cả media</option><option value="favorites">Yêu thích của tôi</option></select></label>
     <p><button type="button" disabled={busy} onClick={() => void load()}>Làm mới thư viện</button></p>
     {error && <p role="alert">{error}</p>}
     {error && !ended && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Thử lại</button>}
-    {!busy && !error && items.length === 0 && <p>Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm.</p>}
+    {!busy && !error && items.length === 0 && <p>{favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
     <ul className={styles.grid}>
       {items.map(item => <li key={item.id} className={styles.card}>
         <button type="button" onClick={() => setSelected(item.id)} aria-label={`Xem ${item.title}`} style={{width:"100%"}}><Preview item={item} /></button>

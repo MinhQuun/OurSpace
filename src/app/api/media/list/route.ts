@@ -36,8 +36,8 @@ export const GET = async (request: NextRequest) => {
       return response;
     }
     const params = request.nextUrl.searchParams;
-    if([...params.keys()].some(key=>key!=="after")||params.getAll("after").length>1) return json({error:"invalid_input"},400);
-    return json(await auth.media.page(match[1],params.get("after")??undefined));
+    if([...params.keys()].some(key=>!["after","favorites"].includes(key))||params.getAll("after").length>1||params.getAll("favorites").length>1||(params.has("favorites")&&params.get("favorites")!=="true")) return json({error:"invalid_input"},400);
+    return json(await auth.media.page(match[1],params.get("after")??undefined,params.has("favorites")));
   } catch (error) {
     const reason =
       error instanceof AuthProviderError
