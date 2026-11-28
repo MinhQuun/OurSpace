@@ -2029,3 +2029,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Real desktop/mobile flow injects transport failure only for choices, verifies stale self label removed, selected UUID preserved and unavailable label shown; restores real endpoint and verifies choice/error recovery without losing filter.
 - Lint/typecheck PASS; unchanged production build from04.68; browser2/2 PASS1.6m. Diff/secret scan clean. No mocked successful business response.
 - Stage04/full P0 incomplete; date/album/related filters and sorting remain, as do bulk uploader paging and shared-name browser coverage.
+
+- Uploader recovery regression commit12d53ca34b3aa9eed3011c28d043bedf25a2faae PUSHED; origin/master exact SHA verified. Knowns OS-35FV8J done.
+
+## Task04.70 - Memory-date interval search foundation (Knowns OS-5CM127)
+- D10 migration0120 adds inclusive optional memory-date lower/upper bounds with existing query/tag/type/uploader/favorite/ACL predicates before keyset limit. Null memory dates do not match an active bound; no fallback to uploaded/captured date. Reversed/out-of-supported-year/nonfinite bounds produce no rows at SQL layer; strict transport validation remains next task.
+- Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS42.337s verifies exact leap-day and open bounds, outside/reversed/nonfinite ranges, private hiding, shared-copy date independence, revoked grant hiding and unknown dates excluded from broad0001-9999 range. Diff/secret scan clean.
+- Database foundation only; HTTP/UI date controls and uploaded/captured date filtering still pending. Stage04/full P0 incomplete.
