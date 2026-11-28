@@ -36,8 +36,8 @@ export const GET = async (request: NextRequest) => {
       return response;
     }
     const params = request.nextUrl.searchParams;
-    if([...params.keys()].some(key=>!["after","favorites","q","tag","type","uploader","memoryFrom","memoryTo"].includes(key))||params.getAll("after").length>1||params.getAll("favorites").length>1||params.getAll("q").length>1||params.getAll("tag").length>1||params.getAll("type").length>1||params.getAll("uploader").length>1||params.getAll("memoryFrom").length>1||params.getAll("memoryTo").length>1||(params.has("favorites")&&params.get("favorites")!=="true")) return json({error:"invalid_input"},400);
-    return json(await auth.media.page(match[1],params.get("after")??undefined,params.has("favorites"),params.get("q")??undefined,params.get("tag")??undefined,params.get("type")??undefined,params.get("uploader")??undefined,params.get("memoryFrom")??undefined,params.get("memoryTo")??undefined));
+    if([...params.keys()].some(key=>!["after","favorites","q","tag","type","uploader","memoryFrom","memoryTo","uploadedFrom","uploadedTo","timezone"].includes(key))||params.getAll("after").length>1||params.getAll("favorites").length>1||params.getAll("q").length>1||params.getAll("tag").length>1||params.getAll("type").length>1||params.getAll("uploader").length>1||params.getAll("memoryFrom").length>1||params.getAll("memoryTo").length>1||params.getAll("uploadedFrom").length>1||params.getAll("uploadedTo").length>1||params.getAll("timezone").length>1||(params.has("favorites")&&params.get("favorites")!=="true")) return json({error:"invalid_input"},400);
+    return json(await auth.media.page(match[1],params.get("after")??undefined,params.has("favorites"),params.get("q")??undefined,params.get("tag")??undefined,params.get("type")??undefined,params.get("uploader")??undefined,params.get("memoryFrom")??undefined,params.get("memoryTo")??undefined,params.get("uploadedFrom")??undefined,params.get("uploadedTo")??undefined,params.get("timezone")??undefined));
   } catch (error) {
     const reason =
       error instanceof AuthProviderError

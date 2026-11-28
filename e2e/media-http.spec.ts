@@ -53,6 +53,17 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect((await request.get("/api/media/uploaders",{headers:{...headers(),Origin:"https://example.invalid"}})).status()).toBe(403);
   expect(await (await request.get("/api/media/list?memoryFrom=0001-01-01",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
   await db.query("UPDATE m02.media SET memory_date='2024-02-29',memory_date_set_by=$1,memory_date_set_at=clock_timestamp() WHERE uploaded_by=$1 AND id<>$2",[users[0],media]);
+  await db.query("UPDATE m02.media SET created_at='2024-03-10 04:59:59+00' WHERE uploaded_by=$1 AND id<>$2",[users[0],media]);
+  const uploadQuery="uploadedFrom=2024-03-09&uploadedTo=2024-03-09&timezone=America%2FNew_York&favorites=true";
+  const uploadPage=await (await request.get("/api/media/list?"+uploadQuery,{headers:headers()})).json();
+  expect(uploadPage.media).toHaveLength(50);
+  const uploadTail=await (await request.get("/api/media/list?"+uploadQuery+"&after="+encodeURIComponent(uploadPage.nextCursor),{headers:headers()})).json();
+  expect(uploadTail.media).toHaveLength(2);expect(uploadTail.nextCursor).toBeNull();
+  expect(await (await request.get("/api/media/list?"+uploadQuery.replace("America%2FNew_York","UTC"),{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
+  expect((await request.get("/api/media/list?"+uploadQuery.replace("America%2FNew_York","UTC")+"&after="+encodeURIComponent(uploadPage.nextCursor),{headers:headers()})).status()).toBe(400);
+  for(const query of ["timezone=UTC","uploadedFrom=2024-03-10","uploadedFrom=2024-03-10&timezone=Invalid%2FZone","uploadedFrom=2024-03-10&timezone=UTC&timezone=UTC","uploadedFrom=2024-02-30&timezone=UTC","uploadedFrom=2024-03-11&uploadedTo=2024-03-10&timezone=UTC"])
+    expect((await request.get("/api/media/list?"+query,{headers:headers()})).status()).toBe(400);
+  expect(await (await request.get("/api/media/list?"+uploadQuery,{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   const dateQuery="memoryFrom=2024-02-29&memoryTo=2024-02-29&type=photo&favorites=true";
   const dated=await (await request.get("/api/media/list?"+dateQuery,{headers:headers()})).json();
   expect(dated.media).toHaveLength(50);

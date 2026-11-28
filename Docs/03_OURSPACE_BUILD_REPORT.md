@@ -2057,3 +2057,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0121 adds uploaded date bounds with explicit pg_timezone_names zone, calendar-inclusive days, independent memory-date predicates and existing ACL/filter intersection before keyset limit. Invalid zone yields no rows at SQL layer; transport validation follows separately. No production timestamp mutations.
 - Resumed after automatic-review usage failure; verified migration history count0 before correcting duplicate draft predicate. Migration/provision/lint/typecheck PASS. Actual PostgreSQL lifecycle PASS46.584s checks New York midnight microsecond boundary, UTC day difference, DST spring transition and23-hour day end, invalid zone and private hiding. Test timestamp changes are synthetic fixture-only and restored. Diff/secret scan clean.
 - Database foundation only; API/UI explicit timezone/date controls pending. Captured-date ingestion/filter/sort still incomplete; Stage04/full P0 incomplete.
+
+- Upload timezone query commit75a8f33814b25d508bd08e9dc232b9861998725c PUSHED; origin/master exact SHA verified. Knowns OS-50XVCN done.
+
+## Task04.74 - Upload date timezone HTTP filters (Knowns OS-2S4XZS)
+- List API accepts uploadedFrom/uploadedTo plus required explicit timezone when either bound is present. Reuses strict calendar validation, rejects reversed bounds, missing/standalone/invalid/repeated timezone and repeated date params. Zone validates against PostgreSQL catalog used by0121. Cursor scope includes upload dates and timezone alongside all other filters.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.2m verifies50+2 pages, UTC vs New York day difference, changed-zone cursor rejection, invalid inputs and private hiding. Real upload regression PASS39.5s. Diff/secret scan clean.
+- UI upload-date/timezone controls remain next; captured dates and remaining M02 P0 incomplete. Stage04/full project incomplete.
