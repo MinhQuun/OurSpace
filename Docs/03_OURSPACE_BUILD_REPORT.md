@@ -2036,3 +2036,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - D10 migration0120 adds inclusive optional memory-date lower/upper bounds with existing query/tag/type/uploader/favorite/ACL predicates before keyset limit. Null memory dates do not match an active bound; no fallback to uploaded/captured date. Reversed/out-of-supported-year/nonfinite bounds produce no rows at SQL layer; strict transport validation remains next task.
 - Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS42.337s verifies exact leap-day and open bounds, outside/reversed/nonfinite ranges, private hiding, shared-copy date independence, revoked grant hiding and unknown dates excluded from broad0001-9999 range. Diff/secret scan clean.
 - Database foundation only; HTTP/UI date controls and uploaded/captured date filtering still pending. Stage04/full P0 incomplete.
+
+- Memory interval query commitcc0c927e39b699aa63f200393a5d0153d6541985 PUSHED; origin/master exact SHA verified. Knowns OS-5CM127 done.
+
+## Task04.71 - Memory-date interval HTTP filter (Knowns OS-83ZEKJ)
+- List API accepts memoryFrom/memoryTo strict real YYYY-MM-DD days, supports either bound, rejects blank/noncalendar/year0000/repeated/reversed bounds. Calendar validation performs no timezone conversion. Dates combine existing filters through0120; cursor scope includes both bounds and rejects changes.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.0m verifies unknown dates empty, exact leap-day50+2 pages, changed-bound cursor rejection, malformed dates, outside-range empty and private caller hiding. Real upload regression PASS37.5s. Diff/secret scan clean.
+- Date controls UI remains next; uploaded/captured date filtering and other D10 fields/sorts still pending. Stage04/full P0 incomplete.

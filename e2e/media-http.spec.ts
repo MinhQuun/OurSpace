@@ -51,6 +51,18 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
     expect((await request.get("/api/media/uploaders?"+query,{headers:headers()})).status()).toBe(400);
   expect((await request.get("/api/media/uploaders")).status()).toBe(401);
   expect((await request.get("/api/media/uploaders",{headers:{...headers(),Origin:"https://example.invalid"}})).status()).toBe(403);
+  expect(await (await request.get("/api/media/list?memoryFrom=0001-01-01",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
+  await db.query("UPDATE m02.media SET memory_date='2024-02-29',memory_date_set_by=$1,memory_date_set_at=clock_timestamp() WHERE uploaded_by=$1 AND id<>$2",[users[0],media]);
+  const dateQuery="memoryFrom=2024-02-29&memoryTo=2024-02-29&type=photo&favorites=true";
+  const dated=await (await request.get("/api/media/list?"+dateQuery,{headers:headers()})).json();
+  expect(dated.media).toHaveLength(50);
+  const datedTail=await (await request.get("/api/media/list?"+dateQuery+"&after="+encodeURIComponent(dated.nextCursor),{headers:headers()})).json();
+  expect(datedTail.media).toHaveLength(2);expect(datedTail.nextCursor).toBeNull();
+  expect((await request.get("/api/media/list?"+dateQuery.replace("memoryTo=2024-02-29","memoryTo=2024-03-01")+"&after="+encodeURIComponent(dated.nextCursor),{headers:headers()})).status()).toBe(400);
+  for(const query of ["memoryFrom=","memoryFrom=2023-02-29","memoryTo=0000-01-01","memoryFrom=2024-03-01&memoryTo=2024-02-29","memoryTo=2024-02-29&memoryTo=2024-02-29"])
+    expect((await request.get("/api/media/list?"+query,{headers:headers()})).status()).toBe(400);
+  expect(await (await request.get("/api/media/list?memoryFrom=2024-03-01",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
+  expect(await (await request.get("/api/media/list?"+dateQuery,{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   const uploaderQuery="uploader="+users[0]+"&type=photo&q=PAGE&favorites=true";
   const uploaded=await (await request.get("/api/media/list?"+uploaderQuery,{headers:headers()})).json();
   expect(uploaded.media).toHaveLength(50);
