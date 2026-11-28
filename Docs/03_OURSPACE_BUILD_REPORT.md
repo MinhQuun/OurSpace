@@ -1985,3 +1985,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration/provision/lint/typecheck/production build PASS. Final actual HTTP/desktop/mobile6/6 PASS3.5m:50+2 filtered pages, scope rejection, private no-results, photo/video intersections, gallery selection and permission regression. Video-positive fixture changes synthetic metadata only; video upload/playback is NOT claimed complete.
 - Fixed selector accessible name after initial browser timeout. Existing full HTTP upload scenario exceeded old30s budget; final measured36.4s with120s scenario timeout, assertions unchanged. Interrupted/failed preliminary runs not counted as passing. Diff/secret scan clean.
 - Remaining D10 includes filename, dates, albums, uploader, related resource/place and sorting; Stage04 and full project P0 incomplete.
+
+- Media type filter commit39956f28e73696068427692b5f01092dc5e0345c PUSHED; origin/master exact SHA verified. Knowns OS-MDWKTT done.
+
+## Task04.64 - Permission-first uploader search foundation (Knowns OS-C2EXVB)
+- D10: migration0118 filters by uploader UUID, optionally combined with type, text, exact tag and caller favorites. All predicates and current object ACL apply before keyset limit; safe gallery projection only. No account lookup/summary exposed, wrong or nonexistent uploader yields empty.
+- Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS42.735s proves private hiding, owner match, wrong/nonexistent uploader empty, type intersection, shared-copy caller favorite match, revoked grant and revoked session hiding. Diff/secret scan clean.
+- Database foundation only; uploader HTTP/UI and bounded permission-safe selection still pending. Stage04/full P0 incomplete.
