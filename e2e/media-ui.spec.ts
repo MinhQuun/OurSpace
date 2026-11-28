@@ -100,6 +100,17 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(page.getByRole("option",{name:"Tôi",exact:true})).toHaveCount(1);
   await page.getByLabel("Người tải lên",{exact:true}).selectOption(user);
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
+  await page.route("**/api/media/uploaders",route=>route.abort());
+  await page.getByRole("button",{name:"Làm mới người tải lên",exact:true}).click();
+  await expect(page.getByText("Không tải được lựa chọn người tải lên. Bộ lọc hiện tại vẫn được giữ.",{exact:true})).toBeVisible();
+  await expect(page.getByLabel("Người tải lên",{exact:true})).toHaveValue(user);
+  await expect(page.getByRole("option",{name:"Tôi",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("option",{name:"Người đã chọn (chưa xác minh lại)",exact:true})).toHaveCount(1);
+  await page.unroute("**/api/media/uploaders");
+  await page.getByRole("button",{name:"Làm mới người tải lên",exact:true}).click();
+  await expect(page.getByRole("option",{name:"Tôi",exact:true})).toHaveCount(1);
+  await expect(page.getByLabel("Người tải lên",{exact:true})).toHaveValue(user);
+  await expect(page.getByText("Không tải được lựa chọn người tải lên. Bộ lọc hiện tại vẫn được giữ.",{exact:true})).toHaveCount(0);
   await page.getByLabel("Loại media",{exact:true}).selectOption("video");
   await expect(page.getByText("Không có media phù hợp với bộ lọc.",{exact:true})).toBeVisible();
   await page.getByLabel("Loại media",{exact:true}).selectOption("photo");

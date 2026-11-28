@@ -2022,3 +2022,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Lint/typecheck/production build PASS. Actual owner desktop/mobile2/2 PASS1.5m; shared permission desktop/mobile2/2 PASS in preceding run on same build. Tests exercise self selection, type/text intersections, Clear All and revoked session flow. Updated old single-alert test assumptions to select intended error after new component also reports failed authorization.
 - Resumed after automatic-review usage limit: untracked component existed, Knowns plan/gallery edits had not executed. No failed run counted as passing. Diff/secret scan clean.
 - Bulk distinct-uploader paging, explicit choice retry and profile-name revoke browser cases remain coverage to extend (DB/HTTP boundaries already tested). Stage04/full P0 incomplete.
+
+- Uploader selector commit21786580b806df6bf55be0151b6859c65e790fad PUSHED; origin/master exact SHA verified. Knowns OS-6P5SYZ done.
+
+## Task04.69 - Uploader choice network retry regression (Knowns OS-35FV8J)
+- Real desktop/mobile flow injects transport failure only for choices, verifies stale self label removed, selected UUID preserved and unavailable label shown; restores real endpoint and verifies choice/error recovery without losing filter.
+- Lint/typecheck PASS; unchanged production build from04.68; browser2/2 PASS1.6m. Diff/secret scan clean. No mocked successful business response.
+- Stage04/full P0 incomplete; date/album/related filters and sorting remain, as do bulk uploader paging and shared-name browser coverage.
