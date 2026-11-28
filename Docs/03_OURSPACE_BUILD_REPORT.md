@@ -1969,3 +1969,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Lint/typecheck/production build PASS. Actual owner upload/gallery desktop and mobile 2/2 PASS (1.4m), shared permission desktop/mobile 2/2 PASS in preceding run. Tests verify title case-insensitive search, description match, missing exact tag AND predicate, favorite intersection, individual/all clearing and no horizontal overflow.
 - Initial owner tests failed before search: trace proved final upload HTTP200 took the chained operation beyond the old5s assertion timeout. Upload completion assertions now wait15s; full expanded scenario allows120s. No business assertion weakened. Diff/secret scan clean.
 - Exact positive tag and filtered-after-edit browser scenarios remain to extend (SQL/HTTP matching already covered). Wider date/album/uploader/type/related filters and sorting remain pending; Stage04/full P0 incomplete.
+
+- Gallery search commit3362f08c114b6106c0fe5036d8d22e52ef26679a PUSHED; origin/master exact SHA verified. Knowns OS-TDBME5 done.
+
+## Task04.62 - Exact tag search and viewer refresh regression (Knowns OS-KHQ8WC)
+- Real upload browser flow now searches the saved literal HTML-looking tag, opens the single match, removes its tag, verifies filtered empty state on close and restores all3 media with Clear All. No mock search responses.
+- Lint/typecheck PASS; unchanged production build from04.61; desktop/mobile2/2 PASS1.6m. Diff/secret scan clean. An initial partially edited run was explicitly stopped before final rerun; not counted as passing.
+- D10 search remains partial: wider filters/sorts, original filename and date provenance still pending. Stage04/full P0 incomplete.
