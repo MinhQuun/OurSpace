@@ -97,6 +97,9 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(page.getByText("Chưa có media yêu thích còn khả dụng.",{exact:true})).toBeVisible();
   await page.getByLabel("Hiển thị media",{exact:true}).selectOption("all");
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
+  await expect(page.getByRole("option",{name:"Tôi",exact:true})).toHaveCount(1);
+  await page.getByLabel("Người tải lên",{exact:true}).selectOption(user);
+  await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
   await page.getByLabel("Loại media",{exact:true}).selectOption("video");
   await expect(page.getByText("Không có media phù hợp với bộ lọc.",{exact:true})).toBeVisible();
   await page.getByLabel("Loại media",{exact:true}).selectOption("photo");
@@ -120,6 +123,7 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await page.getByRole("button",{name:"Áp dụng tìm kiếm",exact:true}).click();
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(1);
   await page.getByRole("button",{name:"Xóa tất cả bộ lọc",exact:true}).click();
+  await expect(page.getByLabel("Người tải lên",{exact:true})).toHaveValue("");
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   const openFirst=page.getByRole("button",{name:"Xem first.png",exact:true});
@@ -170,6 +174,7 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await viewer.getByRole("button",{name:"Đóng ảnh",exact:true}).click();
   await expect(page.getByText("Không có media phù hợp với bộ lọc.",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Xóa tất cả bộ lọc",exact:true}).click();
+  await expect(page.getByLabel("Người tải lên",{exact:true})).toHaveValue("");
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
   await openFirst.click();
   await viewer.getByText("Thông tin ảnh",{exact:true}).click();
@@ -287,7 +292,7 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await page.unroute("**/api/media/detail/*");
   await page.route("**/api/media/list",route=>route.abort());
   await page.getByRole("button",{name:"Làm mới thư viện"}).click();
-  await expect(page.locator("main").getByRole("alert")).toContainText("Không tải được thư viện");
+  await expect(page.locator("main").getByRole("alert").filter({hasText:"Không tải được thư viện"})).toBeVisible();
   await page.unroute("**/api/media/list");
   await page.getByRole("button",{name:"Thử lại",exact:true}).click();
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
@@ -305,15 +310,15 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await owner.query("UPDATE m10.sessions SET revoked_at=clock_timestamp() WHERE id=$1",[session]);
   await visibility("visible");
   await expect(page.getByRole("dialog",{name:"Xem ảnh"})).toHaveCount(0);
-  await expect(page.locator("main").getByRole("alert")).toContainText("Media không còn khả dụng");
+  await expect(page.locator("main").getByRole("alert").filter({hasText:"Media không còn khả dụng"})).toBeVisible();
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(0);
   await page.getByRole("button",{name:"Làm mới thư viện"}).click();
-  await expect(page.locator("main").getByRole("alert")).toContainText("Phiên đăng nhập đã kết thúc");
+  await expect(page.locator("main").getByRole("alert").filter({hasText:"Phiên đăng nhập đã kết thúc"})).toBeVisible();
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(0);
   await page.goto("/media/upload");
   await page.getByLabel("Chọn ảnh").setInputFiles({name:"again.png",mimeType:"image/png",buffer:png});
   await page.getByRole("button",{name:"Tải các ảnh đang chờ"}).click();
-  await expect(page.locator("main").getByRole("alert")).toContainText("Phiên đăng nhập đã kết thúc");
+  await expect(page.locator("main").getByRole("alert").filter({hasText:"Phiên đăng nhập đã kết thúc"})).toBeVisible();
   await expect(page.getByText("first.png",{exact:true})).toHaveCount(0);
  }finally{
   const keys=(await owner.query("SELECT object_key FROM m02.upload_items WHERE owner_id=$1",[user])).rows.map(r=>r.object_key);

@@ -2013,3 +2013,12 @@ Updated: 2026-10-29 (Asia/Saigon)
 - GET /api/media/uploaders uses canonical single session cookie, current actor, same-origin checks, shared media_list budget and no-store/Vary Cookie. Only optional UUID after accepted; invalid/repeated/unknown params rejected. Service projects id/isSelf/displayName and up to50 choices with nextCursor from0119.
 - Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.1m. New checks: own safe projection, foreign private-empty, cursor boundary, malformed/repeated params, no session401, foreign Origin403 and no-store. Existing real image upload regression PASS41.4s. Diff/secret scan clean.
 - More-than50 distinct-uploader HTTP fixture not yet exercised; existing database bound and single-uploader cursor boundary verified. Gallery uploader selection still pending. Stage04/full P0 incomplete.
+
+- Uploader choices API commit1a0187f7028c699cf40f95fdef4f8c4344cfffa1 PUSHED; origin/master exact SHA verified. Knowns OS-7VTE25 done.
+
+## Task04.68 - Gallery uploader selection (Knowns OS-6P5SYZ)
+- Added uploader selector using real permission-filtered API: self label, authorized names or anonymous ordinal labels; explicit refresh, loading/error and load-more. Abort stale reads; clear choice names on hidden tab and re-fetch on visibility/pageshow. Preserve selected UUID if choices unavailable, so failed reads never broaden active filter. Viewer locks controls.
+- Gallery uploader combines with other predicates, resets paging and participates in Clear All and filtered refresh. No client profile lookup or persistent storage.
+- Lint/typecheck/production build PASS. Actual owner desktop/mobile2/2 PASS1.5m; shared permission desktop/mobile2/2 PASS in preceding run on same build. Tests exercise self selection, type/text intersections, Clear All and revoked session flow. Updated old single-alert test assumptions to select intended error after new component also reports failed authorization.
+- Resumed after automatic-review usage limit: untracked component existed, Knowns plan/gallery edits had not executed. No failed run counted as passing. Diff/secret scan clean.
+- Bulk distinct-uploader paging, explicit choice retry and profile-name revoke browser cases remain coverage to extend (DB/HTTP boundaries already tested). Stage04/full P0 incomplete.
