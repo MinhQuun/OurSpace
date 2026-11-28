@@ -42,6 +42,15 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(first.media).toHaveLength(50);
   const second=await (await request.get("/api/media/list?favorites=true&after="+encodeURIComponent(first.nextCursor),{headers:headers()})).json();
   expect(second.media).toHaveLength(2); expect(second.nextCursor).toBeNull();
+  const typed=await (await request.get("/api/media/list?type=photo&q=PAGE&favorites=true",{headers:headers()})).json();
+  expect(typed.media).toHaveLength(50);
+  const typedTail=await (await request.get("/api/media/list?type=photo&q=PAGE&favorites=true&after="+encodeURIComponent(typed.nextCursor),{headers:headers()})).json();
+  expect(typedTail.media).toHaveLength(2); expect(typedTail.nextCursor).toBeNull();
+  for(const type of ["","audio","photo&type=video"])
+    expect((await request.get("/api/media/list?type="+type,{headers:headers()})).status()).toBe(400);
+  expect((await request.get("/api/media/list?type=video&q=PAGE&favorites=true&after="+encodeURIComponent(typed.nextCursor),{headers:headers()})).status()).toBe(400);
+  expect(await (await request.get("/api/media/list?type=photo",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
+  expect(await (await request.get("/api/media/list?type=video",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
   const searched=await (await request.get("/api/media/list?q=PAGE&favorites=true",{headers:headers()})).json();
   expect(searched.media).toHaveLength(50);
   const tail=await (await request.get("/api/media/list?q=PAGE&favorites=true&after="+encodeURIComponent(searched.nextCursor),{headers:headers()})).json();
@@ -53,6 +62,13 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(await (await request.get("/api/media/list?q=PAGE",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   expect(await (await request.get("/api/media/list?q=%25",{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
   expect(new Set([...first.media,...second.media].map((item:{id:string})=>item.id)).size).toBe(52);
+  // Metadata-only fixture proves filtering, not video ingestion/playback.
+  const videoId=first.media[0].id;
+  await db.query("UPDATE m02.media SET mime_type='video/mp4' WHERE id=$1",[videoId]);
+  const videos=await (await request.get("/api/media/list?type=video&q=PAGE&favorites=true",{headers:headers()})).json();
+  expect(videos.media.map((item:{id:string})=>item.id)).toEqual([videoId]);
+  expect(await (await request.get("/api/media/list?type=video",{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
+  await db.query("UPDATE m02.media SET mime_type='image/png' WHERE id=$1",[videoId]);
   expect((await request.get("/api/media/list?after="+encodeURIComponent(first.nextCursor),{headers:headers()})).status()).toBe(400);
   expect((await db.query("SELECT count(*)::int n FROM app_internal.audit_events WHERE command_id=$1",[command.commandId])).rows[0].n).toBe(1);
   expect((await db.query("SELECT count(*)::int n FROM m10.resource_grants WHERE resource_id=$1",[media])).rows[0].n).toBe(0);
@@ -80,6 +96,7 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
 });
 
 test("Next upload HTTP stores real images and preserves private ownership",async({request})=>{
+ test.setTimeout(120000);
  const owner=new Pool({host:"127.0.0.1",port:55432,database:"ourspace",user:"ourspace_owner",password:readFileSync(".local/db-password","utf8").trim(),max:1});
  const users=[randomUUID(),randomUUID()], sessions=users.map(()=>randomUUID()),tokens=users.map(()=>randomBytes(32).toString("base64url"));
  const headers=(i=0)=>({Origin:"http://127.0.0.1:3103",Cookie:`ourspace_session=${sessions[i]}:${tokens[i]}`});

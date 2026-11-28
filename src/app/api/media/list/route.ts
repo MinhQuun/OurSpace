@@ -36,8 +36,8 @@ export const GET = async (request: NextRequest) => {
       return response;
     }
     const params = request.nextUrl.searchParams;
-    if([...params.keys()].some(key=>!["after","favorites","q","tag"].includes(key))||params.getAll("after").length>1||params.getAll("favorites").length>1||params.getAll("q").length>1||params.getAll("tag").length>1||(params.has("favorites")&&params.get("favorites")!=="true")) return json({error:"invalid_input"},400);
-    return json(await auth.media.page(match[1],params.get("after")??undefined,params.has("favorites"),params.get("q")??undefined,params.get("tag")??undefined));
+    if([...params.keys()].some(key=>!["after","favorites","q","tag","type"].includes(key))||params.getAll("after").length>1||params.getAll("favorites").length>1||params.getAll("q").length>1||params.getAll("tag").length>1||params.getAll("type").length>1||(params.has("favorites")&&params.get("favorites")!=="true")) return json({error:"invalid_input"},400);
+    return json(await auth.media.page(match[1],params.get("after")??undefined,params.has("favorites"),params.get("q")??undefined,params.get("tag")??undefined,params.get("type")??undefined));
   } catch (error) {
     const reason =
       error instanceof AuthProviderError

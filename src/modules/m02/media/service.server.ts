@@ -185,12 +185,13 @@ export class MediaService {
       version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date, favorite: row.favorite, tags: row.tags,
     };
   }
-  async page(session: string, after?: string, favorites = false, query?: string, tag?: string) {
+  async page(session: string, after?: string, favorites = false, query?: string, tag?: string, type?: string) {
     const hash=digest(session);
-    const searching = query !== undefined || tag !== undefined;
+    const searching = query !== undefined || tag !== undefined || type !== undefined;
+    if (type !== undefined && type !== "photo" && type !== "video") throw new AuthProviderError("invalid_input");
     if ([query, tag].some(value => value !== undefined && (!value.trim() || value.includes(String.fromCharCode(0)))) || Buffer.byteLength(JSON.stringify([query, tag]), "utf8") > 16384)
       throw new AuthProviderError("invalid_input");
-    const scope = searching ? createHash("sha256").update(JSON.stringify([query ?? null, tag ?? null, favorites])).digest("hex") : favorites ? "favorites" : null;
+    const scope = searching ? createHash("sha256").update(JSON.stringify(type ? [query ?? null, tag ?? null, favorites, type] : [query ?? null, tag ?? null, favorites])).digest("hex") : favorites ? "favorites" : null;
     let beforeTime:string|null=null,beforeId:string|null=null;
     if(after!==undefined){
       try{
@@ -203,8 +204,8 @@ export class MediaService {
       }catch{throw new AuthProviderError("invalid_input");}
     }
     const result=await this.db.query<{id:string;title:string;mime_type:string;created_at:string;byte_size:string}>(
-      searching ? "SELECT * FROM app_internal.search_media_page($1,$2,$3,$4,$5,$6)" : favorites ? "SELECT * FROM app_internal.list_favorite_media_page($1,$2,$3)" : "SELECT * FROM app_internal.list_media_page($1,$2,$3)",
-      searching ? [hash,query ?? null,tag ?? null,favorites,beforeTime,beforeId] : [hash,beforeTime,beforeId]);
+      type ? "SELECT * FROM app_internal.search_media_type_page($1,$2,$3,$4,$5,$6,$7)" : searching ? "SELECT * FROM app_internal.search_media_page($1,$2,$3,$4,$5,$6)" : favorites ? "SELECT * FROM app_internal.list_favorite_media_page($1,$2,$3)" : "SELECT * FROM app_internal.list_media_page($1,$2,$3)",
+      type ? [hash,query ?? null,tag ?? null,favorites,type,beforeTime,beforeId] : searching ? [hash,query ?? null,tag ?? null,favorites,beforeTime,beforeId] : [hash,beforeTime,beforeId]);
     const rows=result.rows.slice(0,50),last=rows.at(-1);
     return {media:rows.map(row=>({id:row.id,title:row.title,mimeType:row.mime_type,createdAt:row.created_at,byteSize:Number(row.byte_size)})),
       nextCursor:result.rows.length>50&&last?Buffer.from(JSON.stringify(scope?[last.created_at,last.id,scope]:[last.created_at,last.id])).toString("base64url"):null};

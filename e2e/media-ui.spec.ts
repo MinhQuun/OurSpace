@@ -97,6 +97,10 @@ test("upload queue isolates bad files and retry preserves completed images",asyn
   await expect(page.getByText("Chưa có media yêu thích còn khả dụng.",{exact:true})).toBeVisible();
   await page.getByLabel("Hiển thị media",{exact:true}).selectOption("all");
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
+  await page.getByLabel("Loại media",{exact:true}).selectOption("video");
+  await expect(page.getByText("Không có media phù hợp với bộ lọc.",{exact:true})).toBeVisible();
+  await page.getByLabel("Loại media",{exact:true}).selectOption("photo");
+  await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(3);
   await page.getByLabel("Từ khóa",{exact:true}).fill(" FIRST ");
   await page.getByRole("button",{name:"Áp dụng tìm kiếm",exact:true}).click();
   await expect(page.locator('section[aria-label="Thư viện media"] li')).toHaveCount(1);

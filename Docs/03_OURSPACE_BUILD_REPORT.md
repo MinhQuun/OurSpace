@@ -1976,3 +1976,12 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Real upload browser flow now searches the saved literal HTML-looking tag, opens the single match, removes its tag, verifies filtered empty state on close and restores all3 media with Clear All. No mock search responses.
 - Lint/typecheck PASS; unchanged production build from04.61; desktop/mobile2/2 PASS1.6m. Diff/secret scan clean. An initial partially edited run was explicitly stopped before final rerun; not counted as passing.
 - D10 search remains partial: wider filters/sorts, original filename and date provenance still pending. Stage04/full P0 incomplete.
+
+- Tag search regression commit256c26756bd24bdf785bd52a7c3b82d45365137f PUSHED; origin/master exact SHA verified. Knowns OS-KHQ8WC done.
+
+## Task04.63 - Gallery photo/video type filter (Knowns OS-MDWKTT)
+- D10: migration0117 adds type-aware search with current ACL, text/tag/favorite intersection before keyset limit. Photo matches image MIME, video matches video MIME. Runtime receives explicit function grant only. Existing migrations/checksums preserved.
+- API accepts only photo/video, rejects empty/unknown/repeated type and cursor type changes. Gallery selector locks while viewer open, resets pagination and participates in Clear All/filtered empty state.
+- Migration/provision/lint/typecheck/production build PASS. Final actual HTTP/desktop/mobile6/6 PASS3.5m:50+2 filtered pages, scope rejection, private no-results, photo/video intersections, gallery selection and permission regression. Video-positive fixture changes synthetic metadata only; video upload/playback is NOT claimed complete.
+- Fixed selector accessible name after initial browser timeout. Existing full HTTP upload scenario exceeded old30s budget; final measured36.4s with120s scenario timeout, assertions unchanged. Interrupted/failed preliminary runs not counted as passing. Diff/secret scan clean.
+- Remaining D10 includes filename, dates, albums, uploader, related resource/place and sorting; Stage04 and full project P0 incomplete.

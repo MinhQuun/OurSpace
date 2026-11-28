@@ -21,6 +21,7 @@ export default function Gallery() {
   const [items, setItems] = useState<Media[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [favorites, setFavorites] = useState(false);
+  const [type, setType] = useState("");
   const [textDraft, setTextDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [filters, setFilters] = useState({ text: "", tag: "" });
@@ -47,6 +48,7 @@ export default function Gallery() {
       if (favorites) query.set("favorites", "true");
       if (filters.text) query.set("q", filters.text);
       if (filters.tag) query.set("tag", filters.tag);
+      if (type) query.set("type", type);
       const response = await fetch(`/api/media/list${query.size ? `?${query}` : ""}`, {
         cache: "no-store", credentials: "same-origin", signal: controller.signal,
       });
@@ -65,8 +67,8 @@ export default function Gallery() {
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
-  }, [favorites, filters]);
-  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag) void load(); }, [favorites, filters, load]);
+  }, [favorites, filters, type]);
+  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag || type) void load(); }, [favorites, filters, type, load]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
@@ -97,14 +99,15 @@ export default function Gallery() {
         <button type="submit">Áp dụng tìm kiếm</button>
         {filters.text && <button type="button" onClick={() => { setTextDraft(""); setFilters(previous => ({...previous, text: ""})); }}>Xóa từ khóa</button>}
         {filters.tag && <button type="button" onClick={() => { setTagDraft(""); setFilters(previous => ({...previous, tag: ""})); }}>Xóa lọc nhãn</button>}
-        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFilters({text: "", tag: ""}); setFavorites(false); }}>Xóa tất cả bộ lọc</button>
+        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFilters({text: "", tag: ""}); setFavorites(false); setType(""); }}>Xóa tất cả bộ lọc</button>
       </fieldset>
     </form>
+    <label>Loại media<select aria-label="Loại media" value={type} disabled={!!selected} onChange={event => setType(event.target.value)}><option value="">Tất cả loại</option><option value="photo">Ảnh</option><option value="video">Video</option></select></label>
     <label>Hiển thị<select aria-label="Hiển thị media" value={favorites ? "favorites" : "all"} disabled={!!selected} onChange={event => setFavorites(event.target.value === "favorites")}><option value="all">Tất cả media</option><option value="favorites">Yêu thích của tôi</option></select></label>
     <p><button type="button" disabled={busy} onClick={() => void load()}>Làm mới thư viện</button></p>
     {error && <p role="alert">{error}</p>}
     {error && !ended && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Thử lại</button>}
-    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
+    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag || type ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
     <ul className={styles.grid}>
       {items.map(item => <li key={item.id} className={styles.card}>
         <button type="button" onClick={() => setSelected(item.id)} aria-label={`Xem ${item.title}`} style={{width:"100%"}}><Preview item={item} /></button>
