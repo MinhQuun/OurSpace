@@ -2050,3 +2050,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Added explicit-apply from/to date controls with supported year bounds, reversed-range correction, individual bound clearing and Clear All reset. UI explains inclusive bounds and unknown-date exclusion. Dates combine existing filters, reset keyset results and refresh filtered view on close.
 - Lint/typecheck/production build PASS; actual desktop/mobile owner/shared4/4 PASS2.4m. Browser verifies reversed range, unknown dates empty, exact leap-day match, open bound after clearing start and full gallery after clearing end; existing editing/privacy flows pass. Diff/secret scan clean.
 - Remaining date work includes captured/uploaded ranges and sorting; other M02 P0 and Stage04/full project remain incomplete.
+
+- Gallery memory dates commitae12e767e33468bebc7f99513d07d447e4c902b7 PUSHED; origin/master exact SHA verified. Knowns OS-TBJGK5 done.
+
+## Task04.73 - Upload calendar interval with explicit timezone (Knowns OS-50XVCN)
+- Migration0121 adds uploaded date bounds with explicit pg_timezone_names zone, calendar-inclusive days, independent memory-date predicates and existing ACL/filter intersection before keyset limit. Invalid zone yields no rows at SQL layer; transport validation follows separately. No production timestamp mutations.
+- Resumed after automatic-review usage failure; verified migration history count0 before correcting duplicate draft predicate. Migration/provision/lint/typecheck PASS. Actual PostgreSQL lifecycle PASS46.584s checks New York midnight microsecond boundary, UTC day difference, DST spring transition and23-hour day end, invalid zone and private hiding. Test timestamp changes are synthetic fixture-only and restored. Diff/secret scan clean.
+- Database foundation only; API/UI explicit timezone/date controls pending. Captured-date ingestion/filter/sort still incomplete; Stage04/full P0 incomplete.
