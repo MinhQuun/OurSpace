@@ -2006,3 +2006,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - Migration0119 derives distinct uploader choices only from currently readable media, stable UUID keyset with51-row bound. Returns UUID/self flag and optional display name. Own name allowed; foreign name reuses read_partner_profile and explicit display_name grants, never whole profile or media counts.
 - Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS46.994s verifies private choices hidden, own choice, cursor boundary, shared unnamed choice, explicit name grant reveals synthetic name, name revocation hides name, media grant revocation removes choice and session revocation returns empty. Diff/secret scan clean.
 - Database foundation only; HTTP paging and gallery selection UI remain next. Stage04/full P0 incomplete.
+
+- Uploader choices commitb7ec05953b20b47846250ed0eb350a75bf9d3c20 PUSHED; origin/master exact SHA verified. Knowns OS-0ZPZ52 done.
+
+## Task04.67 - Uploader choices HTTP endpoint (Knowns OS-7VTE25)
+- GET /api/media/uploaders uses canonical single session cookie, current actor, same-origin checks, shared media_list budget and no-store/Vary Cookie. Only optional UUID after accepted; invalid/repeated/unknown params rejected. Service projects id/isSelf/displayName and up to50 choices with nextCursor from0119.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.1m. New checks: own safe projection, foreign private-empty, cursor boundary, malformed/repeated params, no session401, foreign Origin403 and no-store. Existing real image upload regression PASS41.4s. Diff/secret scan clean.
+- More-than50 distinct-uploader HTTP fixture not yet exercised; existing database bound and single-uploader cursor boundary verified. Gallery uploader selection still pending. Stage04/full P0 incomplete.

@@ -42,6 +42,15 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(first.media).toHaveLength(50);
   const second=await (await request.get("/api/media/list?favorites=true&after="+encodeURIComponent(first.nextCursor),{headers:headers()})).json();
   expect(second.media).toHaveLength(2); expect(second.nextCursor).toBeNull();
+  const choicesResponse=await request.get("/api/media/uploaders",{headers:headers()});
+  expect(choicesResponse.headers()["cache-control"]).toBe("no-store");
+  expect(await choicesResponse.json()).toEqual({uploaders:[{id:users[0],isSelf:true,displayName:null}],nextCursor:null});
+  expect(await (await request.get("/api/media/uploaders",{headers:headers(1)})).json()).toEqual({uploaders:[],nextCursor:null});
+  expect(await (await request.get("/api/media/uploaders?after="+users[0],{headers:headers()})).json()).toEqual({uploaders:[],nextCursor:null});
+  for(const query of ["after=","after=bad","after="+users[0]+"&after="+users[0],"q=x"])
+    expect((await request.get("/api/media/uploaders?"+query,{headers:headers()})).status()).toBe(400);
+  expect((await request.get("/api/media/uploaders")).status()).toBe(401);
+  expect((await request.get("/api/media/uploaders",{headers:{...headers(),Origin:"https://example.invalid"}})).status()).toBe(403);
   const uploaderQuery="uploader="+users[0]+"&type=photo&q=PAGE&favorites=true";
   const uploaded=await (await request.get("/api/media/list?"+uploaderQuery,{headers:headers()})).json();
   expect(uploaded.media).toHaveLength(50);

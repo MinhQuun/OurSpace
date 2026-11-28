@@ -185,6 +185,15 @@ export class MediaService {
       version: row.version, byteSize: Number(row.byte_size), edit: row.edit, memoryDate: row.memory_date, favorite: row.favorite, tags: row.tags,
     };
   }
+  async uploaders(session: string, after?: string) {
+    const hash = digest(session);
+    if (after !== undefined && !uuid(after)) throw new AuthProviderError("invalid_input");
+    const result = await this.db.query<{id:string;is_self:boolean;display_name:string|null}>(
+      "SELECT * FROM app_internal.list_media_uploaders($1,$2)", [hash, after ?? null]);
+    const rows = result.rows.slice(0,50);
+    return { uploaders: rows.map(row => ({id:row.id,isSelf:row.is_self,displayName:row.display_name})),
+      nextCursor: result.rows.length > 50 ? rows.at(-1)!.id : null };
+  }
   async page(session: string, after?: string, favorites = false, query?: string, tag?: string, type?: string, uploader?: string) {
     const hash=digest(session);
     const searching = query !== undefined || tag !== undefined || type !== undefined || uploader !== undefined;
