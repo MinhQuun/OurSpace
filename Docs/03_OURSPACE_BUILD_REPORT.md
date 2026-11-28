@@ -1999,3 +1999,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - D10 list API accepts one uploader UUID; rejects empty/malformed/repeated input. Uploader combines AND with query/tag/type/favorite through0118. Cursor hash binds uploader and rejects swapping identities between pages. No account profile lookup or new response fields.
 - Lint/typecheck/production build PASS; actual HTTP2/2 PASS59.6s. Tests verify50+2 unique pages with uploader/type/text/favorite combination, changed-uploader cursor rejection, wrong/nonexistent uploader empty and private results hidden from foreign caller. Real image upload regression PASS38.4s. Diff/secret scan clean.
 - Uploader selection UI still pending. Stage04/full P0 incomplete.
+
+- Uploader API commite19666df21dd1cda42c3041bfb34c0fadd697050 PUSHED; origin/master exact SHA verified. Knowns OS-V43R7Z done.
+
+## Task04.66 - Permission-filtered uploader choices foundation (Knowns OS-0ZPZ52)
+- Migration0119 derives distinct uploader choices only from currently readable media, stable UUID keyset with51-row bound. Returns UUID/self flag and optional display name. Own name allowed; foreign name reuses read_partner_profile and explicit display_name grants, never whole profile or media counts.
+- Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS46.994s verifies private choices hidden, own choice, cursor boundary, shared unnamed choice, explicit name grant reveals synthetic name, name revocation hides name, media grant revocation removes choice and session revocation returns empty. Diff/secret scan clean.
+- Database foundation only; HTTP paging and gallery selection UI remain next. Stage04/full P0 incomplete.
