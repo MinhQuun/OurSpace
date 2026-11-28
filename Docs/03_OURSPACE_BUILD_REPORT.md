@@ -2043,3 +2043,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - List API accepts memoryFrom/memoryTo strict real YYYY-MM-DD days, supports either bound, rejects blank/noncalendar/year0000/repeated/reversed bounds. Calendar validation performs no timezone conversion. Dates combine existing filters through0120; cursor scope includes both bounds and rejects changes.
 - Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.0m verifies unknown dates empty, exact leap-day50+2 pages, changed-bound cursor rejection, malformed dates, outside-range empty and private caller hiding. Real upload regression PASS37.5s. Diff/secret scan clean.
 - Date controls UI remains next; uploaded/captured date filtering and other D10 fields/sorts still pending. Stage04/full P0 incomplete.
+
+- Memory-date API commit7087b42e20e7df89a78308c0619444c5e3fd6d10 PUSHED; origin/master exact SHA verified. Knowns OS-83ZEKJ done.
+
+## Task04.72 - Gallery memory-date interval controls (Knowns OS-TBJGK5)
+- Added explicit-apply from/to date controls with supported year bounds, reversed-range correction, individual bound clearing and Clear All reset. UI explains inclusive bounds and unknown-date exclusion. Dates combine existing filters, reset keyset results and refresh filtered view on close.
+- Lint/typecheck/production build PASS; actual desktop/mobile owner/shared4/4 PASS2.4m. Browser verifies reversed range, unknown dates empty, exact leap-day match, open bound after clearing start and full gallery after clearing end; existing editing/privacy flows pass. Diff/secret scan clean.
+- Remaining date work includes captured/uploaded ranges and sorting; other M02 P0 and Stage04/full project remain incomplete.

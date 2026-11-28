@@ -26,7 +26,10 @@ export default function Gallery() {
   const [uploader, setUploader] = useState("");
   const [textDraft, setTextDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
-  const [filters, setFilters] = useState({ text: "", tag: "" });
+  const [fromDraft, setFromDraft] = useState("");
+  const [toDraft, setToDraft] = useState("");
+  const [filterError, setFilterError] = useState("");
+  const [filters, setFilters] = useState({ text: "", tag: "", from: "", to: "" });
   const updateItem = useCallback((item: Media) => setItems(previous => previous.map(old => old.id === item.id ? item : old)), []);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -50,6 +53,8 @@ export default function Gallery() {
       if (favorites) query.set("favorites", "true");
       if (filters.text) query.set("q", filters.text);
       if (filters.tag) query.set("tag", filters.tag);
+      if (filters.from) query.set("memoryFrom", filters.from);
+      if (filters.to) query.set("memoryTo", filters.to);
       if (type) query.set("type", type);
       if (uploader) query.set("uploader", uploader);
       const response = await fetch(`/api/media/list${query.size ? `?${query}` : ""}`, {
@@ -71,7 +76,7 @@ export default function Gallery() {
       if (!controller.signal.aborted) setBusy(false);
     }
   }, [favorites, filters, type, uploader]);
-  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag || type || uploader) void load(); }, [favorites, filters, type, uploader, load]);
+  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag || filters.from || filters.to || type || uploader) void load(); }, [favorites, filters, type, uploader, load]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
@@ -93,16 +98,22 @@ export default function Gallery() {
   }, [load, selected]);
 
   return <section aria-label="Thư viện media" aria-busy={busy}>
-    <form onSubmit={event => { event.preventDefault(); setFilters({text: textDraft.trim(), tag: tagDraft.trim()}); }}>
+    <form onSubmit={event => { event.preventDefault(); if(fromDraft && toDraft && fromDraft>toDraft){setFilterError("Ngày bắt đầu không được sau ngày kết thúc.");return;} setFilterError(""); setFilters({text: textDraft.trim(), tag: tagDraft.trim(), from: fromDraft, to: toDraft}); }}>
       <fieldset disabled={!!selected}>
         <legend>Tìm kiếm media</legend>
         <p>Tìm trong tiêu đề, mô tả và nhãn. Các điều kiện được kết hợp với nhau.</p>
         <label>Từ khóa<input value={textDraft} onChange={event => setTextDraft(event.target.value)} /></label>
         <label>Nhãn chính xác<input value={tagDraft} onChange={event => setTagDraft(event.target.value)} /></label>
+        <p>Khoảng ngày kỷ niệm bao gồm cả hai mốc. Media chưa đặt ngày kỷ niệm sẽ không khớp.</p>
+        <label>Ngày kỷ niệm từ<input type="date" min="0001-01-01" max="9999-12-31" value={fromDraft} onChange={event=>setFromDraft(event.target.value)} /></label>
+        <label>Ngày kỷ niệm đến<input type="date" min="0001-01-01" max="9999-12-31" value={toDraft} onChange={event=>setToDraft(event.target.value)} /></label>
+        {filterError&&<p role="alert">{filterError}</p>}
         <button type="submit">Áp dụng tìm kiếm</button>
+        {filters.from&&<button type="button" onClick={()=>{setFromDraft("");setFilterError("");setFilters(previous=>({...previous,from:""}));}}>Xóa ngày bắt đầu</button>}
+        {filters.to&&<button type="button" onClick={()=>{setToDraft("");setFilterError("");setFilters(previous=>({...previous,to:""}));}}>Xóa ngày kết thúc</button>}
         {filters.text && <button type="button" onClick={() => { setTextDraft(""); setFilters(previous => ({...previous, text: ""})); }}>Xóa từ khóa</button>}
         {filters.tag && <button type="button" onClick={() => { setTagDraft(""); setFilters(previous => ({...previous, tag: ""})); }}>Xóa lọc nhãn</button>}
-        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFilters({text: "", tag: ""}); setFavorites(false); setType(""); setUploader(""); }}>Xóa tất cả bộ lọc</button>
+        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFromDraft(""); setToDraft(""); setFilterError(""); setFilters({text: "", tag: "", from: "", to: ""}); setFavorites(false); setType(""); setUploader(""); }}>Xóa tất cả bộ lọc</button>
       </fieldset>
     </form>
     <UploaderFilter value={uploader} change={setUploader} disabled={!!selected} />
@@ -111,7 +122,7 @@ export default function Gallery() {
     <p><button type="button" disabled={busy} onClick={() => void load()}>Làm mới thư viện</button></p>
     {error && <p role="alert">{error}</p>}
     {error && !ended && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Thử lại</button>}
-    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag || type || uploader ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
+    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag || filters.from || filters.to || type || uploader ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
     <ul className={styles.grid}>
       {items.map(item => <li key={item.id} className={styles.card}>
         <button type="button" onClick={() => setSelected(item.id)} aria-label={`Xem ${item.title}`} style={{width:"100%"}}><Preview item={item} /></button>
