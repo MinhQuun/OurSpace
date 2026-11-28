@@ -2064,3 +2064,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - List API accepts uploadedFrom/uploadedTo plus required explicit timezone when either bound is present. Reuses strict calendar validation, rejects reversed bounds, missing/standalone/invalid/repeated timezone and repeated date params. Zone validates against PostgreSQL catalog used by0121. Cursor scope includes upload dates and timezone alongside all other filters.
 - Lint/typecheck/production build PASS; actual HTTP2/2 PASS1.2m verifies50+2 pages, UTC vs New York day difference, changed-zone cursor rejection, invalid inputs and private hiding. Real upload regression PASS39.5s. Diff/secret scan clean.
 - UI upload-date/timezone controls remain next; captured dates and remaining M02 P0 incomplete. Stage04/full project incomplete.
+
+- Upload-date API commit0df8e72d6bd6ac32167ade8b79024895448b0887 PUSHED; origin/master exact SHA verified. Knowns OS-2S4XZS done.
+
+## Task04.75 - Gallery upload-date and timezone controls (Knowns OS-5YCCNQ)
+- Added explicit-apply uploaded date bounds and timezone selector using existing M10 timezone choices/default. UI explains independence from memory dates; rejects reversed upload range, supports individual clearing and Clear All. Sends timezone only while upload bounds active; filters and keyset reset stay combined.
+- Lint/typecheck/production build PASS; actual desktop/mobile owner/shared4/4 PASS2.9m. Browser proves same synthetic near-midnight uploaded timestamp matches New York date but not UTC date, open-ended filter and Clear All restore gallery. Existing privacy/editor regression passes. Diff/secret scan clean.
+- UI uses configured timezone option list and app default (not auto-loading account preference). Broader preference integration and captured-date ingestion/filter/sort remain pending along with other M02 P0. Stage04/full project incomplete.

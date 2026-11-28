@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./gallery.module.css";
 import Viewer from "./viewer";
+import { timezones, defaultPreferences } from "../../modules/m10/profile/preferences";
 import UploaderFilter from "./uploader-filter";
 
 type Media = { id: string; title: string; mimeType: string; byteSize: number; createdAt: string };
@@ -28,8 +29,11 @@ export default function Gallery() {
   const [tagDraft, setTagDraft] = useState("");
   const [fromDraft, setFromDraft] = useState("");
   const [toDraft, setToDraft] = useState("");
+  const [uploadFromDraft, setUploadFromDraft] = useState("");
+  const [uploadToDraft, setUploadToDraft] = useState("");
+  const [zoneDraft, setZoneDraft] = useState(defaultPreferences.timezone);
   const [filterError, setFilterError] = useState("");
-  const [filters, setFilters] = useState({ text: "", tag: "", from: "", to: "" });
+  const [filters, setFilters] = useState({ text: "", tag: "", from: "", to: "", uploadFrom: "", uploadTo: "", zone: defaultPreferences.timezone });
   const updateItem = useCallback((item: Media) => setItems(previous => previous.map(old => old.id === item.id ? item : old)), []);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
@@ -55,6 +59,9 @@ export default function Gallery() {
       if (filters.tag) query.set("tag", filters.tag);
       if (filters.from) query.set("memoryFrom", filters.from);
       if (filters.to) query.set("memoryTo", filters.to);
+      if (filters.uploadFrom) query.set("uploadedFrom", filters.uploadFrom);
+      if (filters.uploadTo) query.set("uploadedTo", filters.uploadTo);
+      if (filters.uploadFrom || filters.uploadTo) query.set("timezone", filters.zone);
       if (type) query.set("type", type);
       if (uploader) query.set("uploader", uploader);
       const response = await fetch(`/api/media/list${query.size ? `?${query}` : ""}`, {
@@ -76,7 +83,7 @@ export default function Gallery() {
       if (!controller.signal.aborted) setBusy(false);
     }
   }, [favorites, filters, type, uploader]);
-  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag || filters.from || filters.to || type || uploader) void load(); }, [favorites, filters, type, uploader, load]);
+  const closeViewer = useCallback(() => { setSelected(null); if (favorites || filters.text || filters.tag || filters.from || filters.to || filters.uploadFrom || filters.uploadTo || type || uploader) void load(); }, [favorites, filters, type, uploader, load]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
@@ -98,7 +105,7 @@ export default function Gallery() {
   }, [load, selected]);
 
   return <section aria-label="Thư viện media" aria-busy={busy}>
-    <form onSubmit={event => { event.preventDefault(); if(fromDraft && toDraft && fromDraft>toDraft){setFilterError("Ngày bắt đầu không được sau ngày kết thúc.");return;} setFilterError(""); setFilters({text: textDraft.trim(), tag: tagDraft.trim(), from: fromDraft, to: toDraft}); }}>
+    <form onSubmit={event => { event.preventDefault(); if(fromDraft && toDraft && fromDraft>toDraft){setFilterError("Ngày bắt đầu không được sau ngày kết thúc.");return;} if(uploadFromDraft && uploadToDraft && uploadFromDraft>uploadToDraft){setFilterError("Ngày tải lên bắt đầu không được sau ngày kết thúc.");return;} setFilterError(""); setFilters({text: textDraft.trim(), tag: tagDraft.trim(), from: fromDraft, to: toDraft, uploadFrom: uploadFromDraft, uploadTo: uploadToDraft, zone: zoneDraft}); }}>
       <fieldset disabled={!!selected}>
         <legend>Tìm kiếm media</legend>
         <p>Tìm trong tiêu đề, mô tả và nhãn. Các điều kiện được kết hợp với nhau.</p>
@@ -107,13 +114,19 @@ export default function Gallery() {
         <p>Khoảng ngày kỷ niệm bao gồm cả hai mốc. Media chưa đặt ngày kỷ niệm sẽ không khớp.</p>
         <label>Ngày kỷ niệm từ<input type="date" min="0001-01-01" max="9999-12-31" value={fromDraft} onChange={event=>setFromDraft(event.target.value)} /></label>
         <label>Ngày kỷ niệm đến<input type="date" min="0001-01-01" max="9999-12-31" value={toDraft} onChange={event=>setToDraft(event.target.value)} /></label>
+        <p>Ngày tải lên được tính theo múi giờ đã chọn, độc lập với ngày kỷ niệm.</p>
+        <label>Ngày tải lên từ<input type="date" min="0001-01-01" max="9999-12-31" value={uploadFromDraft} onChange={event=>setUploadFromDraft(event.target.value)} /></label>
+        <label>Ngày tải lên đến<input type="date" min="0001-01-01" max="9999-12-31" value={uploadToDraft} onChange={event=>setUploadToDraft(event.target.value)} /></label>
+        <label>Múi giờ ngày tải lên<select aria-label="Múi giờ ngày tải lên" value={zoneDraft} onChange={event=>setZoneDraft(event.target.value)}>{timezones.map(zone=><option key={zone} value={zone}>{zone}</option>)}</select></label>
+        {filters.uploadFrom&&<button type="button" onClick={()=>{setUploadFromDraft("");setFilterError("");setFilters(previous=>({...previous,uploadFrom:""}));}}>Xóa ngày tải lên bắt đầu</button>}
+        {filters.uploadTo&&<button type="button" onClick={()=>{setUploadToDraft("");setFilterError("");setFilters(previous=>({...previous,uploadTo:""}));}}>Xóa ngày tải lên kết thúc</button>}
         {filterError&&<p role="alert">{filterError}</p>}
         <button type="submit">Áp dụng tìm kiếm</button>
         {filters.from&&<button type="button" onClick={()=>{setFromDraft("");setFilterError("");setFilters(previous=>({...previous,from:""}));}}>Xóa ngày bắt đầu</button>}
         {filters.to&&<button type="button" onClick={()=>{setToDraft("");setFilterError("");setFilters(previous=>({...previous,to:""}));}}>Xóa ngày kết thúc</button>}
         {filters.text && <button type="button" onClick={() => { setTextDraft(""); setFilters(previous => ({...previous, text: ""})); }}>Xóa từ khóa</button>}
         {filters.tag && <button type="button" onClick={() => { setTagDraft(""); setFilters(previous => ({...previous, tag: ""})); }}>Xóa lọc nhãn</button>}
-        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFromDraft(""); setToDraft(""); setFilterError(""); setFilters({text: "", tag: "", from: "", to: ""}); setFavorites(false); setType(""); setUploader(""); }}>Xóa tất cả bộ lọc</button>
+        <button type="button" onClick={() => { setTextDraft(""); setTagDraft(""); setFromDraft(""); setToDraft(""); setFilterError(""); setUploadFromDraft(""); setUploadToDraft(""); setZoneDraft(defaultPreferences.timezone); setFilters({text: "", tag: "", from: "", to: "", uploadFrom: "", uploadTo: "", zone: defaultPreferences.timezone}); setFavorites(false); setType(""); setUploader(""); }}>Xóa tất cả bộ lọc</button>
       </fieldset>
     </form>
     <UploaderFilter value={uploader} change={setUploader} disabled={!!selected} />
@@ -122,7 +135,7 @@ export default function Gallery() {
     <p><button type="button" disabled={busy} onClick={() => void load()}>Làm mới thư viện</button></p>
     {error && <p role="alert">{error}</p>}
     {error && !ended && <button type="button" disabled={busy} onClick={() => void load(cursor)}>Thử lại</button>}
-    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag || filters.from || filters.to || type || uploader ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
+    {!busy && !error && items.length === 0 && <p>{filters.text || filters.tag || filters.from || filters.to || filters.uploadFrom || filters.uploadTo || type || uploader ? "Không có media phù hợp với bộ lọc." : favorites ? "Chưa có media yêu thích còn khả dụng." : "Chưa có media. Tải ảnh đầu tiên để lưu kỷ niệm."}</p>}
     <ul className={styles.grid}>
       {items.map(item => <li key={item.id} className={styles.card}>
         <button type="button" onClick={() => setSelected(item.id)} aria-label={`Xem ${item.title}`} style={{width:"100%"}}><Preview item={item} /></button>
