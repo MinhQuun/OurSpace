@@ -1992,3 +1992,10 @@ Updated: 2026-10-29 (Asia/Saigon)
 - D10: migration0118 filters by uploader UUID, optionally combined with type, text, exact tag and caller favorites. All predicates and current object ACL apply before keyset limit; safe gallery projection only. No account lookup/summary exposed, wrong or nonexistent uploader yields empty.
 - Migration/provision/lint/typecheck PASS. Actual PostgreSQL sharing lifecycle PASS42.735s proves private hiding, owner match, wrong/nonexistent uploader empty, type intersection, shared-copy caller favorite match, revoked grant and revoked session hiding. Diff/secret scan clean.
 - Database foundation only; uploader HTTP/UI and bounded permission-safe selection still pending. Stage04/full P0 incomplete.
+
+- Uploader query commit1a9c5b17284244478dc75f0961999f6199a7bd46 PUSHED; origin/master exact SHA verified. Knowns OS-C2EXVB done.
+
+## Task04.65 - Uploader HTTP filter and cursor scope (Knowns OS-V43R7Z)
+- D10 list API accepts one uploader UUID; rejects empty/malformed/repeated input. Uploader combines AND with query/tag/type/favorite through0118. Cursor hash binds uploader and rejects swapping identities between pages. No account profile lookup or new response fields.
+- Lint/typecheck/production build PASS; actual HTTP2/2 PASS59.6s. Tests verify50+2 unique pages with uploader/type/text/favorite combination, changed-uploader cursor rejection, wrong/nonexistent uploader empty and private results hidden from foreign caller. Real image upload regression PASS38.4s. Diff/secret scan clean.
+- Uploader selection UI still pending. Stage04/full P0 incomplete.

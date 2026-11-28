@@ -42,6 +42,18 @@ test("favorite HTTP state is personal and retries preserve newer choices",async(
   expect(first.media).toHaveLength(50);
   const second=await (await request.get("/api/media/list?favorites=true&after="+encodeURIComponent(first.nextCursor),{headers:headers()})).json();
   expect(second.media).toHaveLength(2); expect(second.nextCursor).toBeNull();
+  const uploaderQuery="uploader="+users[0]+"&type=photo&q=PAGE&favorites=true";
+  const uploaded=await (await request.get("/api/media/list?"+uploaderQuery,{headers:headers()})).json();
+  expect(uploaded.media).toHaveLength(50);
+  const uploadedTail=await (await request.get("/api/media/list?"+uploaderQuery+"&after="+encodeURIComponent(uploaded.nextCursor),{headers:headers()})).json();
+  expect(uploadedTail.media).toHaveLength(2); expect(uploadedTail.nextCursor).toBeNull();
+  expect(new Set([...uploaded.media,...uploadedTail.media].map((item:{id:string})=>item.id)).size).toBe(52);
+  for(const value of ["","invalid",users[0]+"&uploader="+users[0]])
+    expect((await request.get("/api/media/list?uploader="+value,{headers:headers()})).status()).toBe(400);
+  expect((await request.get("/api/media/list?"+uploaderQuery.replace(users[0],users[1])+"&after="+encodeURIComponent(uploaded.nextCursor),{headers:headers()})).status()).toBe(400);
+  for(const uploader of [users[1],randomUUID()])
+    expect(await (await request.get("/api/media/list?uploader="+uploader,{headers:headers()})).json()).toEqual({media:[],nextCursor:null});
+  expect(await (await request.get("/api/media/list?uploader="+users[0],{headers:headers(1)})).json()).toEqual({media:[],nextCursor:null});
   const typed=await (await request.get("/api/media/list?type=photo&q=PAGE&favorites=true",{headers:headers()})).json();
   expect(typed.media).toHaveLength(50);
   const typedTail=await (await request.get("/api/media/list?type=photo&q=PAGE&favorites=true&after="+encodeURIComponent(typed.nextCursor),{headers:headers()})).json();
